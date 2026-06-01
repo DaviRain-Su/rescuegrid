@@ -1,0 +1,12 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "rescuegrid-worker",
+  "main": "src/index.ts",
+  "compatibility_date": "2024-12-18",
+  "compatibility_flags": ["nodejs_compat"],
+  "observability": { "enabled": true },
+  "durable_objects": {
+    "bindings": [{ "name": "AGENT_RUNTIME", "class_name": "AgentRuntime" }]
+  },
+  "migrations": [{ "tag": "v1", "new_sqlite_classes": ["AgentRuntime"] }]
+}
