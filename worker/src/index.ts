@@ -7,7 +7,9 @@ import { parseIntent } from './parse.js'
 import { strategyHash } from './strategy-core.js'
 import { buildCreatePolicyTx } from './sui-tx.js'
 import { getActivity } from './chain.js'
+import { runTick } from './tick.js'
 import { AGENT_ADDRESS } from './config.js'
+import { DEFAULT_TICK_INTERVAL_SECONDS } from './config.js'
 import type { ParseDefaults, Strategy } from './types.js'
 
 export interface Env {
@@ -80,7 +82,28 @@ app.get('/api/policies/:wrapper_id/activity', async (c) => {
   }
   try {
     const result = await getActivity(wrapperId)
-    return c.json(result, result.status === 'ok' ? 200 : 404)
+    if (result.status !== 'ok') return c.json(result, 404)
+
+    // E8: reconcile Durable Object runtime state with chain. Chain wins.
+    let doState: string | null = null
+    try {
+      const stub = c.env.AGENT_RUNTIME.get(c.env.AGENT_RUNTIME.idFromName(wrapperId))
+      const sres = await stub.fetch('https://do/state')
+      doState = ((await sres.json()) as { runtime_state?: string }).runtime_state ?? null
+    } catch { /* DO may not be activated yet */ }
+
+    const p = result.policy as Record<string, any>
+    const chainTerminal = p.revoked ? 'Revoked' : p.runtime_state === 'Expired' ? 'Expired' : null
+    if (doState && doState !== 'Inactive') {
+      if (chainTerminal && doState !== chainTerminal) {
+        p.runtime_state = chainTerminal // chain wins
+        p.runtime_state_stale = true
+      } else {
+        p.runtime_state = doState
+        p.runtime_state_stale = false
+      }
+    }
+    return c.json(result, 200)
   } catch (e) {
     return c.json({ status: 'error', code: 'CHAIN_READ_FAILED', message: String((e as Error).message) }, 502)
   }
@@ -90,13 +113,45 @@ app.get('/api/policies/:wrapper_id/activity', async (c) => {
 app.post('/api/policies/:wrapper_id/revoke', (c) =>
   c.json({ status: 'error', code: 'NOT_IMPLEMENTED', message: 'revoke pending.' }, 501))
 
-// ── E7: internal agent tick ─────────────────────────────────────────────--
-app.post('/api/agent/tick', (c) =>
-  c.json({ status: 'error', code: 'NOT_IMPLEMENTED', message: 'E7 pending.' }, 501))
+// ── activate a policy's Durable Object runtime (called after the frontend
+//    executes the create_policy tx) ────────────────────────────────────────
+app.post('/api/policies/:wrapper_id/activate', async (c) => {
+  const wrapperId = c.req.param('wrapper_id')
+  if (!/^0x[0-9a-fA-F]+$/.test(wrapperId)) {
+    return c.json({ status: 'error', code: 'BAD_REQUEST', message: 'Invalid wrapper id.' }, 400)
+  }
+  const stub = c.env.AGENT_RUNTIME.get(c.env.AGENT_RUNTIME.idFromName(wrapperId))
+  const res = await stub.fetch('https://do/activate', {
+    method: 'POST',
+    body: JSON.stringify({ wrapperId }),
+  })
+  return c.json(await res.json(), res.status as 200)
+})
+
+// ── E7: internal agent tick (token-gated; force_trigger only in demo mode) ─
+app.post('/api/agent/tick', async (c) => {
+  const auth = c.req.header('Authorization')
+  const expected = c.env.INTERNAL_AGENT_TICK_TOKEN
+  if (!expected || auth !== `Bearer ${expected}`) {
+    return c.json({ status: 'error', code: 'UNAUTHORIZED', message: 'Invalid internal token.' }, 401)
+  }
+  let body: { wrapper_id?: string; force_trigger?: boolean }
+  try {
+    body = await c.req.json()
+  } catch {
+    return c.json({ status: 'error', code: 'BAD_REQUEST', message: 'Invalid JSON body.' }, 400)
+  }
+  if (!body.wrapper_id) return c.json({ status: 'error', code: 'BAD_REQUEST', message: 'wrapper_id required.' }, 400)
+  const forceTrigger = body.force_trigger === true && c.env.RESCUEGRID_DEMO_MODE === 'true'
+  const result = await runTick(c.env, { wrapperId: body.wrapper_id, forceTrigger })
+  return c.json({ status: 'ok', ...result })
+})
 
 export default app
 
-// ── E5: Durable Object agent runtime (stub; alarm/tick filled in next) ────
+// ── E5: Durable Object agent runtime — one instance per policy (idFromName =
+//    wrapper_id). Persists runtime state and self-schedules ticks via alarms.
+//    Chain state stays authoritative (E8): stopped_* halts the loop. ────────
 export class AgentRuntime {
   state: DurableObjectState
   env: Env
@@ -104,9 +159,65 @@ export class AgentRuntime {
     this.state = state
     this.env = env
   }
-  async fetch(_req: Request): Promise<Response> {
-    return new Response(JSON.stringify({ status: 'ok', note: 'AgentRuntime stub' }), {
-      headers: { 'content-type': 'application/json' },
-    })
+
+  json(body: unknown, status = 200): Response {
+    return new Response(JSON.stringify(body), { status, headers: { 'content-type': 'application/json' } })
+  }
+
+  async fetch(req: Request): Promise<Response> {
+    const url = new URL(req.url)
+    if (url.pathname === '/activate' && req.method === 'POST') {
+      const { wrapperId } = await req.json<{ wrapperId: string }>()
+      await this.state.storage.put('wrapperId', wrapperId)
+      await this.state.storage.put('runtime_state', 'Monitoring')
+      await this.state.storage.put('errorCount', 0)
+      await this.state.storage.setAlarm(Date.now() + DEFAULT_TICK_INTERVAL_SECONDS * 1000)
+      return this.json({ status: 'ok', wrapper_id: wrapperId, runtime_state: 'Monitoring' })
+    }
+    if (url.pathname === '/state') {
+      return this.json({
+        status: 'ok',
+        wrapper_id: (await this.state.storage.get('wrapperId')) ?? null,
+        runtime_state: (await this.state.storage.get('runtime_state')) ?? 'Inactive',
+        last_tick_ms: (await this.state.storage.get('lastTickMs')) ?? null,
+        last_action: (await this.state.storage.get('lastAction')) ?? null,
+        error_count: (await this.state.storage.get('errorCount')) ?? 0,
+      })
+    }
+    if (url.pathname === '/tick' && req.method === 'POST') {
+      return this.json(await this.tickOnce())
+    }
+    return this.json({ status: 'error', code: 'NOT_FOUND' }, 404)
+  }
+
+  async alarm(): Promise<void> {
+    const result = await this.tickOnce()
+    // Halt the loop on terminal chain states; otherwise keep monitoring.
+    const terminal = result.action === 'stopped_revoked' || result.action === 'stopped_expired'
+    if (!terminal) {
+      await this.state.storage.setAlarm(Date.now() + DEFAULT_TICK_INTERVAL_SECONDS * 1000)
+    }
+  }
+
+  async tickOnce(): Promise<Record<string, unknown>> {
+    const wrapperId = (await this.state.storage.get<string>('wrapperId')) ?? null
+    if (!wrapperId) return { status: 'error', action: 'error', detail: 'No wrapper registered.' }
+    const result = await runTick(this.env, { wrapperId })
+    const rsMap: Record<string, string> = {
+      stopped_revoked: 'Revoked',
+      stopped_expired: 'Expired',
+      blocked: 'Monitoring',
+      executed: 'Monitoring',
+      no_op: 'Monitoring',
+      error: 'Monitoring',
+    }
+    await this.state.storage.put('runtime_state', rsMap[result.action] ?? 'Monitoring')
+    await this.state.storage.put('lastTickMs', Date.now())
+    await this.state.storage.put('lastAction', result.action)
+    if (result.action === 'error') {
+      const n = ((await this.state.storage.get<number>('errorCount')) ?? 0) + 1
+      await this.state.storage.put('errorCount', n)
+    }
+    return { status: 'ok', ...result }
   }
 }
