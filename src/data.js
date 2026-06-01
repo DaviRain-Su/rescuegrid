@@ -262,4 +262,30 @@ export const RG = {
 
   // price sparkline for SUI
   suiSpark: [4.61,4.58,4.55,4.59,4.52,4.48,4.51,4.44,4.40,4.43,4.38,4.31,4.27,4.30,4.24,4.19,4.182],
+
+  // wallet token holdings — values sum exactly to portfolio.total (demo)
+  holdings: [
+    { sym: 'USDC', amount: 12480.00, value: 12480.00, role: 'Free budget', state: 'free' },
+    { sym: 'SUI',  amount: 5129.60,  value: 21450.00, role: 'Rescue Grid', state: 'deployed' },
+    { sym: 'DEEP', amount: 82454.45, value: 8600.00,  role: 'DCA Ladder',  state: 'deployed' },
+    { sym: 'WAL',  amount: 9090.18,  value: 5700.55,  role: 'Hedge',       state: 'deployed' },
+  ],
+
+  // account identity + session (demo persona)
+  account: {
+    handle: 'ywang.sui',
+    addr: '0x7a3f…c91e',
+    fullAddr: '0x7a3f2b9c14e0d8a6f5c3b1907e2d4a6c8b0f1e3d5a7c9b24e6f8a0c1d3e2c91e',
+    provider: 'Google',
+    email: 'yw•••••@gmail.com',
+    avatar: 'YW',
+    memberSince: 'May 2026',
+    network: 'Sui Mainnet',
+    salt: '0x9f3c…a017',
+    currentEpoch: 612,
+    maxEpoch: 614,
+    sessionExpires: '~36h',
+    ephemeralKey: 'ed25519 · 0x4c8d…71ab',
+    gas: { sponsored: 47, saved: 0.0421, station: 'RescueGrid Gas Station' },
+  },
 }

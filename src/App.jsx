@@ -2,15 +2,16 @@
    RescueGrid — app shell, navigation, crash orchestration
    =========================================================== */
 import { useState, useEffect, useRef } from 'react'
-import { useCurrentAccount, useSuiClient, useSignAndExecuteTransaction, useDisconnectWallet } from '@mysten/dapp-kit'
+import { useCurrentAccount, useCurrentWallet, useSuiClient, useSignAndExecuteTransaction, useDisconnectWallet } from '@mysten/dapp-kit'
 import { Transaction } from '@mysten/sui/transactions'
 import { RG } from './data.js'
-import { WORKER_CONFIGURED, parseIntent, buildPolicyTx, activatePolicy, listPolicies, listActivity, getSummary, getMarket, buildRevokeTx } from './api.js'
+import { WORKER_CONFIGURED, parseIntent, buildPolicyTx, activatePolicy, listPolicies, listActivity, getSummary, getMarket, getBalances, buildRevokeTx } from './api.js'
 import { Icon, Logo, Token, hexToRgba } from './components/primitives.jsx'
 import { ZkLogin } from './components/ZkLogin.jsx'
 import { Dashboard } from './components/Dashboard.jsx'
 import { NewStrategy } from './components/NewStrategy.jsx'
 import { ActivityView, PoliciesView } from './components/Views.jsx'
+import { Profile } from './components/Profile.jsx'
 import { PolicyInspect, TxDrawer } from './components/Detail.jsx'
 import { useTweaks, TweaksPanel, TweakSection, TweakColor, TweakRadio, TweakToggle } from './components/TweaksPanel.jsx'
 
@@ -61,6 +62,7 @@ export default function App({ onExit }) {
 
   // Live mode: real zkLogin account + configured Worker -> on-chain writes.
   const account = useCurrentAccount()
+  const { currentWallet } = useCurrentWallet()
   const suiClient = useSuiClient()
   const { mutateAsync: signAndExec } = useSignAndExecuteTransaction()
   const { mutate: disconnect } = useDisconnectWallet()
@@ -162,16 +164,18 @@ export default function App({ onExit }) {
   const [liveActivity, setLiveActivity] = useState([])
   const [liveSummary, setLiveSummary] = useState(null)
   const [liveMarket, setLiveMarket] = useState(null)
+  const [liveHoldings, setLiveHoldings] = useState([])
   const [liveLoading, setLiveLoading] = useState(false)
   const refreshLivePolicies = async () => {
     if (!liveMode) return
     setLiveLoading(true)
     try {
-      const [pr, ar, sr, mr] = await Promise.all([listPolicies(owner), listActivity(owner), getSummary(owner), getMarket()])
+      const [pr, ar, sr, mr, br] = await Promise.all([listPolicies(owner), listActivity(owner), getSummary(owner), getMarket(), getBalances(owner)])
       if (pr.status === 'ok') setPolicies(pr.policies.map(mapLivePolicy))
       if (ar.status === 'ok') setLiveActivity(ar.activity)
       if (sr.status === 'ok') setLiveSummary(sr.summary)
       if (mr.status === 'ok') setLiveMarket(mr.market)
+      if (br.status === 'ok') setLiveHoldings(br.holdings)
     } catch { /* keep current */ }
     finally { setLiveLoading(false) }
   }
@@ -275,6 +279,7 @@ export default function App({ onExit }) {
     new: { t: 'New strategy', s: 'Turn natural language into a safe, autonomous agent policy' },
     activity: { t: 'Agent activity', s: 'Every autonomous decision and on-chain execution' },
     policies: { t: 'Policies', s: 'The on-chain authority you grant the agent' },
+    profile: { t: 'Profile & wallet', s: 'Your identity, balances and agent authorization' },
   }
 
   return (
@@ -290,6 +295,7 @@ export default function App({ onExit }) {
             <NavItem icon="dashboard" label="Dashboard" active={view === 'dashboard'} onClick={() => setView('dashboard')} />
             <NavItem icon="activity" label="Agent activity" active={view === 'activity'} onClick={() => setView('activity')} badge={activity.length} />
             <NavItem icon="shield" label="Policies" active={view === 'policies'} onClick={() => setView('policies')} />
+            <NavItem icon="wallet" label="Profile & wallet" active={view === 'profile'} onClick={() => setView('profile')} />
           </div>
           <button className="btn btn-primary" style={{ marginTop: 18, justifyContent: 'center' }} onClick={() => setView('new')}>
             <Icon name="plus" size={16} stroke={2.4} /> <span className="rg-navlabel">New strategy</span>
@@ -337,9 +343,9 @@ export default function App({ onExit }) {
 
           {/* user */}
           <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 8px', borderTop: '1px solid var(--border)' }}>
-            <div style={{ width: 32, height: 32, borderRadius: 9, background: 'linear-gradient(135deg,#2EE6CE,#5AA6FF)', color: '#06231f',
+            <div onClick={() => setView('profile')} title="Profile & wallet" style={{ cursor: 'pointer', width: 32, height: 32, borderRadius: 9, background: 'linear-gradient(135deg,#2EE6CE,#5AA6FF)', color: '#06231f',
               display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 700, fontSize: 12, fontFamily: 'var(--f-mono)' }}>{account ? owner.slice(2, 4).toUpperCase() : RG.user.avatar}</div>
-            <div className="rg-userblock" style={{ flex: 1, minWidth: 0 }}>
+            <div className="rg-userblock" onClick={() => setView('profile')} style={{ flex: 1, minWidth: 0, cursor: 'pointer' }}>
               <div className="mono" style={{ fontSize: 12.5, fontWeight: 600, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{ownerShort}</div>
               <div className="mono" style={{ fontSize: 10.5, color: 'var(--t2)' }}>{account ? 'Sui wallet · testnet' : RG.user.provider}</div>
             </div>
@@ -447,6 +453,22 @@ export default function App({ onExit }) {
             {view === 'new' && <NewStrategy mode={mode} setMode={setMode} onDone={deployPolicy} />}
             {view === 'activity' && <ActivityView activity={liveMode ? liveActivity : activity} onTx={setTxView} live={liveMode} loading={liveMode && liveLoading} />}
             {view === 'policies' && <PoliciesView policies={policies} onRevoke={handleRevoke} onInspect={setInspect} live={liveMode} loading={liveMode && liveLoading} />}
+            {view === 'profile' && <Profile
+              live={liveMode}
+              loading={liveMode && liveLoading}
+              policies={policies}
+              holdings={liveMode ? liveHoldings : RG.holdings}
+              account={liveMode ? {
+                avatar: owner.slice(2, 4).toUpperCase(),
+                handle: ownerShort,
+                addr: ownerShort,
+                fullAddr: owner,
+                provider: currentWallet?.name || 'Sui wallet',
+                network: 'Sui Testnet',
+              } : RG.account}
+              onNav={setView}
+              onToast={(m, c) => showToast(m, c)}
+            />}
           </div>
         </main>
 

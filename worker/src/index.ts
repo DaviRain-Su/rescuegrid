@@ -6,7 +6,7 @@ import { cors } from 'hono/cors'
 import { parseIntent } from './parse.js'
 import { strategyHash } from './strategy-core.js'
 import { buildCreatePolicyTx, buildRevokeTx } from './sui-tx.js'
-import { getActivity, listPoliciesByOwner, listActivityByOwner, getOwnerSummary, getMarket, readWrapper } from './chain.js'
+import { getActivity, listPoliciesByOwner, listActivityByOwner, getOwnerSummary, getMarket, getBalances, readWrapper } from './chain.js'
 import { getClient } from './sui-tx.js'
 import { runTick } from './tick.js'
 import { AGENT_ADDRESS } from './config.js'
@@ -141,6 +141,18 @@ app.get('/api/market', async (c) => {
     return c.json({ status: 'ok', market: await getMarket() })
   } catch (e) {
     return c.json({ status: 'error', code: 'MARKET_READ_FAILED', message: String((e as Error).message) }, 502)
+  }
+})
+
+app.get('/api/balances', async (c) => {
+  const owner = c.req.query('owner')
+  if (!owner || !/^0x[0-9a-fA-F]+$/.test(owner)) {
+    return c.json({ status: 'error', code: 'BAD_REQUEST', message: 'owner query param required.' }, 400)
+  }
+  try {
+    return c.json({ status: 'ok', holdings: await getBalances(owner) })
+  } catch (e) {
+    return c.json({ status: 'error', code: 'CHAIN_READ_FAILED', message: String((e as Error).message) }, 502)
   }
 })
 

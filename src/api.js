@@ -60,6 +60,11 @@ export function getMarket() {
   return get('/api/market')
 }
 
+/** GET /api/balances?owner= — real wallet token holdings valued via market. */
+export function getBalances(owner) {
+  return get(`/api/balances?owner=${owner}`)
+}
+
 /** POST /api/policies/:id/revoke — returns { tx_json } unsigned revoke tx. */
 export function buildRevokeTx(owner, wrapperId) {
   return post(`/api/policies/${wrapperId}/revoke`, { owner, confirmed: true })

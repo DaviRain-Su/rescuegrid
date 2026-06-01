@@ -120,6 +120,26 @@ export async function getOwnerSummary(owner, nowMs = Date.now()) {
   }
 }
 
+/** Real wallet token balances for an owner, valued via the live market. */
+export async function getBalances(owner) {
+  const client = getClient()
+  const [balances, market] = await Promise.all([client.getAllBalances({ owner }), getMarket()])
+  const price = { SUI: Number(market.SUI_DBUSDC?.last_price) || 0, USDC: 1, DEEP: Number(market.DEEP_DBUSDC?.last_price) || 0, WAL: Number(market.WAL_DBUSDC?.last_price) || 0 }
+  const sym = (ct) => ct.endsWith('::sui::SUI') ? ['SUI', 9]
+    : ct.includes('::DBUSDC::DBUSDC') ? ['USDC', 6]
+    : ct.endsWith('::deep::DEEP') ? ['DEEP', 6]
+    : ct.endsWith('::wal::WAL') ? ['WAL', 9] : null
+  const out = []
+  for (const b of balances) {
+    const s = sym(b.coinType)
+    if (!s) continue
+    const amount = Number(b.totalBalance) / 10 ** s[1]
+    if (amount <= 0) continue
+    out.push({ sym: s[0], amount, price: price[s[0]], value: amount * price[s[0]], role: 'Wallet', state: 'free' })
+  }
+  return out
+}
+
 /** Live market snapshot from the DeepBook testnet indexer ticker. */
 export async function getMarket() {
   const res = await fetch('https://deepbook-indexer.testnet.mystenlabs.com/ticker')
