@@ -2,7 +2,10 @@
    RescueGrid — app shell, navigation, crash orchestration
    =========================================================== */
 import { useState, useEffect, useRef } from 'react'
+import { useCurrentAccount, useSuiClient, useSignAndExecuteTransaction, useDisconnectWallet } from '@mysten/dapp-kit'
+import { Transaction } from '@mysten/sui/transactions'
 import { RG } from './data.js'
+import { WORKER_CONFIGURED, parseIntent, buildPolicyTx, activatePolicy } from './api.js'
 import { Icon, Logo, Token, hexToRgba } from './components/primitives.jsx'
 import { Landing } from './components/Landing.jsx'
 import { ZkLogin } from './components/ZkLogin.jsx'
@@ -57,6 +60,15 @@ export default function App() {
   const prevStatuses = useRef(null)
   const timers = useRef([])
   const notifId = useRef(100)
+
+  // Live mode: real zkLogin account + configured Worker -> on-chain writes.
+  const account = useCurrentAccount()
+  const suiClient = useSuiClient()
+  const { mutateAsync: signAndExec } = useSignAndExecuteTransaction()
+  const { mutate: disconnect } = useDisconnectWallet()
+  const liveMode = WORKER_CONFIGURED && !!account
+  const owner = account?.address || RG.user.addr
+  const ownerShort = account ? owner.slice(0, 6) + '…' + owner.slice(-4) : RG.user.handle
 
   // toggle landing scroll-mode on <html>/<body> so the dashboard's fixed
   // layout and the scrollable landing page can coexist in one SPA.
@@ -181,7 +193,36 @@ export default function App() {
     showToast('Agents resumed — policies restored to prior state', 'var(--accent)')
   }
 
-  const deployPolicy = (meta = { name: 'SUI Crash Rescue Grid', strategy: 'rescue-grid', budget: 500, scope: 'SUI/USDC', slip: 1.2 }) => {
+  // Live create-policy: worker parse -> build unsigned tx -> zkLogin sign ->
+  // read PolicyCreated -> activate Durable Object. Falls back to mock on error.
+  const deployLive = async (text, meta) => {
+    try {
+      const parsed = await parseIntent(owner, text || `When SUI drops more than 8%, deploy a ${meta.budget} USDC rescue grid`)
+      if (parsed.status !== 'ok') { showToast(`Parse failed: ${parsed.message || parsed.code}`, 'var(--danger)'); return false }
+      const built = await buildPolicyTx(owner, parsed.strategy, parsed.strategy_hash)
+      if (built.status !== 'ok') { showToast(`Build failed: ${built.message || built.code}`, 'var(--danger)'); return false }
+      const tx = Transaction.from(built.tx_json)
+      const signed = await signAndExec({ transaction: tx })
+      const res = await suiClient.waitForTransaction({ digest: signed.digest, options: { showObjectChanges: true, showEvents: true } })
+      const ev = (res.events || []).find(e => String(e.type).endsWith('::policy::PolicyCreated'))
+      const wrapperId = ev?.parsedJson?.wrapper_id
+      if (wrapperId) await activatePolicy(wrapperId).catch(() => {})
+      const np = { id: (wrapperId ? wrapperId.slice(0, 6) + '…' + wrapperId.slice(-4) : '0x…live'),
+        name: meta.name, strategy: meta.strategy, status: 'active', mode, budgetCap: meta.budget, budgetUsed: 0,
+        scope: [meta.scope], maxSlippage: meta.slip, expires: '2026-06-14T00:00:00Z', created: '2026-06-02', execs: 0 }
+      setPolicies(ps => [np, ...ps])
+      showToast('Policy created on-chain — agent authorized within limits', 'var(--accent)')
+      pushNotif('policy', `Policy deployed on-chain · ${meta.name}`)
+      setView('policies')
+      return true
+    } catch (e) {
+      showToast(`On-chain deploy failed: ${String(e?.message || e).slice(0, 80)}`, 'var(--danger)')
+      return false
+    }
+  }
+
+  const deployPolicy = (meta = { name: 'SUI Crash Rescue Grid', strategy: 'rescue-grid', budget: 500, scope: 'SUI/USDC', slip: 1.2 }, text) => {
+    if (liveMode) { deployLive(text, meta); return }
     const np = { id: '0x' + Math.random().toString(16).slice(2, 6) + '…' + Math.random().toString(16).slice(2, 6),
       name: meta.name, strategy: meta.strategy, status: 'active', mode, budgetCap: meta.budget, budgetUsed: 0,
       scope: [meta.scope], maxSlippage: meta.slip, expires: '2026-06-14T00:00:00Z', created: '2026-06-01', execs: 0 }
@@ -272,10 +313,10 @@ export default function App() {
             <div style={{ width: 32, height: 32, borderRadius: 9, background: 'linear-gradient(135deg,#2EE6CE,#5AA6FF)', color: '#06231f',
               display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 700, fontSize: 12, fontFamily: 'var(--f-mono)' }}>{RG.user.avatar}</div>
             <div style={{ flex: 1, minWidth: 0 }}>
-              <div style={{ fontSize: 12.5, fontWeight: 600, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{RG.user.handle}</div>
-              <div className="mono" style={{ fontSize: 10.5, color: 'var(--t2)' }}>{RG.user.provider}</div>
+              <div className="mono" style={{ fontSize: 12.5, fontWeight: 600, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{ownerShort}</div>
+              <div className="mono" style={{ fontSize: 10.5, color: 'var(--t2)' }}>{liveMode ? 'zkLogin · testnet' : RG.user.provider}</div>
             </div>
-            <span style={{ color: 'var(--t2)', cursor: 'pointer' }} onClick={() => { setAuthed(false); setPhase('landing') }}><Icon name="logout" size={16} /></span>
+            <span style={{ color: 'var(--t2)', cursor: 'pointer' }} onClick={() => { if (account) disconnect(); setAuthed(false); setPhase('landing') }}><Icon name="logout" size={16} /></span>
           </div>
         </aside>
 

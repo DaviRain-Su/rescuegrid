@@ -350,7 +350,7 @@ export function NewStrategy({ onDone, mode, setMode }) {
 
           <div style={{ display: 'flex', justifyContent: 'space-between' }}>
             <button className="btn btn-ghost" onClick={() => setStep(2)}><Icon name="chevL" size={15} /> Back</button>
-            <button className="btn btn-primary" onClick={() => onDone(meta)}><Icon name="shield" size={15} /> Sign &amp; deploy policy</button>
+            <button className="btn btn-primary" onClick={() => onDone(meta, text)}><Icon name="shield" size={15} /> Sign &amp; deploy policy</button>
           </div>
         </div>
       )}

@@ -1,20 +1,47 @@
 /* ===========================================================
    RescueGrid — zkLogin entry screen
+   Real Enoki zkLogin when configured (VITE_ENOKI_API_KEY +
+   VITE_GOOGLE_CLIENT_ID); otherwise a self-contained demo sign-in.
    =========================================================== */
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
+import { useWallets, useConnectWallet, useCurrentAccount } from '@mysten/dapp-kit'
+import { isEnokiWallet } from '@mysten/enoki'
 import { Icon, Logo } from './primitives.jsx'
+import { ENOKI_CONFIGURED } from '../api.js'
 
 export function ZkLogin({ onAuth, onBackToLanding }) {
   const [loading, setLoading] = useState(null)
-  const go = (provider) => {
-    setLoading(provider)
-    setTimeout(() => onAuth(), 1500)
+  const wallets = useWallets()
+  const { mutate: connect } = useConnectWallet()
+  const account = useCurrentAccount()
+
+  // Real zkLogin: once a Sui account is connected, we're authed.
+  useEffect(() => {
+    if (ENOKI_CONFIGURED && account) onAuth(account.address)
+  }, [account, onAuth])
+
+  const enokiByProvider = {}
+  if (ENOKI_CONFIGURED) {
+    for (const w of wallets) if (isEnokiWallet(w)) enokiByProvider[w.provider] = w
   }
+
+  const go = (providerId) => {
+    setLoading(providerId)
+    if (ENOKI_CONFIGURED && enokiByProvider[providerId]) {
+      // triggers the OAuth redirect; on return autoConnect sets the account
+      connect({ wallet: enokiByProvider[providerId] }, { onError: () => setLoading(null) })
+    } else {
+      // demo mode — no real proof
+      setTimeout(() => onAuth(), 1500)
+    }
+  }
+
   const providers = [
     { id: 'google', label: 'Continue with Google', glyph: 'G', bg: '#fff', fg: '#1a1a1a' },
     { id: 'twitch', label: 'Continue with Twitch', glyph: 'T', bg: '#9146FF', fg: '#fff' },
     { id: 'apple', label: 'Continue with Apple', glyph: '', fg: '#fff', bg: '#000' },
   ]
+
   return (
     <div style={{ position: 'relative', zIndex: 1, height: '100vh', display: 'grid', gridTemplateColumns: '1.1fr 0.9fr' }}>
       {/* left — brand / value */}
@@ -55,18 +82,27 @@ export function ZkLogin({ onAuth, onBackToLanding }) {
           </p>
 
           <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-            {providers.map(p => (
-              <button key={p.id} onClick={() => go(p.id)} disabled={loading}
-                style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '13px 16px', borderRadius: 'var(--r-md)',
-                  border: '1px solid var(--border-hi)', background: 'var(--glass-2)', color: 'var(--t0)', cursor: loading ? 'wait' : 'pointer',
-                  fontFamily: 'var(--f-body)', fontSize: 14, fontWeight: 600, transition: 'all .14s', opacity: loading && loading !== p.id ? 0.4 : 1 }}>
-                <span style={{ width: 26, height: 26, borderRadius: 7, background: p.bg, color: p.fg, display: 'flex', alignItems: 'center', justifyContent: 'center',
-                  fontWeight: 700, fontFamily: 'var(--f-display)', fontSize: 14, flexShrink: 0 }}>
-                  {p.id === 'apple' ? '' : p.glyph}
-                </span>
-                {loading === p.id ? <><Icon name="refresh" size={15} style={{ animation: 'spin 1s linear infinite' }} /> Generating zk proof…</> : p.label}
-              </button>
-            ))}
+            {providers.map(p => {
+              const live = ENOKI_CONFIGURED && !!enokiByProvider[p.id]
+              const disabledLive = ENOKI_CONFIGURED && !enokiByProvider[p.id]
+              return (
+                <button key={p.id} onClick={() => go(p.id)} disabled={loading || disabledLive}
+                  title={disabledLive ? 'Provider not enabled in Enoki project' : undefined}
+                  style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '13px 16px', borderRadius: 'var(--r-md)',
+                    border: '1px solid var(--border-hi)', background: 'var(--glass-2)', color: 'var(--t0)', cursor: loading ? 'wait' : disabledLive ? 'not-allowed' : 'pointer',
+                    fontFamily: 'var(--f-body)', fontSize: 14, fontWeight: 600, transition: 'all .14s', opacity: (loading && loading !== p.id) || disabledLive ? 0.4 : 1 }}>
+                  <span style={{ width: 26, height: 26, borderRadius: 7, background: p.bg, color: p.fg, display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    fontWeight: 700, fontFamily: 'var(--f-display)', fontSize: 14, flexShrink: 0 }}>
+                    {p.id === 'apple' ? '' : p.glyph}
+                  </span>
+                  {loading === p.id ? <><Icon name="refresh" size={15} style={{ animation: 'spin 1s linear infinite' }} /> {live ? 'Redirecting to provider…' : 'Generating zk proof…'}</> : p.label}
+                </button>
+              )
+            })}
+          </div>
+
+          <div style={{ marginTop: 14, fontSize: 11, color: ENOKI_CONFIGURED ? 'var(--safe)' : 'var(--t2)', fontFamily: 'var(--f-mono)' }}>
+            {ENOKI_CONFIGURED ? '● live zkLogin (Enoki · testnet)' : '○ demo mode — set VITE_ENOKI_API_KEY + VITE_GOOGLE_CLIENT_ID for real zkLogin'}
           </div>
 
           <div style={{ display: 'flex', alignItems: 'center', gap: 12, margin: '24px 0' }}>
