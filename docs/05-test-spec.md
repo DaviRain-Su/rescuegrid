@@ -231,6 +231,8 @@ Advisory:
 6. Confirm `AgentTradeExecuted` event exists.
 7. Confirm `spent_amount` increased.
 
+Production-like e2e tests must not depend on `force_trigger=true`; they must use a controlled mock market provider in non-production or a real trigger condition.
+
 ### Guardian block
 
 1. Create Policy with low max slippage.
@@ -248,25 +250,34 @@ Advisory:
 5. Attempt direct `record_agent_trade` as agent.
 6. Confirm chain abort.
 
+### Concurrent policy isolation
+
+1. Create 10 active policies with distinct owners and policy ids.
+2. Activate 10 Durable Object runtimes.
+3. Run one tick for each policy.
+4. Confirm each runtime reads only its own policy id, budget, market snapshot and last action.
+5. Confirm creating an 11th active policy returns `ACTIVE_POLICY_LIMIT_REACHED`.
+
 ## 6. Browser QA
 
-Desktop viewport:
+MVP desktop viewport:
 
 - Dashboard loads without console errors.
 - Login shows owner address.
 - Intent input accepts the sample strategy.
 - Preview panel shows all critical policy parameters.
 - Confirm flow creates Policy and updates state.
-- Activity view shows events and budget.
-- Revoke button changes state to revoked.
+- Activity view shows events and budget within one 5 second polling interval after chain state changes.
+- Revoke button changes state to revoked within one 5 second polling interval.
+- Primary buttons have text labels and disabled/loading states.
 
-Mobile viewport:
+Post-MVP mobile viewport:
 
 - Strategy input, preview, status, activity and revoke controls do not overlap.
 - Long addresses and tx digests truncate or wrap cleanly.
 - Primary actions remain reachable.
 
-Accessibility:
+Post-MVP accessibility:
 
 - Buttons have clear labels.
 - Risk warnings are not color-only.

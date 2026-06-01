@@ -19,6 +19,12 @@
 | `SUPPORTED_CHAIN` | `sui:testnet` | MVP only |
 | `MAX_ACTIVE_POLICIES_PER_DEPLOYMENT` | `10` | MVP concurrency cap |
 
+Enforcement notes:
+
+- `DEFAULT_MAX_SLIPPAGE_BPS` is the default value inserted into new strategy previews.
+- `MAX_ALLOWED_SLIPPAGE_BPS` is the chain-level creation cap. Runtime Guardian checks use each policy's `max_slippage_bps`, not the global default.
+- `MAX_ACTIVE_POLICIES_PER_DEPLOYMENT` is enforced only by Worker/API state. The Move package does not enforce a global deployment count, so direct chain calls can create more policies; this cap is an MVP operational limit, not a security invariant.
+
 ## 2. Deployment Agent
 
 MVP uses one team-controlled Testnet agent wallet per deployment.
@@ -280,7 +286,32 @@ Rules:
 - `expires_at_ms` must satisfy the Move lifetime rules.
 - `strategy_hash` is computed from canonical JSON: UTF-8, lexicographically sorted keys, no insignificant whitespace, decimal strings preserved exactly, then `blake2b-256`.
 
-## 6. HTTP API Contract
+Test vector:
+
+Canonical JSON:
+
+```json
+{"agent":"0x2222222222222222222222222222222222222222222222222222222222222222","budget_ceiling":"500000000","budget_coin_type":"0x3333333333333333333333333333333333333333333333333333333333333333::usdc::USDC","chain":"sui:testnet","execution":{"max_single_trade_amount":"100000000","max_slippage_bps":100,"order_type":"market_or_ioc"},"expires_at_ms":1780000000000,"owner":"0x1111111111111111111111111111111111111111111111111111111111111111","pool_id":"0x4444444444444444444444444444444444444444444444444444444444444444","strategy_type":"rescue_grid","trigger":{"asset":"SUI","metric":"price_drop_pct","threshold_pct":"8"},"version":"1"}
+```
+
+Expected `blake2b-256`:
+
+```text
+0xfb70611291c43a5afbbb27c5211705b0f7419d23c1384a55ecbfacd08114a3f2
+```
+
+## 6. PTB Construction
+
+An execution PTB is valid only if it binds the policy check and Deepbook action into one transaction intent. The minimum command sequence is:
+
+1. Take `RescuePolicy` as a mutable shared object input.
+2. Read or pass the selected Deepbook pool id and trade amount.
+3. Execute the selected Deepbook swap/order call for the allowed pool.
+4. Call `record_agent_trade` on the same `RescuePolicy` with the executed quote amount, received base amount, slippage bps and client order id.
+
+If Deepbook requires a command order that prevents the policy record from sharing the same PTB, Phase B must stop and redesign the execution path before implementation continues.
+
+## 7. HTTP API Contract
 
 ### `POST /api/intents/parse`
 
@@ -458,7 +489,7 @@ Allowed `action` values:
 - `stopped_expired`
 - `error`
 
-## 7. Agent State Machine
+## 8. Agent State Machine
 
 | Current | Trigger | Condition | Next | Side effect |
 | --- | --- | --- | --- | --- |
@@ -476,7 +507,7 @@ Allowed `action` values:
 
 `Paused` is reserved for repeated Guardian or execution failures. MVP may keep blocked policies in `Monitoring` if failures are transient, but must never execute while a blocking condition remains true.
 
-## 8. Guardian Algorithm
+## 9. Guardian Algorithm
 
 Every tick must run checks in this order:
 
@@ -488,6 +519,8 @@ Every tick must run checks in this order:
 6. Proposed trade amount is `<= remaining_budget`.
 7. Estimated slippage is `<= max_slippage_bps`.
 8. Concentration score is computed for UI.
+
+Expiry and budget decisions must be derived from the latest chain Policy object and Sui `Clock` semantics. Worker system time may be used only for scheduling and optimistic UI labels; it must not be the final authority for expiry.
 
 Pseudocode:
 
@@ -508,7 +541,7 @@ Block logging policy:
 - Hard blocks after a trigger condition is met are runtime log by default.
 - On-chain `GuardianBlocked` is used only when the demo or operator needs public proof that the Agent chose not to execute; this costs gas and must be rate-limited by the Worker to at most one on-chain block event per policy per reason per tick.
 
-## 9. Edge Cases
+## 10. Edge Cases
 
 - Natural language does not include budget.
 - Natural language includes unsupported asset.
@@ -526,6 +559,6 @@ Block logging policy:
 - User tries to revoke an already revoked Policy.
 - Deployment already has `MAX_ACTIVE_POLICIES_PER_DEPLOYMENT` active policies.
 
-## 10. Implementation Rule
+## 11. Implementation Rule
 
 When implementation begins, tests must be written from `docs/05-test-spec.md` before production code. Any code behavior that differs from this technical spec must update this document first.

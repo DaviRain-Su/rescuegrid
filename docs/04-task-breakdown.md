@@ -84,14 +84,31 @@
 | G3 | Commit | 2h | README quickstart | 新用户能按步骤跑起演示 |
 | G4 | Commit | 3h | Final docs + QA pass | PRD/架构/规格与实际实现保持一致，并用浏览器和链上查询验证完整闭环 |
 
+## Hackathon Critical Path
+
+完整任务清单约 70h，单人 hackathon 应优先跑最小可演示闭环。Critical path 只保留证明 Sub-track 2 的必要任务：
+
+1. A1-A5：锁定文档契约。
+2. B1、B2、B5：先验证 Deepbook pool、最小下单和 shared Policy + Deepbook PTB 可组合性。
+3. C1-C4、C6、C7：完成 Policy 创建、撤销、授权校验和 Testnet publish；`record_guardian_block` 可延后，runtime log 先满足 demo。
+4. E2、E3、E6、E7、E8：实现 parse、policy create、Guardian、agent tick 和状态同步。
+5. F1、F3：固化 Deepbook adapter，并把 Policy 校验与 Deepbook 执行接入同一链路。
+6. D2-D5：Dashboard 只做登录、preview、status、revoke 的最小 UI。
+7. G1、G2、G4：跑通配置、demo script 和最终验证。
+
+Polish 可延后：D1 的完整视觉打磨、D6 的细粒度空状态、B7 pi-worker 深度验证、F4 幂等增强、Post-MVP browser QA。
+
 ## Dependency Order
 
 1. Phase A must be complete before implementation.
 2. Phase B must complete before committing Deepbook or zkLogin production code.
 3. Move Package should land before Worker execution code.
 4. Worker parse/preview can start before Move publish, but must use the technical spec types.
-5. Dashboard can mock API until Worker endpoints exist.
-6. Demo Hardening starts only after one Testnet transaction is confirmed.
+5. Dashboard D2 has no Worker dependency; it only needs the chosen zkLogin path.
+6. Dashboard D3 can use mocked `/api/intents/parse` until E2 exists.
+7. Dashboard D4 needs E3/E4 for real Policy data, but may start with fixtures.
+8. Dashboard D5 needs E3 or the final revoke API shape before real-chain testing.
+9. Demo Hardening starts only after one Testnet transaction is confirmed.
 
 ## Stop Conditions
 
