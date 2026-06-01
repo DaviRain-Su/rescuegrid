@@ -3,7 +3,7 @@
 // by the on-chain verification script with a stand-in key.
 import { Transaction } from '@mysten/sui/transactions'
 import { SuiClient, getFullnodeUrl } from '@mysten/sui/client'
-import deployment from '../../deployment.testnet.json' with { type: 'json' }
+import deployment from './deployment.js'
 
 export const DEPLOYMENT = deployment
 const MG = deployment.movegate

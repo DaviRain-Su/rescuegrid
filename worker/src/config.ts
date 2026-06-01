@@ -1,5 +1,5 @@
-// Deployment constants — single source is repo-root deployment.testnet.json.
-import deployment from '../../deployment.testnet.json'
+// Deployment constants. See deployment.js (mirrors repo-root deployment.testnet.json).
+import deployment from './deployment.js'
 
 export const CONFIG = deployment
 export const CHAIN = 'sui:testnet' as const

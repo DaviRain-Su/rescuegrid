@@ -1,21 +1,14 @@
-// On-chain proof of the E3 create_policy PTB builder.
-// Builds the strategy + tx exactly as the Worker does, signs with a stand-in
-// ed25519 key (passed via RG_OWNER_KEY, a `suiprivkey1...` bech32 string),
-// submits to testnet, and reads the PolicyCreated event.
+// Proof of the E3 create_policy PTB builder via DRY-RUN (no key, no broadcast).
+// Builds the strategy + tx exactly as the Worker does, then dry-runs it against
+// testnet to confirm it is well-formed and would succeed (PolicyCreated emitted,
+// RescuePolicyWrapper created). The real signature is the frontend's zkLogin.
 //
-//   KEY=$(sui keytool export --key-identity <addr> --json | jq -r '...')
-//   RG_OWNER_KEY=$KEY node test/verify-create-policy.mjs
-import { Ed25519Keypair } from '@mysten/sui/keypairs/ed25519'
-import { decodeSuiPrivateKey } from '@mysten/sui/cryptography'
+//   RG_OWNER=<owner address with gas> node test/verify-create-policy.mjs
 import { strategyHash } from '../src/strategy-core.js'
-import { buildCreatePolicyTx, getClient, readPolicyCreated, DEPLOYMENT } from '../src/sui-tx.js'
+import { buildCreatePolicyTx, getClient, DEPLOYMENT } from '../src/sui-tx.js'
 
-const bech32 = process.env.RG_OWNER_KEY
-if (!bech32) { console.error('set RG_OWNER_KEY (suiprivkey1...)'); process.exit(2) }
-const { secretKey } = decodeSuiPrivateKey(bech32)
-const kp = Ed25519Keypair.fromSecretKey(secretKey)
-const owner = kp.getPublicKey().toSuiAddress()
-console.log('signer (owner=agent for this test):', owner)
+const owner = process.env.RG_OWNER || DEPLOYMENT.agent.address
+console.log('owner (sender, owner=agent for this test):', owner)
 
 // MVP test: owner doubles as agent (deployment.agent.address). Build a small
 // 50-USDC risk_response strategy on the SUI_DBUSDC pool.
@@ -39,18 +32,18 @@ console.log('strategy_hash:', hash)
 
 const client = getClient()
 const tx = buildCreatePolicyTx({ strategy, ownerAddress: owner })
+const bytes = await tx.build({ client })
 
-const res = await client.signAndExecuteTransaction({
-  signer: kp,
-  transaction: tx,
-  options: { showEvents: true, showEffects: true, showObjectChanges: true },
-})
-console.log('digest:', res.digest)
-console.log('status:', res.effects?.status?.status)
-const created = readPolicyCreated(res)
-console.log('PolicyCreated:', created)
-const wrapperObj = (res.objectChanges || []).find(
+const res = await client.dryRunTransactionBlock({ transactionBlock: bytes })
+const status = res.effects?.status?.status
+console.log('dry-run status:', status)
+if (status !== 'success') console.log('error:', JSON.stringify(res.effects?.status))
+const ev = (res.events || []).find((e) => String(e.type).endsWith('::policy::PolicyCreated'))
+console.log('PolicyCreated emitted:', !!ev, ev ? { mandate_id: ev.parsedJson.mandate_id, wrapper_id: ev.parsedJson.wrapper_id } : '')
+const wrapper = (res.objectChanges || []).find(
   (o) => o.objectType && o.objectType.endsWith('::policy::RescuePolicyWrapper'),
 )
-console.log('wrapper object:', wrapperObj?.objectId, wrapperObj?.objectType)
-process.exit(res.effects?.status?.status === 'success' ? 0 : 1)
+console.log('RescuePolicyWrapper created:', wrapper?.objectType ? 'yes' : 'no')
+const gas = res.effects?.gasUsed
+if (gas) console.log('gas (computation+storage):', Number(gas.computationCost) + Number(gas.storageCost), 'MIST')
+process.exit(status === 'success' ? 0 : 1)
