@@ -11,7 +11,8 @@ A running snapshot of what is built and how it was verified. Demo-facing summary
 | **Web dashboard** (Vite + React) | ✅ | `npm run build` (562 modules); landing → zkLogin → dashboard, flash-crash demo |
 | **Move package** `rescuegrid::policy` | ✅ deployed | `sui move test` 8/8; published `0x92f6e3…bb78` |
 | **Worker API** (Cloudflare + Hono) | ✅ all endpoints | 23 unit checks + `wrangler dev` smoke + on-chain dry-run |
-| **Real zkLogin** (Enoki + dapp-kit) | ✅ coded | builds; needs operator OAuth creds to run (see README) |
+| **Sign-in** | ✅ | Sui wallet (Slush/std, no creds) primary; Enoki zkLogin optional |
+| **Live write loop** (create / list / revoke) | ✅ **verified on-chain** | real policy created (`9SQWkBne…`) + revoked (`Gzniih…`); endpoints return live data; post-revoke reads `Revoked` |
 | **Live execution** (Deepbook order) | 🟡 gated | builders + dry-run; blocked on testnet DBUSDC funding |
 
 ## On-chain (testnet)
@@ -27,11 +28,20 @@ A running snapshot of what is built and how it was verified. Demo-facing summary
 - **C** Move — ✅ C1–C7. RescuePolicyWrapper + create/revoke/assert/record; thin helper builds `vector<TypeName>`; AuthToken consumed via MoveGate receipt; published.
 - **E** Worker — ✅ E1–E8. parse (strategy_hash matches all 4 spec vectors) · create_policy PTB (zkLogin-signed, dry-run success) · activity (chain-authoritative) · Guardian (11 tests) · tick state machine (7 tests) · Durable Object (alarm) · state sync.
 - **F** Deepbook — 🟡 F1/F3 builders structurally verified (serialize + dry-run of create). Agent + BalanceManager provisioned on-chain. **Blocked:** DBUSDC mint is permissioned and the SUI_DBUSDC pool is illiquid, so the BM can't be self-funded → live execution dry-run pending an external DBUSDC source. `EXECUTION_ENABLED=false` until then.
-- **D** dashboard wiring — ✅ real zkLogin sign-in; live create-policy (parse → build → sign → activate); live policy list + on-chain revoke. (Create/list/revoke need no DBUSDC.) Live PTB *preview* still uses the demo shape; real parse runs at deploy.
+- **D** dashboard wiring — ✅ sign-in (Sui wallet primary, zkLogin optional); live create-policy (parse → build → wallet-sign → activate); live D4 activity + D5 revoke; responsive + lazy-loaded landing; D3 live PTB preview. **Live write loop proven on-chain** (see below).
 - **G** packaging — ✅ G1 `npm run config`; G3 README quickstart; this status doc. G2 execute-leg of the demo script is gated with F.
+
+## Live write loop — verified on-chain (2026-06-02)
+
+Broadcast with the dedicated agent key (agent-as-owner for the test):
+- `create_policy` → tx `9SQWkBneN2jZ1ovETaZyRkx8UrwntSUBceBwPT2gRYdP` → wrapper `0x85703d17…55ea4`, mandate `0x1587a441…33825`.
+- Worker endpoints returned it live: `/api/policies?owner=` (1), `/api/activity?owner=` (PolicyCreated), `/api/policies/:id/activity` (`Monitoring`, spent 0).
+- `revoke_policy` → tx `GzniihEkpUNJG3dr1K1e5J3f5YWJ75B6yBnYMvmWEfmg` → `PolicyRevoked`; post-revoke reads `revoked:true` / `runtime_state: Revoked`, activity = 2 events.
+
+So create / list / activity / revoke are real on testnet. In the browser, a connected Sui wallet drives the same flow (no DBUSDC needed).
 
 ## Known gaps / next
 
-1. **DBUSDC funding** — unblock live Deepbook execution (operator-provided DBUSDC or a working faucet), then flip `EXECUTION_ENABLED=true` and dry-run/replay the execution PTB (`worker/test/verify-create-policy.mjs` pattern).
-2. **zkLogin live test** — provide Enoki + Google creds, then exercise sign-in + create/revoke end-to-end.
-3. **Live PTB preview (D3)** — render the Worker's parse output in the Review step (currently demo-shaped).
+1. **DBUSDC funding** — the only true remaining gap. Unblock live Deepbook execution (operator-provided DBUSDC or a working faucet), then flip `EXECUTION_ENABLED=true` and replay the execution PTB.
+2. **Browser wallet click-through** — connect Slush (testnet) and run create/revoke from the UI (the on-chain txs above prove the underlying path; UI uses the same builders via dapp-kit).
+3. **zkLogin live test** (optional) — only if using Enoki instead of a wallet.
