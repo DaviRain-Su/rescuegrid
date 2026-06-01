@@ -59,6 +59,23 @@ export function buildCreatePolicyTx({ strategy, ownerAddress }) {
   return tx
 }
 
+/** Build the owner-signed revoke_policy transaction (frontend zkLogin signs). */
+export function buildRevokeTx({ wrapperId, mandateId, ownerAddress }) {
+  const tx = new Transaction()
+  tx.setSender(ownerAddress)
+  tx.moveCall({
+    target: `${RG.package_id}::policy::revoke_policy`,
+    arguments: [
+      tx.object(wrapperId),
+      tx.object(mandateId),
+      tx.object(MG.mandate_registry),
+      tx.object(deployment.agent.passport_id),
+      tx.object('0x6'),
+    ],
+  })
+  return tx
+}
+
 /** Extract mandate_id + wrapper_id from the PolicyCreated event. */
 export function readPolicyCreated(effectsOrEvents) {
   const events = effectsOrEvents.events || effectsOrEvents

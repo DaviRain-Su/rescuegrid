@@ -68,6 +68,32 @@ export async function queryPolicyEvents(client, wrapperId, max = 100) {
   return out
 }
 
+/** List policies owned by an address, from PolicyCreated events (newest first). */
+export async function listPoliciesByOwner(owner) {
+  const client = getClient()
+  const out = []
+  let cursor = null
+  for (let page = 0; page < 5; page++) {
+    const res = await client.queryEvents({
+      query: { MoveEventModule: { package: RG.package_id, module: 'policy' } },
+      cursor, limit: 50, order: 'descending',
+    })
+    for (const e of res.data) {
+      if (!String(e.type).endsWith('::policy::PolicyCreated')) continue
+      const pj = e.parsedJson || {}
+      if (pj.owner !== owner) continue
+      out.push({
+        wrapper_id: pj.wrapper_id, mandate_id: pj.mandate_id, owner: pj.owner, agent: pj.agent,
+        pool_id: pj.pool_id, budget_ceiling: String(pj.budget_ceiling), max_slippage_bps: Number(pj.max_slippage_bps),
+        expires_at_ms: String(pj.expires_at_ms), created_tx: e.id?.txDigest,
+      })
+    }
+    if (!res.hasNextPage) break
+    cursor = res.nextCursor
+  }
+  return out
+}
+
 export async function getActivity(wrapperId, nowMs = Date.now()) {
   const client = getClient()
   const wrapper = await readWrapper(client, wrapperId)

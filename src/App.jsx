@@ -5,7 +5,7 @@ import { useState, useEffect, useRef } from 'react'
 import { useCurrentAccount, useSuiClient, useSignAndExecuteTransaction, useDisconnectWallet } from '@mysten/dapp-kit'
 import { Transaction } from '@mysten/sui/transactions'
 import { RG } from './data.js'
-import { WORKER_CONFIGURED, parseIntent, buildPolicyTx, activatePolicy } from './api.js'
+import { WORKER_CONFIGURED, parseIntent, buildPolicyTx, activatePolicy, listPolicies, buildRevokeTx } from './api.js'
 import { Icon, Logo, Token, hexToRgba } from './components/primitives.jsx'
 import { Landing } from './components/Landing.jsx'
 import { ZkLogin } from './components/ZkLogin.jsx'
@@ -164,7 +164,40 @@ export default function App() {
     setActivity(RG.activity); setPolicies(RG.policies)
   }
 
-  const handleRevoke = (id) => {
+  // Live policies (D4): load the owner's on-chain policies from PolicyCreated events.
+  const mapLivePolicy = (p) => ({
+    id: p.wrapper_id.slice(0, 6) + '…' + p.wrapper_id.slice(-4),
+    _wrapperId: p.wrapper_id, _mandateId: p.mandate_id,
+    name: 'SUI Crash Rescue Grid', strategy: 'rescue-grid', status: 'active', mode,
+    budgetCap: Number(p.budget_ceiling) / 1e6, budgetUsed: 0,
+    scope: ['SUI/USDC'], maxSlippage: p.max_slippage_bps / 100,
+    expires: new Date(Number(p.expires_at_ms)).toISOString(), created: '2026-06-02', execs: 0,
+  })
+  const refreshLivePolicies = async () => {
+    if (!liveMode) return
+    try {
+      const r = await listPolicies(owner)
+      if (r.status === 'ok') setPolicies(r.policies.map(mapLivePolicy))
+    } catch { /* keep current */ }
+  }
+  useEffect(() => { if (liveMode && authed) refreshLivePolicies() }, [liveMode, authed])
+
+  const handleRevoke = async (id) => {
+    if (liveMode) {
+      const pol = policies.find(p => p.id === id)
+      const wid = pol?._wrapperId || id
+      try {
+        const built = await buildRevokeTx(owner, wid)
+        if (built.status !== 'ok') { showToast(`Revoke build failed: ${built.message || built.code}`, 'var(--danger)'); return }
+        await signAndExec({ transaction: Transaction.from(built.tx_json) })
+        showToast('Policy revoked on-chain — agent authority deleted', 'var(--danger)')
+        pushNotif('policy', 'Policy revoked on-chain')
+        refreshLivePolicies()
+      } catch (e) {
+        showToast(`Revoke failed: ${String(e?.message || e).slice(0, 80)}`, 'var(--danger)')
+      }
+      return
+    }
     setPolicies(ps => ps.filter(p => p.id !== id))
     showToast('Policy revoked on-chain — agent authority deleted', 'var(--danger)')
     pushNotif('policy', 'Policy revoked on-chain')

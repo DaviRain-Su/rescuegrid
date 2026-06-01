@@ -5,8 +5,9 @@ import { Hono } from 'hono'
 import { cors } from 'hono/cors'
 import { parseIntent } from './parse.js'
 import { strategyHash } from './strategy-core.js'
-import { buildCreatePolicyTx } from './sui-tx.js'
-import { getActivity } from './chain.js'
+import { buildCreatePolicyTx, buildRevokeTx } from './sui-tx.js'
+import { getActivity, listPoliciesByOwner, readWrapper } from './chain.js'
+import { getClient } from './sui-tx.js'
 import { runTick } from './tick.js'
 import { AGENT_ADDRESS } from './config.js'
 import { DEFAULT_TICK_INTERVAL_SECONDS } from './config.js'
@@ -109,9 +110,40 @@ app.get('/api/policies/:wrapper_id/activity', async (c) => {
   }
 })
 
-// ── revoke ────────────────────────────────────────────────────────────────
-app.post('/api/policies/:wrapper_id/revoke', (c) =>
-  c.json({ status: 'error', code: 'NOT_IMPLEMENTED', message: 'revoke pending.' }, 501))
+// ── list policies for an owner (from PolicyCreated events) ────────────────
+app.get('/api/policies', async (c) => {
+  const owner = c.req.query('owner')
+  if (!owner || !/^0x[0-9a-fA-F]+$/.test(owner)) {
+    return c.json({ status: 'error', code: 'BAD_REQUEST', message: 'owner query param required.' }, 400)
+  }
+  try {
+    return c.json({ status: 'ok', policies: await listPoliciesByOwner(owner) })
+  } catch (e) {
+    return c.json({ status: 'error', code: 'CHAIN_READ_FAILED', message: String((e as Error).message) }, 502)
+  }
+})
+
+// ── D5: build the owner-signed revoke tx (frontend zkLogin signs) ─────────
+app.post('/api/policies/:wrapper_id/revoke', async (c) => {
+  const wrapperId = c.req.param('wrapper_id')
+  if (!/^0x[0-9a-fA-F]+$/.test(wrapperId)) {
+    return c.json({ status: 'error', code: 'BAD_REQUEST', message: 'Invalid wrapper id.' }, 400)
+  }
+  let body: { owner?: string; confirmed?: boolean }
+  try { body = await c.req.json() } catch { return c.json({ status: 'error', code: 'BAD_REQUEST', message: 'Invalid JSON.' }, 400) }
+  if (!body.confirmed) return c.json({ status: 'error', code: 'CONFIRM_REQUIRED', message: 'confirmed must be true.' }, 400)
+  try {
+    const wrapper = await readWrapper(getClient(), wrapperId)
+    if (!wrapper) return c.json({ status: 'error', code: 'NOT_FOUND', message: 'Wrapper not found.' }, 404)
+    if (body.owner && wrapper.owner !== body.owner) {
+      return c.json({ status: 'error', code: 'OWNER_MISMATCH', message: 'Only the policy owner can revoke.' }, 403)
+    }
+    const tx = buildRevokeTx({ wrapperId, mandateId: wrapper.mandate_id, ownerAddress: wrapper.owner })
+    return c.json({ status: 'ok', tx_json: tx.serialize(), wrapper_id: wrapperId, mandate_id: wrapper.mandate_id, sign_with: 'frontend zkLogin' })
+  } catch (e) {
+    return c.json({ status: 'error', code: 'CHAIN_READ_FAILED', message: String((e as Error).message) }, 502)
+  }
+})
 
 // ── activate a policy's Durable Object runtime (called after the frontend
 //    executes the create_policy tx) ────────────────────────────────────────

@@ -39,3 +39,13 @@ export function activatePolicy(wrapperId) {
 export function getActivity(wrapperId) {
   return get(`/api/policies/${wrapperId}/activity`)
 }
+
+/** GET /api/policies?owner= — policies owned by an address (PolicyCreated events). */
+export function listPolicies(owner) {
+  return get(`/api/policies?owner=${owner}`)
+}
+
+/** POST /api/policies/:id/revoke — returns { tx_json } unsigned revoke tx. */
+export function buildRevokeTx(owner, wrapperId) {
+  return post(`/api/policies/${wrapperId}/revoke`, { owner, confirmed: true })
+}
