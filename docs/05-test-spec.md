@@ -2,6 +2,7 @@
 
 状态：Draft
 日期：2026-06-01
+定位：RescueGrid：自主 DeFi 风险响应 Agent
 原则：测试先于生产实现；实现偏离本文件时，先改规格再改测试和代码。
 
 ## 1. Test Layers
@@ -114,8 +115,9 @@ Happy path:
 
 Happy path:
 
-- 输入“当 SUI 下跌超过 8% 时启动 500 USDC 救援网格”返回 `status=ok`。
+- 输入“当 SUI 下跌超过 8% 时启动 500 USDC 风险响应策略。”返回 `status=ok`。
 - 响应包含 `strategy`、`strategy_hash`、`guardian_warnings`、`ptb_preview`。
+- `strategy.strategy_type` 必须等于 `risk_response`。
 - 响应包含部署配置中的 `agent_address`，且 preview 明确展示该 address。
 - preview 必须包含 owner、agent、pool、budget、slippage、expiry。
 
@@ -308,7 +310,7 @@ The final demo must prove this exact sequence:
 
 1. Start with no active Policy.
 2. Login with zkLogin on Sui Testnet.
-3. Enter: “当 SUI 下跌超过 8% 时启动 500 USDC 救援网格。”
+3. Enter: “当 SUI 下跌超过 8% 时启动 500 USDC 风险响应策略。”
 4. Show structured strategy and PTB preview.
 5. Confirm and create Policy.
 6. Show mandate id, wrapper id and budget ceiling.

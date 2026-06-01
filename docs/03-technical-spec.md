@@ -2,6 +2,7 @@
 
 状态：Draft
 日期：2026-06-01
+定位：RescueGrid：自主 DeFi 风险响应 Agent
 适用范围：Hackathon MVP technical contract
 
 ## 1. Constants
@@ -45,7 +46,7 @@ MVP uses one team-controlled Testnet agent wallet per deployment.
 
 ### 架构：MoveGate + RescuePolicyWrapper
 
-RescueGrid 复用 MoveGate 的 Mandate（Agent 授权、撤销、过期）和 AuthToken（hot-potato 同一 PTB 强制消费），在此之上搭建 RescuePolicyWrapper 覆盖 DeFi 救仓特有约束（pool_id、递减预算、滑点、strategy_hash）。
+RescueGrid 复用 MoveGate 的 Mandate（Agent 授权、撤销、过期）和 AuthToken（hot-potato 同一 PTB 强制消费），在此之上搭建 RescuePolicyWrapper 覆盖 DeFi 风险响应特有约束（pool_id、递减预算、滑点、strategy_hash）。
 
 MoveGate Testnet 部署：
 - Package ID：`0xec91e604714e263ad43723d43470f236607bd0b13f64731aad36b00a61cf884a`
@@ -299,7 +300,7 @@ Natural language must parse into this JSON shape before confirmation:
 ```json
 {
   "version": "1",
-  "strategy_type": "rescue_grid",
+  "strategy_type": "risk_response",
   "owner": "0x...",
   "agent": "0x...",
   "chain": "sui:testnet",
@@ -322,7 +323,7 @@ Natural language must parse into this JSON shape before confirmation:
 
 Rules:
 
-- `strategy_type` MVP supports only `rescue_grid`.
+- `strategy_type` MVP supports only `risk_response`.
 - `agent` must equal deployment config `RESCUEGRID_AGENT_ADDRESS`.
 - `chain` must equal `sui:testnet`.
 - `budget_ceiling` and `max_single_trade_amount` are decimal strings to avoid JavaScript integer loss.
@@ -336,13 +337,13 @@ Test vector:
 Canonical JSON:
 
 ```json
-{"agent":"0x2222222222222222222222222222222222222222222222222222222222222222","budget_ceiling":"500000000","budget_coin_type":"0x3333333333333333333333333333333333333333333333333333333333333333::usdc::USDC","chain":"sui:testnet","execution":{"max_single_trade_amount":"100000000","max_slippage_bps":100,"order_type":"market_or_ioc"},"expires_at_ms":1780000000000,"owner":"0x1111111111111111111111111111111111111111111111111111111111111111","pool_id":"0x4444444444444444444444444444444444444444444444444444444444444444","strategy_type":"rescue_grid","trigger":{"asset":"SUI","metric":"price_drop_pct","threshold_pct":"8"},"version":"1"}
+{"agent":"0x2222222222222222222222222222222222222222222222222222222222222222","budget_ceiling":"500000000","budget_coin_type":"0x3333333333333333333333333333333333333333333333333333333333333333::usdc::USDC","chain":"sui:testnet","execution":{"max_single_trade_amount":"100000000","max_slippage_bps":100,"order_type":"market_or_ioc"},"expires_at_ms":1780000000000,"owner":"0x1111111111111111111111111111111111111111111111111111111111111111","pool_id":"0x4444444444444444444444444444444444444444444444444444444444444444","strategy_type":"risk_response","trigger":{"asset":"SUI","metric":"price_drop_pct","threshold_pct":"8"},"version":"1"}
 ```
 
 Expected `blake2b-256`:
 
 ```text
-0xfb70611291c43a5afbbb27c5211705b0f7419d23c1384a55ecbfacd08114a3f2
+0x76db36393f9eb39a0267a225c9a99bd8e491b69bf9bb2c39e14ec0c67da1d838
 ```
 
 Additional hash conformance vectors:
@@ -350,7 +351,7 @@ Additional hash conformance vectors:
 | Canonical UTF-8 input | Expected `blake2b-256` |
 | --- | --- |
 | empty string | `0x0e5751c026e543b2e8ab2eb06099daa1d1e5df47778f7787faab45cdf12fe3a8` |
-| `{"text":"当 SUI 下跌超过 8% 时启动 500 USDC 救援网格"}` | `0xc2b9520eaad63e4de52da50eb145ed5e72f68bf8af2c1507ede26de27fe8994e` |
+| `{"text":"当 SUI 下跌超过 8% 时启动 500 USDC 风险响应策略。"}` | `0x041503ce868c54347445d99743f185ba13ece965d179e0f40c36e22083c3e80f` |
 | `{"amount":"1000000000000000000000000","threshold_pct":"8.0"}` | `0x93bc4163c34e49983b49c47cc70821f1c6b236ba418cf02cbe88adf653db03fa` |
 
 ## 6. PTB Construction
@@ -379,7 +380,7 @@ Request:
 ```json
 {
   "owner": "0x...",
-  "text": "当 SUI 下跌超过 8% 时启动 500 USDC 救援网格",
+  "text": "当 SUI 下跌超过 8% 时启动 500 USDC 风险响应策略。",
   "defaults": {
     "chain": "sui:testnet",
     "pool_id": "0x...",

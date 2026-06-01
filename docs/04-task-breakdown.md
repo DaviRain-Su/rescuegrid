@@ -2,6 +2,7 @@
 
 状态：Draft
 日期：2026-06-01
+定位：RescueGrid：自主 DeFi 风险响应 Agent
 
 任务类型：
 
@@ -59,7 +60,7 @@
 | ID | Type | Estimate | Task | Acceptance |
 | --- | --- | --- | --- | --- |
 | E1 | Commit | 2h | 初始化 Cloudflare Worker project | 本地 wrangler dev 可运行 |
-| E2 | Commit | 3h | 实现 `/api/intents/parse` | 支持 rescue_grid 模板和错误响应 |
+| E2 | Commit | 3h | 实现 `/api/intents/parse` | 支持 risk_response 模板和错误响应 |
 | E3 | Commit | 3h | 实现 `/api/policies` | 能提交 create policy 或生成签名请求 |
 | E4 | Commit | 2h | 实现 `/api/policies/:wrapper_id/activity` | 能聚合 Mandate、Wrapper、chain event 和 runtime state |
 | E5 | Commit | 3h | 实现 Durable Object policy runtime | 每个 policy 独立状态，支持 alarm tick |
