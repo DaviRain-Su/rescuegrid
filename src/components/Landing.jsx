@@ -190,7 +190,7 @@ export function Landing({ onLaunch }) {
               <div style={{ display: 'flex', flexDirection: 'column', gap: 12, marginTop: 24 }}>
                 {[
                   [<strong key="s" style={{ color: 'var(--t0)' }}>Self-enforced budget</strong>, ' — the agent asserts remaining budget on-chain before every order.'],
-                  [<strong key="s" style={{ color: 'var(--t0)' }}>zkLogin</strong>, ' — no seed phrase, no extension; your Sui address from a zero-knowledge proof.'],
+                  [<strong key="s" style={{ color: 'var(--t0)' }}>Any Sui wallet</strong>, ' — authorize with one signature; the agent gets a scoped capability, never your keys.'],
                   [<strong key="s" style={{ color: 'var(--t0)' }}>Revocable instantly</strong>, " — delete the object and the agent's power is gone, on-chain."],
                 ].map((row, i) => (
                   <div key={i} style={{ display: 'flex', gap: 11, alignItems: 'flex-start' }}>
@@ -295,7 +295,7 @@ export function Landing({ onLaunch }) {
               <svg width="26" height="26" viewBox="0 0 32 32" fill="none"><rect x="2" y="2" width="28" height="28" rx="8" fill="#06231f" stroke="#2EE6CE" strokeOpacity="0.5"/><path d="M9 19 l4-5 3 3 4-6" stroke="#2EE6CE" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/><circle cx="23" cy="11" r="2.2" fill="#2EE6CE"/></svg>
               <span className="display" style={{ fontWeight: 700 }}>RescueGrid</span>
             </div>
-            <div className="mono" style={{ fontSize: 12, color: 'var(--t2)' }}>zkLogin · Move Policy Object · PTB · Deepbook v3 · Cloudflare Workers</div>
+            <div className="mono" style={{ fontSize: 12, color: 'var(--t2)' }}>Sui wallet · Move Policy Object · PTB · Deepbook v3 · Cloudflare Workers</div>
           </div>
         </footer>
       </div>

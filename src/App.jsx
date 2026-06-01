@@ -334,10 +334,10 @@ export default function App({ onExit }) {
           {/* user */}
           <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 8px', borderTop: '1px solid var(--border)' }}>
             <div style={{ width: 32, height: 32, borderRadius: 9, background: 'linear-gradient(135deg,#2EE6CE,#5AA6FF)', color: '#06231f',
-              display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 700, fontSize: 12, fontFamily: 'var(--f-mono)' }}>{RG.user.avatar}</div>
+              display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 700, fontSize: 12, fontFamily: 'var(--f-mono)' }}>{account ? owner.slice(2, 4).toUpperCase() : RG.user.avatar}</div>
             <div className="rg-userblock" style={{ flex: 1, minWidth: 0 }}>
               <div className="mono" style={{ fontSize: 12.5, fontWeight: 600, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{ownerShort}</div>
-              <div className="mono" style={{ fontSize: 10.5, color: 'var(--t2)' }}>{liveMode ? 'zkLogin · testnet' : RG.user.provider}</div>
+              <div className="mono" style={{ fontSize: 10.5, color: 'var(--t2)' }}>{account ? 'Sui wallet · testnet' : RG.user.provider}</div>
             </div>
             <span style={{ color: 'var(--t2)', cursor: 'pointer' }} onClick={() => { if (account) disconnect(); setAuthed(false); onExit && onExit() }}><Icon name="logout" size={16} /></span>
           </div>
