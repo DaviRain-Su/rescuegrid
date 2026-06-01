@@ -18,6 +18,7 @@
 | `MAX_POLICY_LIFETIME_SECONDS` | `604800` | 7 days |
 | `MIN_POLICY_BUDGET` | implementation coin unit dependent | must be non-zero |
 | `SUPPORTED_CHAIN` | `sui:testnet` | MVP only |
+| `EXECUTOR_KIND_DEEPBOOK` | `deepbook` | only registered MVP executor adapter |
 | `MAX_ACTIVE_POLICIES_PER_DEPLOYMENT` | `10` | MVP concurrency cap |
 | `RESCUEGRID_PROTOCOL_ADDRESS` | published RescueGrid package address | protocol address passed to MoveGate |
 | `ACTION_DEEPBOOK_RESCUE` | `1` | MoveGate action type for rescue trades |
@@ -30,6 +31,7 @@ Enforcement notes:
 - `DEFAULT_MAX_SLIPPAGE_BPS` is the default value inserted into new strategy previews.
 - `MAX_ALLOWED_SLIPPAGE_BPS` is the chain-level creation cap. Runtime Guardian checks use each policy's `max_slippage_bps`, not the global default.
 - `MAX_ACTIVE_POLICIES_PER_DEPLOYMENT` is enforced only by Worker/API state. The Move package does not enforce a global deployment count, so direct chain calls can create more policies; this cap is an MVP operational limit, not a security invariant.
+- `EXECUTOR_KIND_DEEPBOOK` is part of the confirmed strategy hash. Future adapters must introduce explicit executor kinds and tests before they can be accepted.
 
 ## 2. Deployment Agent
 
@@ -42,7 +44,49 @@ MVP uses one team-controlled Testnet agent wallet per deployment.
 - `/api/policies` must verify the submitted strategy agent equals `RESCUEGRID_AGENT_ADDRESS`.
 - Agent key rotation affects only new policies. Existing policies name the old agent until owner revokes and recreates them.
 
-## 3. Move Package Surface
+## 3. Composable Runtime Contract
+
+Runtime Core is shared by Cloud Agent and the future Local CLI daemon. It owns policy loading, adapter selection, Guardian evaluation and activity logging. Protocol-specific behavior lives behind ExecutorAdapter.
+
+```ts
+type ExecutorKind = 'deepbook';
+
+type ExecutionPlan = {
+  executor_kind: ExecutorKind;
+  target_id: string;
+  action_type: number;
+  quote_amount: string;
+  estimated_slippage_bps: number;
+  preview: string[];
+};
+
+interface ExecutorAdapter {
+  kind: ExecutorKind;
+  readMarket(policy: PolicySnapshot): Promise<MarketSnapshot>;
+  planExecution(policy: PolicySnapshot, strategy: StructuredStrategy, market: MarketSnapshot): Promise<ExecutionPlan>;
+  buildPtb(plan: ExecutionPlan, auth: MoveGateAuthContext): Promise<Transaction>;
+  parseExecutionResult(result: SuiTransactionResult): Promise<ActivityEvent>;
+}
+```
+
+Rules:
+
+- MVP registers only `deepbook`.
+- `/api/intents/parse` must reject unknown `executor_kind` with `UNSUPPORTED_EXECUTOR`.
+- The adapter must return an `ExecutionPlan` before any PTB is signed.
+- Guardian checks run against the `ExecutionPlan`; an adapter cannot submit directly.
+- `quote_amount`, `estimated_slippage_bps`, `target_id`, and `action_type` must match the values encoded in the PTB.
+- Runtime Core must use the same adapter interface in Worker/Durable Object and future CLI daemon code.
+
+Post-MVP adapter candidates:
+
+- `cdpm`: Cetus DLMM Position Manager / LeafSheep-style agent operations.
+- `scallop`: supply, redeem, unwind and risk-reduction flows.
+- `kai`: SAV vault supply/redeem flows.
+
+These adapters are not allowed to reuse the Deepbook-specific `pool_id` constraint unless their target semantics are equivalent. If they need position ids, vault ids, lending market ids or bin ranges, add adapter-specific wrapper fields or a new wrapper version.
+
+## 4. Move Package Surface
 
 ### 架构：MoveGate + RescuePolicyWrapper
 
@@ -75,7 +119,7 @@ public struct RescuePolicyWrapper has key, store {
     owner: address,
     mandate_id: ID,          // reference to MoveGate Mandate
     agent: address,          // cached from mandate for efficiency
-    pool_id: ID,             // specific Deepbook pool constraint
+    pool_id: ID,             // v1 target constraint: specific Deepbook pool
     budget_coin_type: String,
     budget_ceiling: u64,
     spent_amount: u64,       // cumulative, never resets
@@ -89,7 +133,7 @@ Field rules:
 - `owner` is recorded at creation from `tx_context::sender(ctx)`.
 - `mandate_id` references the MoveGate Mandate that enforces agent authorization, expiry and revocation.
 - `agent` is cached from the Mandate for fast access; must match `movegate::mandate::mandate_agent(mandate)`.
-- `pool_id` is the only Deepbook pool this policy may target.
+- `pool_id` is the only Deepbook pool this policy may target. In v1 this is a Deepbook-specific target field; future non-Deepbook adapters must add adapter-specific target constraints instead of overloading it.
 - `budget_coin_type` is the human-readable coin type used for preview and UI consistency.
 - `budget_ceiling` and `spent_amount` use the smallest unit of `budget_coin_type`.
 - `max_slippage_bps` must be `<= MAX_ALLOWED_SLIPPAGE_BPS`.
@@ -236,7 +280,7 @@ Postconditions:
 - Increments `wrapper.spent_amount` by `quote_amount_spent`.
 - Emits `AgentTradeExecuted`.
 
-## 4. RescueGrid Events
+## 5. RescueGrid Events
 
 RescueGrid 自身发出以下事件。MoveGate 的 ActionReceipt 提供额外的不可变审计轨迹（`freeze_object`）。
 
@@ -293,7 +337,7 @@ Guardian reason codes:
 - `6`: concentration risk warning.
 - `7`: mandate and wrapper mismatch.
 
-## 5. Structured Strategy
+## 6. Structured Strategy
 
 Natural language must parse into this JSON shape before confirmation:
 
@@ -304,6 +348,7 @@ Natural language must parse into this JSON shape before confirmation:
   "owner": "0x...",
   "agent": "0x...",
   "chain": "sui:testnet",
+  "executor_kind": "deepbook",
   "pool_id": "0x...",
   "budget_coin_type": "0x...::coin::USDC",
   "budget_ceiling": "500000000",
@@ -324,6 +369,7 @@ Natural language must parse into this JSON shape before confirmation:
 Rules:
 
 - `strategy_type` MVP supports only `risk_response`.
+- `executor_kind` MVP supports only `deepbook`.
 - `agent` must equal deployment config `RESCUEGRID_AGENT_ADDRESS`.
 - `chain` must equal `sui:testnet`.
 - `budget_ceiling` and `max_single_trade_amount` are decimal strings to avoid JavaScript integer loss.
@@ -337,13 +383,13 @@ Test vector:
 Canonical JSON:
 
 ```json
-{"agent":"0x2222222222222222222222222222222222222222222222222222222222222222","budget_ceiling":"500000000","budget_coin_type":"0x3333333333333333333333333333333333333333333333333333333333333333::usdc::USDC","chain":"sui:testnet","execution":{"max_single_trade_amount":"100000000","max_slippage_bps":100,"order_type":"market_or_ioc"},"expires_at_ms":1780000000000,"owner":"0x1111111111111111111111111111111111111111111111111111111111111111","pool_id":"0x4444444444444444444444444444444444444444444444444444444444444444","strategy_type":"risk_response","trigger":{"asset":"SUI","metric":"price_drop_pct","threshold_pct":"8"},"version":"1"}
+{"agent":"0x2222222222222222222222222222222222222222222222222222222222222222","budget_ceiling":"500000000","budget_coin_type":"0x3333333333333333333333333333333333333333333333333333333333333333::usdc::USDC","chain":"sui:testnet","execution":{"max_single_trade_amount":"100000000","max_slippage_bps":100,"order_type":"market_or_ioc"},"executor_kind":"deepbook","expires_at_ms":1780000000000,"owner":"0x1111111111111111111111111111111111111111111111111111111111111111","pool_id":"0x4444444444444444444444444444444444444444444444444444444444444444","strategy_type":"risk_response","trigger":{"asset":"SUI","metric":"price_drop_pct","threshold_pct":"8"},"version":"1"}
 ```
 
 Expected `blake2b-256`:
 
 ```text
-0x76db36393f9eb39a0267a225c9a99bd8e491b69bf9bb2c39e14ec0c67da1d838
+0xa6554d4c4ea6f63d5cbc05e60fe917043fad64a8a7eb09acec89124e94721f5c
 ```
 
 Additional hash conformance vectors:
@@ -354,24 +400,24 @@ Additional hash conformance vectors:
 | `{"text":"当 SUI 下跌超过 8% 时启动 500 USDC 风险响应策略。"}` | `0x041503ce868c54347445d99743f185ba13ece965d179e0f40c36e22083c3e80f` |
 | `{"amount":"1000000000000000000000000","threshold_pct":"8.0"}` | `0x93bc4163c34e49983b49c47cc70821f1c6b236ba418cf02cbe88adf653db03fa` |
 
-## 6. PTB Construction
+## 7. PTB Construction
 
-An execution PTB is valid only if it binds MoveGate authorization, Deepbook action, MoveGate receipt creation and RescuePolicyWrapper recording into one transaction intent. The command sequence is:
+An execution PTB is valid only if it binds MoveGate authorization, adapter action, MoveGate receipt creation and RescuePolicyWrapper recording into one transaction intent. The MVP Deepbook command sequence is:
 
 1. MoveGate `authorize_action<BudgetCoin>(mandate, passport, RESCUEGRID_PROTOCOL_ADDRESS, quote_amount, ACTION_DEEPBOOK_RESCUE, clock, ctx)` returns AuthToken.
-2. Deepbook swap/order call for the allowed `pool_id` with computed `min_out` from slippage.
+2. Deepbook adapter emits swap/order call for the allowed `pool_id` with computed `min_out` from slippage.
 3. RescuePolicyWrapper `record_agent_trade(wrapper, mandate, passport, agent_registry, pool_id, quote_amount, base_amount, slippage_bps, client_order_id, auth_token, clock, ctx)`.
 4. `record_agent_trade` verifies wrapper constraints, calls MoveGate `create_success_receipt` to consume the AuthToken and freeze an ActionReceipt, then increments `spent_amount` and emits `AgentTradeExecuted`.
 
 The Move compiler enforces that the AuthToken is consumed in the same PTB — this is a structural guarantee, not a runtime check.
 
-If Deepbook requires a command order that prevents the wrapper record from sharing the same PTB, Phase B must stop and redesign the execution path before implementation continues.
+If Deepbook or a future adapter requires a command order that prevents the wrapper record from sharing the same PTB, Phase B or the adapter feasibility phase must stop and redesign the execution path before implementation continues.
 
 ### AuthToken 消费说明
 
 `record_agent_trade` 接受 `auth_token: movegate::mandate::AuthToken`，但不直接调用 `consume_auth_token`。它把 token 交给 `movegate::receipt::create_success_receipt`，由 MoveGate 消费 token 并冻结 ActionReceipt。因为 AuthToken 是 zero-ability struct（no `store`, `copy`, `drop`），Move 编译器在编译时强制它必须在获得它的 PTB 内被消费。这消除了"AuthToken 被存储、复制或逃逸"的可能性，同时保留 MoveGate 的审计轨迹。
 
-## 7. HTTP API Contract
+## 8. HTTP API Contract
 
 ### `POST /api/intents/parse`
 
@@ -383,6 +429,7 @@ Request:
   "text": "当 SUI 下跌超过 8% 时启动 500 USDC 风险响应策略。",
   "defaults": {
     "chain": "sui:testnet",
+    "executor_kind": "deepbook",
     "pool_id": "0x...",
     "max_slippage_bps": 100,
     "expires_in_seconds": 86400
@@ -401,6 +448,7 @@ Response:
   "guardian_warnings": [],
   "ptb_preview": [
     "Create MoveGate Mandate and RescuePolicyWrapper for owner 0x...",
+    "Use deepbook executor adapter",
     "Allow agent 0x... to trade only pool 0x...",
     "Set budget ceiling to 500 USDC",
     "Set max slippage to 1.00%",
@@ -416,6 +464,16 @@ Error response:
   "status": "error",
   "code": "INTENT_AMBIGUOUS",
   "message": "Budget or trigger threshold is missing."
+}
+```
+
+Unknown executor response:
+
+```json
+{
+  "status": "error",
+  "code": "UNSUPPORTED_EXECUTOR",
+  "message": "Executor adapter is not registered."
 }
 ```
 
@@ -455,6 +513,7 @@ Validation:
 - `confirmed` must be true.
 - `strategy.owner` must equal request `owner`.
 - `strategy.agent` must equal `RESCUEGRID_AGENT_ADDRESS`.
+- `strategy.executor_kind` must be registered in the ExecutorAdapter registry.
 - `strategy_hash` must equal the server recomputed hash.
 - The deployment must have fewer than `MAX_ACTIVE_POLICIES_PER_DEPLOYMENT` active policies, otherwise return `ACTIVE_POLICY_LIMIT_REACHED`.
 
@@ -569,7 +628,7 @@ Allowed `action` values:
 - `stopped_expired`
 - `error`
 
-## 8. Agent State Machine
+## 9. Agent State Machine
 
 | Current | Trigger | Condition | Next | Side effect |
 | --- | --- | --- | --- | --- |
@@ -587,11 +646,11 @@ Allowed `action` values:
 
 `Paused` is reserved for repeated Guardian or execution failures. MVP may keep blocked policies in `Monitoring` if failures are transient, but must never execute while a blocking condition remains true.
 
-## 9. Guardian Algorithm
+## 10. Guardian Algorithm
 
 Every tick must read both the MoveGate Mandate and RescuePolicyWrapper, then run checks in this order:
 
-1. Chain and pool match.
+1. Chain and adapter target match.
 2. Mandate and wrapper exist and `wrapper.mandate_id == mandate.id`.
 3. Mandate is not revoked.
 4. Mandate is not expired.
@@ -611,7 +670,7 @@ if mandate.revoked: block(REVOKED)
 if now_ms >= mandate.expires_at_ms: block(EXPIRED)
 if proposed_amount > remaining: block(BUDGET)
 if estimated_slippage_bps > wrapper.max_slippage_bps: block(SLIPPAGE)
-if pool_id != wrapper.pool_id: block(POOL_MISMATCH)
+if plan.target_id != wrapper.pool_id: block(POOL_MISMATCH) // v1 Deepbook target
 return allow
 ```
 
@@ -622,14 +681,16 @@ Block logging policy:
 - Hard blocks after a trigger condition is met are runtime log by default.
 - MVP does not emit on-chain `GuardianBlocked`. Public no-trade proof is deferred until a post-MVP design can bind block events to a valid Mandate without creating gas spam or post-revocation noise.
 
-## 10. Edge Cases
+## 11. Edge Cases
 
 - Natural language does not include budget.
 - Natural language includes unsupported asset.
+- Natural language selects an unsupported executor.
 - User changes wallet after preview before confirm.
 - Mandate + Wrapper creation transaction succeeds but Worker response times out.
 - Durable Object activates before chain event query returns the creation event.
 - Agent tick reads stale market price.
+- Adapter produces an ExecutionPlan from stale protocol state.
 - Deepbook pool has insufficient liquidity.
 - Estimated slippage passes but submitted transaction fails.
 - `spent_amount + amount` would overflow `u64`.
@@ -640,6 +701,6 @@ Block logging policy:
 - User tries to revoke an already revoked Policy.
 - Deployment already has `MAX_ACTIVE_POLICIES_PER_DEPLOYMENT` active policies.
 
-## 11. Implementation Rule
+## 12. Implementation Rule
 
 When implementation begins, tests must be written from `docs/05-test-spec.md` before production code. Any code behavior that differs from this technical spec must update this document first.

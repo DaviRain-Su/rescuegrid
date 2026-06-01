@@ -10,6 +10,7 @@
 - Move unit tests：Mandate + Wrapper 创建、撤销、授权、预算、滑点、过期、事件。
 - Worker API tests：intent parse、preview、policy API、activity API、agent tick。
 - Guardian tests：各类 block reason 和允许路径。
+- ExecutorAdapter tests：adapter registry、ExecutionPlan、preview、PTB build conformance。
 - Integration tests：Worker + Sui Testnet package + Deepbook execution。
 - Browser QA：Dashboard 登录、确认、状态展示、撤销。
 - Demo acceptance：完整 create -> autonomous execute -> activity log -> revoke -> blocked-after-revoke 闭环。
@@ -118,8 +119,9 @@ Happy path:
 - 输入“当 SUI 下跌超过 8% 时启动 500 USDC 风险响应策略。”返回 `status=ok`。
 - 响应包含 `strategy`、`strategy_hash`、`guardian_warnings`、`ptb_preview`。
 - `strategy.strategy_type` 必须等于 `risk_response`。
+- `strategy.executor_kind` 必须等于 `deepbook`。
 - 响应包含部署配置中的 `agent_address`，且 preview 明确展示该 address。
-- preview 必须包含 owner、agent、pool、budget、slippage、expiry。
+- preview 必须包含 owner、agent、executor、pool、budget、slippage、expiry。
 
 Boundary:
 
@@ -132,6 +134,7 @@ Error:
 - 缺失预算返回 `INTENT_AMBIGUOUS`。
 - 不支持 chain 返回 `UNSUPPORTED_CHAIN`。
 - 不支持 strategy 返回 `UNSUPPORTED_STRATEGY`。
+- 不支持 executor 返回 `UNSUPPORTED_EXECUTOR`。
 - 滑点超过硬上限返回 `GUARDIAN_STATIC_BLOCK`。
 
 ### `POST /api/policies`
@@ -180,6 +183,7 @@ Happy path:
 
 - trigger false 返回 `action=no_op`。
 - trigger true 且检查通过返回 `action=executed` 和 tx digest。
+- tick 必须通过 adapter registry 选择 `deepbook` adapter；不能直接调用 Deepbook-specific runtime code。
 - 内部 token 有效且 `RESCUEGRID_DEMO_MODE=true` 时，`force_trigger=true` 可以绕过自然市场触发条件。
 
 Blocked:
@@ -193,6 +197,8 @@ Blocked:
 Error:
 
 - market read failed 返回 `error`，不提交交易。
+- adapter plan failed 返回 `error`，不提交交易。
+- unknown executor 返回 `UNSUPPORTED_EXECUTOR`，不提交交易。
 - Deepbook transaction failed 返回 `error`，不更新成功状态。
 - 缺失或错误 internal token 时返回 `401` 或 `403`，不运行 tick。
 - 生产部署或 `RESCUEGRID_DEMO_MODE=false` 时提交 `force_trigger=true` 返回 `FORCE_TRIGGER_DISABLED`。
@@ -223,7 +229,27 @@ Advisory:
 - concentration risk score 高时 UI 显示 warning，但 MVP 不因此自动 abort，除非后续技术规格升级为强制检查。
 - UI warning 断言方式：显示包含 “Concentration risk” 的文本标签、severity badge 和解释文案；不能只依赖颜色变化。
 
-## 5. Integration Tests
+## 5. ExecutorAdapter Tests
+
+### Registry
+
+- `deepbook` 是唯一 MVP registered adapter。
+- unknown `executor_kind` 返回 `UNSUPPORTED_EXECUTOR`。
+- Runtime Core 只能通过 registry 获取 adapter，不能直接 import Deepbook execution path。
+
+### ExecutionPlan conformance
+
+- Deepbook adapter returns `executor_kind=deepbook`、`target_id=pool_id`、`quote_amount`、`estimated_slippage_bps`、`action_type=ACTION_DEEPBOOK_RESCUE`。
+- Guardian sees the same `quote_amount` and `estimated_slippage_bps` that later appear in PTB arguments。
+- Adapter preview lines include executor, pool, budget impact, slippage and expected event。
+
+### PTB build
+
+- Adapter build fails if plan target differs from Wrapper `pool_id`。
+- Adapter build fails if plan action type differs from `ACTION_DEEPBOOK_RESCUE`。
+- Adapter does not sign or submit; signing belongs to Runtime Core signer boundary。
+
+## 6. Integration Tests
 
 ### Policy lifecycle
 
@@ -272,7 +298,7 @@ Production-like e2e tests must not depend on `force_trigger=true`; they must use
 4. Confirm each runtime reads only its own mandate id, wrapper id, budget, market snapshot and last action.
 5. Confirm creating an 11th active policy returns `ACTIVE_POLICY_LIMIT_REACHED`.
 
-## 6. Browser QA
+## 7. Browser QA
 
 MVP desktop viewport:
 
@@ -304,7 +330,7 @@ Concurrency:
 - Creating the 11th active policy returns `ACTIVE_POLICY_LIMIT_REACHED`.
 - Ten active Durable Object instances must not leak runtime state into each other.
 
-## 7. Demo Acceptance Script
+## 8. Demo Acceptance Script
 
 The final demo must prove this exact sequence:
 
@@ -312,13 +338,14 @@ The final demo must prove this exact sequence:
 2. Login with zkLogin on Sui Testnet.
 3. Enter: “当 SUI 下跌超过 8% 时启动 500 USDC 风险响应策略。”
 4. Show structured strategy and PTB preview.
-5. Confirm and create Policy.
-6. Show mandate id, wrapper id and budget ceiling.
-7. Let Cloud Agent tick execute one Deepbook Testnet trade; demo may use a dev-only manual trigger or mock price feed if the real 8% price drop is not happening.
-8. Show transaction digest and `AgentTradeExecuted` event.
-9. Revoke Policy from Dashboard.
-10. Run or wait for another tick.
-11. Show Agent cannot execute after revoke.
+5. Show `executor_kind=deepbook` in structured strategy.
+6. Confirm and create Policy.
+7. Show mandate id, wrapper id and budget ceiling.
+8. Let Cloud Agent tick execute one Deepbook Testnet trade; demo may use a dev-only manual trigger or mock price feed if the real 8% price drop is not happening.
+9. Show transaction digest and `AgentTradeExecuted` event.
+10. Revoke Policy from Dashboard.
+11. Run or wait for another tick.
+12. Show Agent cannot execute after revoke.
 
 Passing criteria:
 
@@ -328,10 +355,22 @@ Passing criteria:
 - No step requires exposing a user private key to the Agent.
 - The deployed agent address shown in preview matches the agent recorded in the Mandate and Wrapper.
 
-## 8. Open Test Decisions
+## 9. Post-MVP Local CLI Daemon Tests
+
+These tests are not MVP gates, but they define the composability target.
+
+- `rescuegrid daemon run` loads local agent config and starts periodic ticks.
+- `rescuegrid daemon status` shows agent address, chain, registered adapters and watched policies.
+- daemon uses the same Runtime Core and ExecutorAdapter registry as Cloud Agent.
+- daemon refuses to run when the local agent address does not match the Policy Mandate agent.
+- daemon writes local activity logs and can recover after restart without double-submitting an already confirmed action.
+- daemon supports external signer mode before any Mainnet policy is accepted.
+
+## 10. Open Test Decisions
 
 Before implementation starts, resolve and update `docs/03-technical-spec.md` if needed:
 
 - Exact Sui Testnet pool id and coin decimals.
 - Exact zkLogin SDK flow and test provider.
 - Exact Deepbook call shape for the selected pool.
+- Exact adapter package boundary between Worker and future CLI daemon.
