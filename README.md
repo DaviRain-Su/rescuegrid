@@ -6,17 +6,35 @@ A hi-fi, fully clickable dashboard prototype implementing the [Claude Design han
 
 This repo is the **Web Dashboard** layer described in [`docs/02-architecture.md`](docs/02-architecture.md), recreated pixel-faithfully from the design prototype as a Vite + React single-page app.
 
-## Run it
+## Quickstart
+
+**Demo mode** (no backend, no credentials — fully clickable):
 
 ```bash
 npm install
 npm run dev      # http://localhost:5173
 ```
 
+**Live mode** (real Sui Testnet backend + zkLogin):
+
+```bash
+npm run config            # prints on-chain ids + the env templates below
+
+# 1) backend
+cd worker && npm install && npm run dev      # http://localhost:8787
+
+# 2) frontend (new shell)
+cp .env.example .env.local   # fill VITE_WORKER_URL + Enoki/Google creds
+npm install && npm run dev   # http://localhost:5173
+```
+
 ```bash
 npm run build    # production build → dist/
 npm run preview  # serve the production build
+cd worker && npm test   # 23 backend checks (hash + guardian + tick)
 ```
+
+A live deployment already exists on Sui Testnet (see [`docs/STATUS.md`](docs/STATUS.md) / `npm run config`); the Move package is published and the agent runtime is provisioned.
 
 ## The flow
 
