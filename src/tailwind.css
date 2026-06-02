@@ -8,3 +8,13 @@
 @import 'tailwindcss/utilities.css' layer(utilities);
 @import '@heroui/react/styles';
 @source '../node_modules/@heroui/react/dist';
+
+/* Map RescueGrid's neon accent into HeroUI's theme tokens so HeroUI components
+   pick up the brand color instead of the default palette. */
+@theme {
+  --color-accent: #2ee6ce;
+  --color-accent-hover: #1fc7b1;
+  --color-accent-foreground: #04211c;
+  --color-focus: #2ee6ce;
+  --color-danger: #ff5470;
+}
