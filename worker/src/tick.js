@@ -4,12 +4,13 @@
 import { runGuardian } from './guardian.js'
 import { readWrapper, readMandate, readBalanceManagerBalance, readClockTimestampMs } from './chain.js'
 import { DEPLOYMENT } from './sui-tx.js'
-import { keypairFromWorkerEnv } from './secret-safe-signer.js'
 import { buildFundingReadiness } from './read-surfaces.js'
 import { EXECUTOR_KIND_DEEPBOOK, getExecutorAdapter, unsupportedExecutor, unsupportedExecutorTarget } from './executor-adapters.js'
+import { resolveSignerAdapter, signerExecutionEnabled } from './signer-adapters.js'
 
 export const EXECUTION_BLOCKER_LABELS = {
   EXECUTION_DISABLED: 'Execution disabled',
+  UNSUPPORTED_SIGNER: 'Unsupported signer',
   INSUFFICIENT_DBUSDC: 'Insufficient DBUSDC',
   INSUFFICIENT_DEEP: 'Insufficient DEEP',
   INSUFFICIENT_GAS: 'Insufficient SUI gas',
@@ -342,7 +343,8 @@ export async function runTick(env, p) {
     amount: amount.toString(),
     estimated_slippage_bps: p.market?.estimated_slippage_bps ?? Math.min(80, wrapper.max_slippage_bps),
   }
-  const executionEnabled = env?.EXECUTION_ENABLED === 'true' && !!env?.AGENT_KEY
+  const signerAdapter = resolveSignerAdapter(env, { client })
+  const executionEnabled = signerExecutionEnabled(env, signerAdapter)
 
   const executorKind = p.executorKind || EXECUTOR_KIND_DEEPBOOK
   const adapter = getExecutorAdapter(executorKind)
@@ -352,7 +354,20 @@ export async function runTick(env, p) {
   const plan = adapter.planExecution({ wrapper, mandate, proposed, nowMs, market: p.market })
   if (!plan.target_supported) return { ...unsupportedExecutorTarget(executorKind, wrapper.pool_id), wrapper_id: p.wrapperId, mandate_id: wrapper.mandate_id }
   const decision = decideTick({ wrapper, mandate, triggerMet, proposed, nowMs, executionEnabled, expectedAgentId: DEPLOYMENT.agent.address, expectedPoolId })
-  if (decision.action !== 'execute') return { ...decision, wrapper_id: p.wrapperId, mandate_id: wrapper.mandate_id }
+  if (decision.action !== 'execute') {
+    if (decision.code === 'EXECUTION_DISABLED' && env?.EXECUTION_ENABLED === 'true' && !signerAdapter.available && signerAdapter.unavailable_code !== 'EXECUTION_DISABLED') {
+      return {
+        ...readinessBlock({
+          code: signerAdapter.unavailable_code,
+          detail: signerAdapter.unavailable_detail,
+        }),
+        signer_kind: signerAdapter.kind,
+        wrapper_id: p.wrapperId,
+        mandate_id: wrapper.mandate_id,
+      }
+    }
+    return { ...decision, wrapper_id: p.wrapperId, mandate_id: wrapper.mandate_id }
+  }
 
   const fundingBlock = await checkFunding(client, proposed, executionEnabled)
   if (fundingBlock) {
@@ -361,9 +376,8 @@ export async function runTick(env, p) {
 
   // execute: build + sign + submit (only reached when executionEnabled)
   try {
-    const kp = keypairFromWorkerEnv(env)
     const tx = adapter.buildPtb(plan, { wrapperId: p.wrapperId, mandateId: wrapper.mandate_id, wrapper, market: p.market, nowMs })
-    const submitted = await client.signAndExecuteTransaction({ signer: kp, transaction: tx, options: { showEffects: true, showEvents: true } })
+    const submitted = await signerAdapter.signAndSubmit(tx, { showEffects: true, showEvents: true })
     if (!submitted.digest) {
       return {
         ...executionNonSuccess({
