@@ -548,4 +548,3 @@ export function ActiveStrategy({ p, activity, onBack, onToggle, onRebalance, onR
     </div>
   );
 }
-
