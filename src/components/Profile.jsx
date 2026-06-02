@@ -18,12 +18,11 @@ function CopyChip({ text, label, full }) {
     setTimeout(() => setCopied(false), 1400)
   }
   return (
-    <button onClick={copy} className="mono" style={{ display: 'inline-flex', alignItems: 'center', gap: 7, padding: '6px 10px',
-      borderRadius: 'var(--r-sm)', border: '1px solid var(--border)', background: 'var(--bg-0)', cursor: 'pointer',
-      color: copied ? 'var(--accent)' : 'var(--t1)', fontSize: 12, fontWeight: 600, transition: 'all .14s' }}>
-      <span>{copied ? 'copied' : (label || text)}</span>
-      <Icon name={copied ? 'check' : 'copy'} size={13} stroke={copied ? 2.6 : 1.8} />
-    </button>
+    <Button onPress={copy} size="sm" radius="sm" variant="bordered"
+      className={`mono gap-[7px] h-auto min-w-0 py-[6px] px-[10px] border-[color:var(--border)] bg-[color:var(--bg-0)] text-xs font-semibold ${copied ? 'text-[color:var(--accent)]' : 'text-[color:var(--t1)]'}`}
+      endContent={<Icon name={copied ? 'check' : 'copy'} size={13} stroke={copied ? 2.6 : 1.8} />}>
+      {copied ? 'copied' : (label || text)}
+    </Button>
   )
 }
 
