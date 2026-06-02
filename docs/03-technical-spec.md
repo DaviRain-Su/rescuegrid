@@ -680,18 +680,55 @@ Data source rules:
 - `runtime_state` comes from Durable Object state.
 - If chain state conflicts with runtime state, chain state wins and `runtime_state_stale` is true.
 
-### `GET /api/risk/venue-stops`
+### `GET /api/risk/controls`
 
-Returns Worker-persisted runtime venue emergency stops.
+Returns Worker-persisted owner runtime risk controls. When `owner` is provided, the Durable Object response is filtered to that owner; unfiltered reads are used only by the internal tick path and runtime core still matches controls against the wrapper owner before blocking.
 
 Response:
 
 ```json
 {
   "status": "ok",
+  "owner": "0x...",
+  "global_stopped": true,
+  "global_stop": {
+    "action": "set_global_stop",
+    "scope": "global",
+    "target_key": "global",
+    "stopped": true,
+    "owner": "0x...",
+    "updated_ms": 1780480000000,
+    "issued_at_ms": 1780480000000
+  },
+  "global_stops": [
+    {
+      "action": "set_global_stop",
+      "scope": "global",
+      "target_key": "global",
+      "stopped": true,
+      "owner": "0x...",
+      "updated_ms": 1780480000000,
+      "issued_at_ms": 1780480000000
+    }
+  ],
+  "strategy_stops": ["0x...wrapper"],
+  "strategy_stop_records": [
+    {
+      "action": "set_strategy_stop",
+      "scope": "strategy",
+      "target_key": "0x...wrapper",
+      "wrapper_id": "0x...wrapper",
+      "stopped": true,
+      "owner": "0x...",
+      "updated_ms": 1780480000000,
+      "issued_at_ms": 1780480000000
+    }
+  ],
   "venue_stops": ["DeepBook"],
   "venue_stop_records": [
     {
+      "action": "set_venue_stop",
+      "scope": "venue",
       "venue": "DeepBook",
       "venue_key": "deepbook",
       "stopped": true,
@@ -703,27 +740,34 @@ Response:
 }
 ```
 
-### `POST /api/risk/venue-stops`
+### `POST /api/risk/controls`
 
-Persists an owner-signed runtime venue stop/resume control. The Worker must verify a Sui personal-message signature from the owner before mutating Durable Object state.
+Persists an owner-signed runtime global, strategy or venue stop/resume control. The Worker must verify a Sui personal-message signature from the owner before mutating Durable Object state.
 
 Request:
 
 ```json
 {
   "owner": "0x...",
-  "message": "{\"app\":\"RescueGrid\",\"version\":1,\"chain\":\"sui:testnet\",\"action\":\"set_venue_stop\",...}",
+  "message": "{\"app\":\"RescueGrid\",\"version\":1,\"chain\":\"sui:testnet\",\"action\":\"set_strategy_stop\",...}",
   "signature": "base64..."
 }
 ```
 
 Rules:
 
-- `message` domain must be `RescueGrid`, `version=1`, `chain=sui:testnet`, `action=set_venue_stop`.
+- `message` domain must be `RescueGrid`, `version=1`, `chain=sui:testnet`.
+- Supported actions are `set_global_stop`, `set_strategy_stop` and `set_venue_stop`.
 - `message.owner` must match the request owner and the verified Sui signature address.
-- `message` must include `venue`, `venue_key`, `stopped`, `nonce` and `issued_at_ms`.
+- `set_global_stop` must include `stopped`, `nonce` and `issued_at_ms`.
+- `set_strategy_stop` must include `wrapper_id`, `stopped`, `nonce` and `issued_at_ms`; the Worker reads the wrapper from chain and rejects the control unless `wrapper.owner` equals the signed owner.
+- `set_venue_stop` must include `venue`, `venue_key`, `stopped`, `nonce` and `issued_at_ms`.
 - The control expires after 10 minutes and used nonces are rejected.
 - Successful writes update the runtime control plane only. They do not revoke the MoveGate Mandate or alter the `RescuePolicyWrapper`.
+
+### `GET/POST /api/risk/venue-stops`
+
+Compatibility view for venue-only controls. GET returns `venue_stops` and `venue_stop_records` from the same Durable Object state. POST still verifies a Sui personal-message signature, but rejects any action other than `set_venue_stop`. New UI and tests should prefer `/api/risk/controls`.
 
 ### `POST /api/agent/tick`
 
@@ -774,8 +818,10 @@ Allowed `action` values:
 
 Runtime risk controls:
 
-- Before submitting an execution PTB, tick must read Worker venue-stop controls.
-- If the target venue is stopped and the trigger condition is met, tick returns `action=blocked`, `code=VENUE_STOPPED`, and does not submit a transaction.
+- Before submitting an execution PTB, tick must read Worker runtime risk controls.
+- If the owner's global stop is active and the trigger condition is met, tick returns `action=blocked`, `code=GLOBAL_STOPPED`, and does not submit a transaction.
+- If the wrapper's strategy stop is active and the trigger condition is met, tick returns `action=blocked`, `code=STRATEGY_STOPPED`, and does not submit a transaction.
+- If the target venue is stopped for the owner and the trigger condition is met, tick returns `action=blocked`, `code=VENUE_STOPPED`, and does not submit a transaction.
 - If risk controls cannot be read when a triggered execution is being evaluated, tick returns `RISK_CONTROLS_UNAVAILABLE` and does not submit.
 
 ## 9. Agent State Machine

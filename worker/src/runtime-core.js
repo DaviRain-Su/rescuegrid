@@ -6,7 +6,7 @@
 // runtime-specific callers.
 import { runGuardian } from './guardian.js'
 import { EXECUTOR_KIND_DEEPBOOK, getExecutorAdapter, listExecutorAdapters, unsupportedExecutor, unsupportedExecutorTarget } from './executor-adapters.js'
-import { isVenueStopped, normalizeVenueKey } from './risk-controls.js'
+import { isGlobalStopped, isStrategyStopped, isVenueStopped, normalizeVenueKey } from './risk-controls.js'
 
 export const RUNTIME_CORE_BOUNDARIES = Object.freeze({
   policy_reader: 'Loads MoveGate Mandate + RescuePolicyWrapper snapshots before a tick.',
@@ -42,6 +42,8 @@ export const EXECUTION_BLOCKER_LABELS = {
   FORCE_TRIGGER_DISABLED: 'Force trigger disabled',
   UNSUPPORTED_EXECUTOR: 'Unsupported executor',
   UNSUPPORTED_EXECUTOR_TARGET: 'Unsupported executor target',
+  GLOBAL_STOPPED: 'Global emergency stop',
+  STRATEGY_STOPPED: 'Strategy emergency stop',
   VENUE_STOPPED: 'Venue emergency stop',
   RISK_CONTROLS_UNAVAILABLE: 'Risk controls unavailable',
 }
@@ -163,12 +165,15 @@ export function classifyExecutionResolution({ submitted, resolved, beforeWrapper
  * @param {boolean} a.executionEnabled
  * @param {string=} a.expectedAgentId
  * @param {string=} a.expectedPoolId
+ * @param {string=} a.wrapperId
+ * @param {string=} a.owner
  * @param {string=} a.venue
  * @param {Array<string|object>=} a.stoppedVenues
+ * @param {{globalStops?:Array<string|object>,strategyStops?:Array<string|object>,venueStops?:Array<string|object>}=} a.riskControls
  * @param {boolean=} a.riskControlsUnavailable
  * @returns {{action:string, reason?:number, detail:string, guardian?:object}}
  */
-export function decideTick({ wrapper, mandate, triggerMet, proposed, nowMs, executionEnabled, expectedAgentId, expectedPoolId, venue, stoppedVenues = [], riskControlsUnavailable = false }) {
+export function decideTick({ wrapper, mandate, triggerMet, proposed, nowMs, executionEnabled, expectedAgentId, expectedPoolId, wrapperId, owner, venue, stoppedVenues = [], riskControls = {}, riskControlsUnavailable = false }) {
   if (mandate.revoked) return readinessBlock({ action: 'stopped_revoked', code: 'POLICY_REVOKED', detail: 'Mandate revoked on-chain; halting.' })
   if (nowMs >= Number(mandate.expires_at_ms)) return readinessBlock({ action: 'stopped_expired', code: 'POLICY_EXPIRED', detail: 'Mandate expired; halting.' })
   if (expectedAgentId && (wrapper.agent !== expectedAgentId || mandate.agent !== expectedAgentId)) {
@@ -184,14 +189,39 @@ export function decideTick({ wrapper, mandate, triggerMet, proposed, nowMs, exec
       detail: 'Execution blocked: runtime risk controls could not be read before preparing a transaction.',
     })
   }
-  if (venue && isVenueStopped(venue, stoppedVenues)) {
+  const controlOwner = owner || wrapper.owner || null
+  const globalStops = riskControls.globalStops || riskControls.global_stops || []
+  const strategyStops = riskControls.strategyStops || riskControls.strategy_stops || []
+  const venueControlStops = riskControls.venueStops || riskControls.venue_stops || stoppedVenues
+  if (isGlobalStopped(controlOwner, globalStops)) {
+    return readinessBlock({
+      code: 'GLOBAL_STOPPED',
+      detail: 'Execution blocked: owner global emergency stop is active.',
+      extra: {
+        owner: controlOwner,
+      },
+    })
+  }
+  if (wrapperId && isStrategyStopped(wrapperId, strategyStops, controlOwner)) {
+    return readinessBlock({
+      code: 'STRATEGY_STOPPED',
+      detail: `Execution blocked: strategy emergency stop is active for ${wrapperId}.`,
+      extra: {
+        owner: controlOwner,
+        wrapper_id: wrapperId,
+        stopped_strategies: strategyStops,
+      },
+    })
+  }
+  if (venue && isVenueStopped(venue, venueControlStops, controlOwner)) {
     return readinessBlock({
       code: 'VENUE_STOPPED',
       detail: `Execution blocked: ${venue} venue emergency stop is active.`,
       extra: {
+        owner: controlOwner,
         venue,
         venue_key: normalizeVenueKey(venue),
-        stopped_venues: stoppedVenues,
+        stopped_venues: venueControlStops,
       },
     })
   }

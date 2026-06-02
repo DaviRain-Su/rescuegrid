@@ -151,17 +151,24 @@ export function RiskCenter({
   policies,
   onEmergencyStop,
   onTogglePolicy,
+  onToggleGlobalStop,
+  onToggleStrategyStop,
   onToggleVenueStop,
   onToast,
   stopped,
+  globalStopped = false,
+  strategyStops,
   venueStops,
-  venueStopsLoading = false,
-  venueStopPending = false,
-  venueStopSource = 'local',
+  riskControlsLoading = false,
+  riskControlPending = false,
+  riskControlSource = 'local',
 }) {
   const [localStoppedVenues, setLocalStoppedVenues] = useState(() => new Set());
   const controlledVenueStops = Array.isArray(venueStops);
   const stoppedVenueKeys = new Set((controlledVenueStops ? venueStops : [...localStoppedVenues]).map(venueKey));
+  const controlledStrategyStops = Array.isArray(strategyStops);
+  const stoppedStrategyKeys = new Set((controlledStrategyStops ? strategyStops : []).map(String));
+  const effectiveGlobalStopped = stopped || globalStopped;
   const rb = RG.riskBudget;
   const atRiskPct = rb.atRisk / rb.authorized * 100;
   const lossPct = rb.dailyLossUsed / rb.dailyLossCap * 100;
@@ -223,8 +230,20 @@ export function RiskCenter({
   };
   const toggleStrategyStop = (p) => {
     if (terminalStatuses.has(p.status)) return;
+    const strategyKey = p._wrapperId || p.id;
+    if (onToggleStrategyStop) {
+      onToggleStrategyStop(p, !stoppedStrategyKeys.has(strategyKey));
+      return;
+    }
     if (onTogglePolicy) onTogglePolicy(p);
     else onToast && onToast(`${p.name} ${p.status === 'active' ? 'paused' : 'resumed'} locally`, p.status === 'active' ? 'var(--warn)' : 'var(--accent)');
+  };
+  const toggleGlobalStop = () => {
+    if (onToggleGlobalStop) {
+      onToggleGlobalStop(!globalStopped);
+      return;
+    }
+    onEmergencyStop && onEmergencyStop();
   };
 
   return (
@@ -232,15 +251,15 @@ export function RiskCenter({
 
       {/* emergency banner */}
       <div className="card" style={{ padding: '16px 20px', display: 'flex', alignItems: 'center', gap: 18, flexWrap: 'wrap',
-        border: `1px solid ${stopped ? 'var(--danger)' : 'color-mix(in srgb, var(--danger) 30%, var(--border))'}`,
-        background: stopped ? 'var(--danger-dim)' : 'var(--bg-2)' }}>
+        border: `1px solid ${effectiveGlobalStopped ? 'var(--danger)' : 'color-mix(in srgb, var(--danger) 30%, var(--border))'}`,
+        background: effectiveGlobalStopped ? 'var(--danger-dim)' : 'var(--bg-2)' }}>
         <div style={{ width: 42, height: 42, borderRadius: 11, background: 'var(--danger-dim)', color: 'var(--danger)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
           <Icon name="alert" size={22} />
         </div>
         <div style={{ flex: 1, minWidth: 220 }}>
-          <div className="display" style={{ fontSize: 15, fontWeight: 600 }}>{stopped ? 'All agents halted' : 'Emergency stop'}</div>
+          <div className="display" style={{ fontSize: 15, fontWeight: 600 }}>{effectiveGlobalStopped ? 'All agents halted' : 'Emergency stop'}</div>
           <div style={{ fontSize: 12, color: 'var(--t2)', marginTop: 2 }}>
-            {stopped ? 'Every policy is paused. Resume individual strategies when ready.' : 'Pause every policy instantly. Positions are held — nothing is force-closed.'}
+            {effectiveGlobalStopped ? 'New runtime submissions are blocked. Existing positions are held.' : 'Pause every policy instantly. Positions are held — nothing is force-closed.'}
           </div>
         </div>
         <div style={{ display: 'flex', gap: 7, flexWrap: 'wrap' }}>
@@ -248,9 +267,9 @@ export function RiskCenter({
           <span className="badge badge-warn" style={{ fontSize: 9 }}><span className="dot"></span>strategy</span>
           <span className="badge badge-accent" style={{ fontSize: 9 }}><span className="dot"></span>venue</span>
         </div>
-        <button onClick={() => { onEmergencyStop && onEmergencyStop(); }} className="btn btn-danger"
-          style={{ fontWeight: 600 }} disabled={stopped}>
-          <Icon name="x" size={15} stroke={2.4} /> {stopped ? 'Halted' : 'Stop all agents'}
+        <button onClick={toggleGlobalStop} className={`btn ${globalStopped ? '' : 'btn-danger'}`}
+          style={{ fontWeight: 600 }} disabled={riskControlPending || (stopped && !onToggleGlobalStop)}>
+          <Icon name={globalStopped ? 'refresh' : 'x'} size={15} stroke={2.4} /> {globalStopped ? 'Resume global' : effectiveGlobalStopped ? 'Halted' : 'Stop all agents'}
         </button>
       </div>
 
@@ -316,18 +335,21 @@ export function RiskCenter({
         <RCard title="Strategy emergency controls" icon="shield" right={<span className="badge badge-neutral" style={{ fontSize: 9.5 }}>{policies.length} strategies</span>}>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
             {policies.map(p => {
-              const h = riskBadge(p.status);
+              const runtimeStopped = stoppedStrategyKeys.has(p._wrapperId || p.id);
+              const statusForBadge = runtimeStopped ? 'paused' : p.status;
+              const h = riskBadge(statusForBadge);
               const used = p.budgetUsed || p.spent || p.used || 0;
               const budget = p.budgetCap || p.budget || p.cap || p.maxSpend || 1;
               const scope = Array.isArray(p.scope) ? p.scope.join(', ') : (p.scope || p.venue || 'Sui policy');
               const pct = Math.min(100, budget ? used / budget * 100 : 0);
-              const disabled = terminalStatuses.has(p.status);
+              const disabled = terminalStatuses.has(p.status) || riskControlPending;
+              const buttonStops = !runtimeStopped && p.status === 'active';
               return (
-                <div key={p.id} style={{ padding: '12px 13px', borderRadius: 'var(--r-sm)', background: 'var(--glass)', border: `1px solid ${p.status === 'active' ? 'var(--border)' : `color-mix(in srgb, ${h[0]} 35%, var(--border))`}` }}>
+                <div key={p.id} style={{ padding: '12px 13px', borderRadius: 'var(--r-sm)', background: runtimeStopped ? 'var(--warn-dim)' : 'var(--glass)', border: `1px solid ${statusForBadge === 'active' ? 'var(--border)' : `color-mix(in srgb, ${h[0]} 35%, var(--border))`}` }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
                     <div style={{ flex: '1 1 180px', minWidth: 0 }}>
                       <div style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0 }}>
-                        <span style={{ width: 8, height: 8, borderRadius: p.status === 'active' ? '50%' : 3, background: h[0], flexShrink: 0 }} />
+                        <span style={{ width: 8, height: 8, borderRadius: statusForBadge === 'active' ? '50%' : 3, background: h[0], flexShrink: 0 }} />
                         <span style={{ fontSize: 12.5, fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{p.name}</span>
                       </div>
                       <div className="mono" style={{ fontSize: 10, color: 'var(--t2)', marginTop: 3 }}>
@@ -335,9 +357,9 @@ export function RiskCenter({
                       </div>
                     </div>
                     <span className="badge" style={{ fontSize: 9, background: h[1], color: h[0] }}><span className="dot"></span>{h[2]}</span>
-                    <button className={`btn btn-sm ${p.status === 'active' ? 'btn-danger' : ''}`} disabled={disabled}
+                    <button className={`btn btn-sm ${buttonStops ? 'btn-danger' : ''}`} disabled={disabled}
                       onClick={() => toggleStrategyStop(p)} style={{ minWidth: 82, justifyContent: 'center' }}>
-                      <Icon name={p.status === 'active' ? 'x' : 'refresh'} size={12} stroke={2.4} /> {p.status === 'active' ? 'Pause' : 'Resume'}
+                      <Icon name={buttonStops ? 'x' : 'refresh'} size={12} stroke={2.4} /> {buttonStops ? 'Pause' : 'Resume'}
                     </button>
                   </div>
                   <div style={{ marginTop: 10 }}>
@@ -354,8 +376,8 @@ export function RiskCenter({
         </RCard>
 
         <RCard title="Venue emergency controls" icon="layers" right={
-          <span className={`badge ${venueStopsLoading || venueStopPending ? 'badge-warn' : 'badge-neutral'}`} style={{ fontSize: 9.5 }}>
-            <span className="dot"></span>{venueStopsLoading || venueStopPending ? 'syncing' : `${stoppedVenueKeys.size} stopped`}
+          <span className={`badge ${riskControlsLoading || riskControlPending ? 'badge-warn' : 'badge-neutral'}`} style={{ fontSize: 9.5 }}>
+            <span className="dot"></span>{riskControlsLoading || riskControlPending ? 'syncing' : `${stoppedVenueKeys.size} stopped`}
           </span>
         }>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
@@ -379,7 +401,7 @@ export function RiskCenter({
                       <span className="dot"></span>{isStopped ? 'stopped' : 'open'}
                     </span>
                     <button className={`btn btn-sm ${isStopped ? '' : 'btn-danger'}`} onClick={() => toggleVenueStop(v.venue)}
-                      disabled={venueStopPending}
+                      disabled={riskControlPending}
                       style={{ minWidth: 98, justifyContent: 'center' }}>
                       <Icon name={isStopped ? 'refresh' : 'x'} size={12} stroke={2.4} /> {isStopped ? 'Resume' : 'Stop venue'}
                     </button>
@@ -392,9 +414,9 @@ export function RiskCenter({
             })}
             <div style={{ display: 'flex', gap: 8, fontSize: 10.5, color: 'var(--t2)', lineHeight: 1.45, paddingTop: 2 }}>
               <span style={{ color: 'var(--warn)', flexShrink: 0 }}><Icon name="alert" size={13} /></span>
-              {venueStopSource === 'worker'
-                ? 'Venue stop is persisted in the Worker runtime controls and blocks new adapter submissions before PTB signing.'
-                : 'Venue stop is local demo state in this session. Connect a wallet with the Worker to persist it into runtime controls.'}
+              {riskControlSource === 'worker'
+                ? 'Global, strategy and venue stops are persisted in Worker runtime controls and block new submissions before PTB signing.'
+                : 'Stops are local demo state in this session. Connect a wallet with the Worker to persist them into runtime controls.'}
             </div>
           </div>
         </RCard>

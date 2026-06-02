@@ -223,7 +223,10 @@ Blocked:
 - 滑点超限返回 `blocked`。
 - 预算超限返回 `blocked`。
 - pool mismatch 返回 `blocked`。
-- target venue 被 owner-signed runtime control 停止时返回 `VENUE_STOPPED`，不提交交易。
+- owner global stop 命中时返回 `GLOBAL_STOPPED`，不提交交易。
+- wrapper strategy stop 命中时返回 `STRATEGY_STOPPED`，不提交交易。
+- target venue 被同一 owner 的 runtime control 停止时返回 `VENUE_STOPPED`，不提交交易。
+- 其他 owner 的 global / strategy / venue stop 不能阻塞当前 wrapper。
 - trigger 已命中但 runtime risk controls 读取失败时返回 `RISK_CONTROLS_UNAVAILABLE`，不提交交易。
 
 Error:
@@ -236,13 +239,19 @@ Error:
 - 缺失或错误 internal token 时返回 `401` 或 `403`，不运行 tick。
 - 生产部署或 `RESCUEGRID_DEMO_MODE=false` 时提交 `force_trigger=true` 返回 `FORCE_TRIGGER_DISABLED`。
 
+### `GET/POST /api/risk/controls`
+
+- GET 按 owner 返回 `global_stopped`、`global_stops`、`strategy_stops`、`strategy_stop_records`、`venue_stops`、`venue_stop_records` 和完整 `control_records`。
+- POST 必须验证 Sui personal-message signature，签名地址必须等于 `owner`。
+- message domain 必须是 `RescueGrid` / `sui:testnet`，action 必须是 `set_global_stop`、`set_strategy_stop` 或 `set_venue_stop`。
+- `set_strategy_stop` 必须校验链上 wrapper owner 等于签名 owner。
+- expired message、owner mismatch、signature mismatch 和 replayed nonce 必须失败。
+- 成功写入后，后续 tick 在 trigger 命中时必须分别返回 `GLOBAL_STOPPED`、`STRATEGY_STOPPED` 或 `VENUE_STOPPED`。
+
 ### `GET/POST /api/risk/venue-stops`
 
-- GET 返回 `venue_stops` 和 `venue_stop_records`。
-- POST 必须验证 Sui personal-message signature，签名地址必须等于 `owner`。
-- message domain 必须是 `RescueGrid` / `sui:testnet` / `set_venue_stop`。
-- expired message、owner mismatch、signature mismatch 和 replayed nonce 必须失败。
-- 成功写入后，后续 tick 对应 venue 在 trigger 命中时必须返回 `VENUE_STOPPED`。
+- 兼容旧接口；GET 只返回 venue control view。
+- POST 只接受 `set_venue_stop`，其他 action 必须返回 `BAD_CONTROL_ACTION`。
 
 ## 4. Guardian Tests
 

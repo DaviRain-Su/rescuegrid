@@ -14,9 +14,11 @@ import {
   buildPolicyTx,
   activatePolicy,
   buildRevokeTx,
+  buildGlobalStopMessage,
+  buildStrategyStopMessage,
   buildVenueStopMessage,
-  getVenueStops,
-  setVenueStop,
+  getRiskControls,
+  setRiskControl,
 } from './api.js'
 import { EMPTY_LIVE_DASHBOARD, liveDashboardOwnerKey, useLiveDashboard } from './queries/live.js'
 import { Icon, Logo, Token, hexToRgba } from './components/primitives.jsx'
@@ -257,9 +259,9 @@ export default function App({ onExit }) {
     enabled: liveReadsEnabled && authed,
   })
   const liveDashboard = liveDashboardQuery.data || EMPTY_LIVE_DASHBOARD
-  const venueStopsQuery = useQuery({
-    queryKey: ['risk', 'venue-stops'],
-    queryFn: getVenueStops,
+  const riskControlsQuery = useQuery({
+    queryKey: ['risk', 'controls', owner],
+    queryFn: () => getRiskControls(owner),
     enabled: authed && liveReadsEnabled && WORKER_CONFIGURED,
     staleTime: 5_000,
     refetchInterval: authed && liveReadsEnabled && WORKER_CONFIGURED ? 5_000 : false,
@@ -280,9 +282,14 @@ export default function App({ onExit }) {
     ? { source: 'error', error: String(liveDashboardQuery.error?.message || liveDashboardQuery.error) }
     : liveDashboard.meta
   const refreshLivePolicies = () => queryClient.invalidateQueries({ queryKey: liveDashboardOwnerKey(owner) })
-  const refreshVenueStops = () => queryClient.invalidateQueries({ queryKey: ['risk', 'venue-stops'] })
-  const liveVenueStops = venueStopsQuery.data?.status === 'ok' && Array.isArray(venueStopsQuery.data.venue_stops)
-    ? venueStopsQuery.data.venue_stops
+  const refreshRiskControls = () => queryClient.invalidateQueries({ queryKey: ['risk', 'controls', owner] })
+  const liveRiskControls = riskControlsQuery.data?.status === 'ok' ? riskControlsQuery.data : null
+  const liveGlobalStopped = Boolean(liveRiskControls?.global_stopped)
+  const liveStrategyStops = Array.isArray(liveRiskControls?.strategy_stops)
+    ? liveRiskControls.strategy_stops
+    : []
+  const liveVenueStops = Array.isArray(liveRiskControls?.venue_stops)
+    ? liveRiskControls.venue_stops
     : []
   const displayedPolicies = liveReadsEnabled && livePoliciesLoading ? [] : policies
 
@@ -412,27 +419,32 @@ export default function App({ onExit }) {
     },
   })
 
-  const venueStopMutation = useMutation({
-    mutationFn: async ({ venue, stopped }) => {
+  const riskControlMutation = useMutation({
+    mutationFn: async ({ action, venue, policy, stopped }) => {
       if (!account) throw new Error('Connect a Sui wallet to sign runtime risk controls.')
-      const message = buildVenueStopMessage({ owner: account.address, venue, stopped })
+      const message = action === 'global'
+        ? buildGlobalStopMessage({ owner: account.address, stopped })
+        : action === 'strategy'
+          ? buildStrategyStopMessage({ owner: account.address, wrapperId: policy?._wrapperId, stopped })
+          : buildVenueStopMessage({ owner: account.address, venue, stopped })
       const signed = await signPersonalMessage({ message: new TextEncoder().encode(message) })
-      const result = await setVenueStop(account.address, message, signed.signature)
-      if (result.status !== 'ok') throw apiFailure('Venue stop failed', result)
-      return { venue, stopped, result }
+      const result = await setRiskControl(account.address, message, signed.signature)
+      if (result.status !== 'ok') throw apiFailure('Risk control failed', result)
+      return { action, venue, policy, stopped, result }
     },
-    onSuccess: ({ venue, stopped }) => {
+    onSuccess: ({ action, venue, policy, stopped }) => {
+      const label = action === 'global' ? 'Global' : action === 'strategy' ? policy?.name || 'Strategy' : venue
       showToast(
         stopped
-          ? `${venue} stop persisted — Worker runtime will block new adapter submissions`
-          : `${venue} stop removed — Worker runtime can evaluate adapter submissions`,
+          ? `${label} stop persisted — Worker runtime will block matching submissions`
+          : `${label} stop removed — Worker runtime can evaluate matching submissions`,
         stopped ? 'var(--warn)' : 'var(--accent)',
       )
-      pushNotif('guardian', `${venue} ${stopped ? 'venue stop enabled' : 'venue stop removed'}`)
-      refreshVenueStops()
+      pushNotif('guardian', `${label} ${stopped ? 'runtime stop enabled' : 'runtime stop removed'}`)
+      refreshRiskControls()
     },
     onError: (e) => {
-      showToast(`Venue stop failed: ${String(e?.message || e).slice(0, 80)}`, 'var(--danger)')
+      showToast(`Risk control failed: ${String(e?.message || e).slice(0, 80)}`, 'var(--danger)')
     },
   })
 
@@ -481,10 +493,35 @@ export default function App({ onExit }) {
     showToast(p.status === 'active' ? 'Strategy paused — agent holds, no new actions' : 'Strategy resumed — agent active within policy', p.status === 'active' ? 'var(--warn)' : 'var(--accent)')
   }
 
+  const handleGlobalStop = (stopped) => {
+    if (liveMode) {
+      if (!WORKER_CONFIGURED) { showToast('Global stop needs the Worker — set VITE_WORKER_URL and run it', 'var(--warn)'); return }
+      riskControlMutation.mutate({ action: 'global', stopped })
+      return
+    }
+    if (readOnlyLiveMode) {
+      showToast('Read-only live Worker mode — connect a wallet to sign global risk controls', 'var(--warn)')
+    }
+  }
+
+  const handleStrategyStop = (policy, stopped) => {
+    if (liveMode) {
+      if (!WORKER_CONFIGURED) { showToast('Strategy stop needs the Worker — set VITE_WORKER_URL and run it', 'var(--warn)'); return }
+      if (!policy?._wrapperId) { showToast('Strategy stop needs a live wrapper id', 'var(--warn)'); return }
+      riskControlMutation.mutate({ action: 'strategy', policy, stopped })
+      return
+    }
+    if (readOnlyLiveMode) {
+      showToast('Read-only live Worker mode — connect a wallet to sign strategy risk controls', 'var(--warn)')
+      return
+    }
+    togglePolicy(policy)
+  }
+
   const handleVenueStop = (venue, stopped) => {
     if (liveMode) {
       if (!WORKER_CONFIGURED) { showToast('Venue stop needs the Worker — set VITE_WORKER_URL and run it', 'var(--warn)'); return }
-      venueStopMutation.mutate({ venue, stopped })
+      riskControlMutation.mutate({ action: 'venue', venue, stopped })
       return
     }
     if (readOnlyLiveMode) {
@@ -831,13 +868,17 @@ export default function App({ onExit }) {
               policies={displayedPolicies}
               stopped={halted}
               onEmergencyStop={emergencyStop}
-              onTogglePolicy={togglePolicy}
+              onTogglePolicy={liveReadsEnabled ? undefined : togglePolicy}
+              onToggleGlobalStop={liveReadsEnabled ? handleGlobalStop : undefined}
+              globalStopped={liveReadsEnabled ? liveGlobalStopped : false}
+              onToggleStrategyStop={liveReadsEnabled ? handleStrategyStop : undefined}
+              strategyStops={liveReadsEnabled ? liveStrategyStops : undefined}
               onToggleVenueStop={liveReadsEnabled ? handleVenueStop : undefined}
               onToast={showToast}
               venueStops={liveReadsEnabled ? liveVenueStops : undefined}
-              venueStopsLoading={liveReadsEnabled && venueStopsQuery.isFetching}
-              venueStopPending={venueStopMutation.isPending}
-              venueStopSource={liveReadsEnabled && venueStopsQuery.data?.status === 'ok' ? 'worker' : 'local'}
+              riskControlsLoading={liveReadsEnabled && riskControlsQuery.isFetching}
+              riskControlPending={riskControlMutation.isPending}
+              riskControlSource={liveReadsEnabled && riskControlsQuery.data?.status === 'ok' ? 'worker' : 'local'}
             />}
             {view === 'strategies' && <StrategyMarketplace onDeploy={(s) => { setSeed(s); setView('new') }} onToast={showToast} onOpen={openStrategy} />}
             {view === 'strategy-detail' && <StrategyDetail id={stratId} onBack={() => setView('strategies')} onDeploy={(s) => { setSeed(s); setView('new') }} onToast={showToast} />}

@@ -11,10 +11,11 @@ const check = (name, got, want) => {
 
 const MID = '0xMANDATE'
 const OWNER = '0x1111111111111111111111111111111111111111111111111111111111111111'
+const WRAPPER_ID = '0x3333333333333333333333333333333333333333333333333333333333333333'
 const AGENT = '0xAGENT'
 const POOL = '0xPOOL'
 const base = {
-  wrapper: { mandate_id: MID, agent: AGENT, pool_id: POOL, budget_ceiling: '1000000', spent_amount: '0', max_slippage_bps: 100 },
+  wrapper: { mandate_id: MID, owner: OWNER, agent: AGENT, pool_id: POOL, budget_ceiling: '1000000', spent_amount: '0', max_slippage_bps: 100 },
   mandate: { id: MID, agent: AGENT, revoked: false, expires_at_ms: 10_000 },
   triggerMet: true,
   proposed: { pool_id: POOL, amount: '100000', estimated_slippage_bps: 50 },
@@ -34,6 +35,11 @@ check('stopped venue does not spam before trigger', run({ triggerMet: false, ven
 check('stopped venue -> blocked when trigger fires', run({ venue: 'DeepBook', stoppedVenues: ['DeepBook'] }).action, 'blocked')
 check('stopped venue exposes stable code', run({ venue: 'DeepBook', stoppedVenues: ['DeepBook'] }).code, 'VENUE_STOPPED')
 check('stopped venue never claims execution', run({ venue: 'DeepBook', stoppedVenues: ['DeepBook'] }).execution_claimed, false)
+check('owner global stop blocks triggered execution', run({ riskControls: { global_stops: [{ owner: OWNER, stopped: true }] } }).code, 'GLOBAL_STOPPED')
+check('other owner global stop does not block', run({ riskControls: { global_stops: [{ owner: '0x2222222222222222222222222222222222222222222222222222222222222222', stopped: true }] } }).action, 'execute')
+check('owner strategy stop blocks triggered execution', run({ wrapperId: WRAPPER_ID, riskControls: { strategy_stops: [{ owner: OWNER, wrapper_id: WRAPPER_ID, stopped: true }] } }).code, 'STRATEGY_STOPPED')
+check('other strategy stop does not block', run({ wrapperId: WRAPPER_ID, riskControls: { strategy_stops: [{ owner: OWNER, wrapper_id: '0x2222222222222222222222222222222222222222222222222222222222222222', stopped: true }] } }).action, 'execute')
+check('other owner venue stop does not block', run({ venue: 'DeepBook', riskControls: { venue_stops: [{ owner: '0x2222222222222222222222222222222222222222222222222222222222222222', venue: 'DeepBook', stopped: true }] } }).action, 'execute')
 check('risk controls unavailable blocks triggered execution', run({ riskControlsUnavailable: true }).code, 'RISK_CONTROLS_UNAVAILABLE')
 check('wrong agent -> blocked', run({ expectedAgentId: AGENT, wrapper: { ...base.wrapper, agent: '0xOTHER' } }).action, 'blocked')
 check('wrong agent exposes stable code', run({ expectedAgentId: AGENT, wrapper: { ...base.wrapper, agent: '0xOTHER' } }).code, 'WRONG_AGENT')
@@ -77,7 +83,6 @@ check('funding block includes disabled flag', unfundedDisabled.blocker_codes.inc
 check('funding block includes missing DEEP', unfundedDisabled.blocker_codes.includes('INSUFFICIENT_DEEP'), true)
 check('funding block never claims execution', unfundedDisabled.execution_claimed, false)
 
-const WRAPPER_ID = '0xWRAP'
 const beforeWrapper = { spent_amount: '0' }
 const afterUnchangedWrapper = { spent_amount: '0' }
 const afterSpentWrapper = { spent_amount: '100000' }

@@ -237,7 +237,7 @@ Required modules:
 - Guardian rule editor;
 - "what the agent cannot do" capability matrix.
 
-Implementation status: `src/components/Risk.jsx` now implements the K7 Risk Center surface. It shows global budget and daily loss caps, per-strategy pause/resume controls wired to the existing policy toggle state, Sui venue stop/resume controls, per-venue exposure caps, liquidation watch, oracle health, signer/executor health, stale-data warning summaries, Guardian preset editing/simulation and the capability matrix. The global emergency stop remains wired to the app-wide halt path; strategy controls update the current policy state. In live wallet mode, venue stop/resume signs a Sui personal message and writes `/api/risk/venue-stops`; Worker ticks read the persisted control and block matching adapter submissions with `VENUE_STOPPED` before PTB signing. Demo mode keeps a local preview state.
+Implementation status: `src/components/Risk.jsx` now implements the K7 Risk Center surface. It shows global budget and daily loss caps, per-strategy pause/resume controls, Sui venue stop/resume controls, per-venue exposure caps, liquidation watch, oracle health, signer/executor health, stale-data warning summaries, Guardian preset editing/simulation and the capability matrix. In live wallet mode, global / strategy / venue stop/resume signs a Sui personal message and writes `/api/risk/controls`; Worker ticks read the persisted owner-scoped controls and block matching submissions with `GLOBAL_STOPPED`, `STRATEGY_STOPPED` or `VENUE_STOPPED` before PTB signing. Demo mode keeps a local preview state.
 
 ### G. Agent Activity Ledger v2
 

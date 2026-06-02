@@ -180,31 +180,70 @@ function venueKey(venue) {
   return String(venue || '').trim().toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '')
 }
 
-export function buildVenueStopMessage({ owner, venue, stopped, nonce = ownerControlNonce(), issuedAtMs = Date.now() }) {
-  const cleanVenue = String(venue || '').trim().replace(/\s+/g, ' ')
-  return JSON.stringify({
+function baseRiskControlMessage({ owner, action, stopped, nonce, issuedAtMs }) {
+  return {
     app: 'RescueGrid',
     version: 1,
     chain: 'sui:testnet',
-    action: 'set_venue_stop',
+    action,
     owner,
-    venue: cleanVenue,
-    venue_key: venueKey(cleanVenue),
     stopped: Boolean(stopped),
     nonce,
     issued_at_ms: issuedAtMs,
+  }
+}
+
+export function buildGlobalStopMessage({ owner, stopped, nonce = ownerControlNonce(), issuedAtMs = Date.now() }) {
+  return JSON.stringify(baseRiskControlMessage({ owner, action: 'set_global_stop', stopped, nonce, issuedAtMs }))
+}
+
+export function buildStrategyStopMessage({ owner, wrapperId, stopped, nonce = ownerControlNonce(), issuedAtMs = Date.now() }) {
+  return JSON.stringify({
+    ...baseRiskControlMessage({ owner, action: 'set_strategy_stop', stopped, nonce, issuedAtMs }),
+    wrapper_id: wrapperId,
   })
 }
 
+export function buildVenueStopMessage({ owner, venue, stopped, nonce = ownerControlNonce(), issuedAtMs = Date.now() }) {
+  const cleanVenue = String(venue || '').trim().replace(/\s+/g, ' ')
+  return JSON.stringify({
+    ...baseRiskControlMessage({ owner, action: 'set_venue_stop', stopped, nonce, issuedAtMs }),
+    venue: cleanVenue,
+    venue_key: venueKey(cleanVenue),
+  })
+}
+
+/** GET /api/risk/controls — owner-scoped Worker runtime risk controls. */
+export function getRiskControls(owner) {
+  const query = owner ? `?owner=${encodeURIComponent(owner)}` : ''
+  return workerGet(`/api/risk/controls${query}`).catch((e) => ({
+    status: 'error',
+    code: WORKER_CONFIGURED ? 'WORKER_READ_FAILED' : 'WORKER_NOT_CONFIGURED',
+    message: String(e?.message || e),
+    global_stopped: false,
+    global_stop: null,
+    strategy_stops: [],
+    strategy_stop_records: [],
+    venue_stops: [],
+    venue_stop_records: [],
+  }))
+}
+
 /** GET /api/risk/venue-stops — Worker runtime venue emergency stops. */
-export function getVenueStops() {
-  return workerGet('/api/risk/venue-stops').catch((e) => ({
+export function getVenueStops(owner) {
+  const query = owner ? `?owner=${encodeURIComponent(owner)}` : ''
+  return workerGet(`/api/risk/venue-stops${query}`).catch((e) => ({
     status: 'error',
     code: WORKER_CONFIGURED ? 'WORKER_READ_FAILED' : 'WORKER_NOT_CONFIGURED',
     message: String(e?.message || e),
     venue_stops: [],
     venue_stop_records: [],
   }))
+}
+
+/** POST /api/risk/controls — owner-signed runtime risk control. */
+export function setRiskControl(owner, message, signature) {
+  return post('/api/risk/controls', { owner, message, signature })
 }
 
 /** POST /api/risk/venue-stops — owner-signed runtime venue stop/resume. */

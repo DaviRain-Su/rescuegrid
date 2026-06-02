@@ -134,7 +134,7 @@ async function checkFunding(chainData, proposed, executionEnabled) {
 /**
  * Full tick with chain reads + gated execution.
  * @param {object} env worker env (AGENT_KEY, EXECUTION_ENABLED, DEMO_MODE)
- * @param {object} p { wrapperId, forceTrigger, nowMs, market, executorKind, venueStops, riskControlsUnavailable }
+ * @param {object} p { wrapperId, forceTrigger, nowMs, market, executorKind, venueStops, riskControls, riskControlsUnavailable }
  * @returns {Promise<Record<string, any>>}
  */
 export async function runTick(env, p) {
@@ -178,7 +178,10 @@ export async function runTick(env, p) {
     executionEnabled,
     expectedAgentId: DEPLOYMENT.agent.address,
     expectedPoolId,
+    wrapperId: p.wrapperId,
+    owner: wrapper.owner,
     venue,
+    riskControls: p.riskControls || {},
     stoppedVenues: p.venueStops || [],
     riskControlsUnavailable: p.riskControlsUnavailable === true,
   })

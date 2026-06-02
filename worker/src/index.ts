@@ -29,7 +29,15 @@ import {
 import { AGENT_ADDRESS, DEFAULT_TICK_INTERVAL_SECONDS, MAX_ACTIVE_POLICIES_PER_DEPLOYMENT } from './config.js'
 import { getExecutorAdapter, unsupportedExecutor, unsupportedExecutorTarget } from './executor-adapters.js'
 import { activationPolicyPreflight, reconcilePolicyListRuntimeState, reconcilePolicyRuntimeState, revokePolicyPreflight } from './policy-api.js'
-import { RISK_CONTROLS_DO_NAME, verifyVenueStopControl } from './risk-controls.js'
+import {
+  OWNER_CONTROL_ACTION_SET_GLOBAL_STOP,
+  OWNER_CONTROL_ACTION_SET_STRATEGY_STOP,
+  OWNER_CONTROL_ACTION_SET_VENUE_STOP,
+  RISK_CONTROLS_DO_NAME,
+  riskControlStorageKey,
+  verifyRiskControl,
+  verifyVenueStopControl,
+} from './risk-controls.js'
 import type { ParseDefaults, Strategy } from './types.js'
 
 export interface Env {
@@ -84,11 +92,10 @@ async function fetchRiskControlsJson(env: Env, path: string, init?: RequestInit)
   }
 }
 
-async function readRuntimeVenueStops(env: Env): Promise<{ venueStops: string[]; unavailable: boolean }> {
-  const body = await fetchRiskControlsJson(env, '/venue-stops')
-  if (!body) return { venueStops: [], unavailable: true }
-  const stops = Array.isArray(body.venue_stops) ? body.venue_stops.map(String) : []
-  return { venueStops: stops, unavailable: false }
+async function readRuntimeRiskControls(env: Env): Promise<{ controls: Record<string, any>; unavailable: boolean }> {
+  const body = await fetchRiskControlsJson(env, '/controls')
+  if (!body) return { controls: {}, unavailable: true }
+  return { controls: body, unavailable: false }
 }
 
 async function readRuntimeState(env: Env, wrapperId: string): Promise<Record<string, any> | null> {
@@ -364,9 +371,52 @@ app.get('/api/balances', async (c) => {
   }
 })
 
-// ── K7: runtime risk controls for venue emergency stops ──────────────────
+// ── K7: owner-signed runtime risk controls ───────────────────────────────
+app.get('/api/risk/controls', async (c) => {
+  const owner = c.req.query('owner')
+  const qs = owner ? `?owner=${encodeURIComponent(owner)}` : ''
+  const body = await fetchRiskControlsJson(c.env, `/controls${qs}`)
+  if (!body) {
+    return c.json({ status: 'error', code: 'RISK_CONTROLS_UNAVAILABLE', message: 'Runtime risk controls are unavailable.' }, 503)
+  }
+  return c.json(body)
+})
+
+app.post('/api/risk/controls', async (c) => {
+  let body: { owner?: string; message?: string; signature?: string }
+  try {
+    body = await c.req.json()
+  } catch {
+    return c.json({ status: 'error', code: 'BAD_REQUEST', message: 'Invalid JSON body.' }, 400)
+  }
+  const verified = await verifyRiskControl(body as any)
+  if (!verified.ok) return c.json(verified.body, verified.status as 400)
+  const control = (verified as { control: any }).control
+  if (control.action === OWNER_CONTROL_ACTION_SET_STRATEGY_STOP) {
+    try {
+      const chainData = chainDataProvider(c.env)
+      const wrapper = await chainData.readWrapper(control.wrapper_id)
+      if (!wrapper) return c.json({ status: 'error', code: 'WRAPPER_NOT_FOUND', message: 'Wrapper not found on-chain.' }, 404)
+      if (wrapper.owner !== control.owner) {
+        return c.json({ status: 'error', code: 'OWNER_MISMATCH', message: 'Signed owner does not own this wrapper.' }, 403)
+      }
+    } catch (e) {
+      return c.json({ status: 'error', code: 'CHAIN_READ_FAILED', message: String((e as Error).message) }, 502)
+    }
+  }
+
+  const stub = c.env.AGENT_RUNTIME.get(c.env.AGENT_RUNTIME.idFromName(RISK_CONTROLS_DO_NAME))
+  const res = await stub.fetch('https://do/controls', {
+    method: 'POST',
+    body: JSON.stringify(control),
+  })
+  return c.json(await res.json(), res.status as 200)
+})
+
 app.get('/api/risk/venue-stops', async (c) => {
-  const body = await fetchRiskControlsJson(c.env, '/venue-stops')
+  const owner = c.req.query('owner')
+  const qs = owner ? `?owner=${encodeURIComponent(owner)}` : ''
+  const body = await fetchRiskControlsJson(c.env, `/venue-stops${qs}`)
   if (!body) {
     return c.json({ status: 'error', code: 'RISK_CONTROLS_UNAVAILABLE', message: 'Runtime risk controls are unavailable.' }, 503)
   }
@@ -384,7 +434,7 @@ app.post('/api/risk/venue-stops', async (c) => {
   if (!verified.ok) return c.json(verified.body, verified.status as 400)
 
   const stub = c.env.AGENT_RUNTIME.get(c.env.AGENT_RUNTIME.idFromName(RISK_CONTROLS_DO_NAME))
-  const res = await stub.fetch('https://do/venue-stops', {
+  const res = await stub.fetch('https://do/controls', {
     method: 'POST',
     body: JSON.stringify(verified.control),
   })
@@ -551,11 +601,11 @@ app.post('/api/agent/tick', async (c) => {
   if (!bodyResult.ok) return c.json(bodyResult.body, bodyResult.status as 400)
   const forceResult = validateForceTrigger({ forceTriggerRequested: body.force_trigger === true, demoMode: c.env.RESCUEGRID_DEMO_MODE })
   if (!forceResult.ok) return c.json(forceResult.body, forceResult.status as 403)
-  const controls = await readRuntimeVenueStops(c.env)
+  const controls = await readRuntimeRiskControls(c.env)
   const result = await runTick(c.env, {
     wrapperId: bodyResult.wrapperId,
     forceTrigger: forceResult.forceTrigger,
-    venueStops: controls.venueStops,
+    riskControls: controls.controls,
     riskControlsUnavailable: controls.unavailable,
   })
   return c.json({ status: 'ok', ...result })
@@ -578,35 +628,69 @@ export class AgentRuntime {
     return new Response(JSON.stringify(body), { status, headers: { 'content-type': 'application/json' } })
   }
 
+  riskControlView(recordsByKey: Record<string, any>, owner: string | null = null): Record<string, any> {
+    const records = Object.values(recordsByKey)
+      .filter((r: any) => !owner || r.owner === owner)
+      .sort((a: any, b: any) => Number(b.updated_ms || 0) - Number(a.updated_ms || 0))
+    const active = records.filter((r: any) => r.stopped)
+    const globalRecords = active.filter((r: any) => r.action === OWNER_CONTROL_ACTION_SET_GLOBAL_STOP)
+    const strategyRecords = active.filter((r: any) => r.action === OWNER_CONTROL_ACTION_SET_STRATEGY_STOP)
+    const venueRecords = active.filter((r: any) => r.action === OWNER_CONTROL_ACTION_SET_VENUE_STOP)
+    return {
+      status: 'ok',
+      owner,
+      global_stopped: globalRecords.length > 0,
+      global_stop: globalRecords[0] ?? null,
+      global_stops: globalRecords,
+      strategy_stops: strategyRecords.map((r: any) => r.wrapper_id),
+      strategy_stop_records: strategyRecords,
+      venue_stops: venueRecords.map((r: any) => r.venue),
+      venue_stop_records: venueRecords,
+      control_records: records,
+      updated_ms: records[0]?.updated_ms ?? null,
+    }
+  }
+
   async fetch(req: Request): Promise<Response> {
     const url = new URL(req.url)
-    if (url.pathname === '/venue-stops') {
-      const recordsByVenue = (await this.state.storage.get<Record<string, any>>('venueStopRecords')) ?? {}
+    if (url.pathname === '/controls' || url.pathname === '/venue-stops') {
+      const recordsByKey = (await this.state.storage.get<Record<string, any>>('riskControlRecords')) ?? {}
       if (req.method === 'GET') {
-        const records = Object.values(recordsByVenue).sort((a: any, b: any) => Number(b.updated_ms || 0) - Number(a.updated_ms || 0))
-        return this.json({
-          status: 'ok',
-          venue_stops: records.filter((r: any) => r.stopped).map((r: any) => r.venue),
-          venue_stop_records: records,
-          updated_ms: records[0]?.updated_ms ?? null,
-        })
+        const owner = url.searchParams.get('owner')
+        const view = this.riskControlView(recordsByKey, owner)
+        return this.json(url.pathname === '/venue-stops'
+          ? {
+              status: 'ok',
+              owner: view.owner,
+              venue_stops: view.venue_stops,
+              venue_stop_records: view.venue_stop_records,
+              updated_ms: view.updated_ms,
+            }
+          : view)
       }
       if (req.method === 'POST') {
         const control = await req.json<any>()
-        if (!control?.owner || !control?.venue || !control?.venue_key || typeof control.stopped !== 'boolean' || !control?.nonce) {
-          return this.json({ status: 'error', code: 'BAD_CONTROL', message: 'Verified venue-stop control required.' }, 400)
+        if (!control?.owner || !control?.action || !control?.target_key || typeof control.stopped !== 'boolean' || !control?.nonce) {
+          return this.json({ status: 'error', code: 'BAD_CONTROL', message: 'Verified risk control required.' }, 400)
         }
-        const nonces = (await this.state.storage.get<Record<string, number>>('venueStopNonces')) ?? {}
+        if (url.pathname === '/venue-stops' && control.action !== OWNER_CONTROL_ACTION_SET_VENUE_STOP) {
+          return this.json({ status: 'error', code: 'BAD_CONTROL_ACTION', message: 'Venue stop endpoint only accepts venue stop controls.' }, 400)
+        }
+        const nonces = (await this.state.storage.get<Record<string, number>>('riskControlNonces')) ?? {}
         const nonceKey = `${control.owner}:${control.nonce}`
         if (nonces[nonceKey]) {
           return this.json({ status: 'error', code: 'CONTROL_REPLAYED', message: 'Owner control nonce was already used.' }, 409)
         }
         const nowMs = Date.now()
         const nextRecords = {
-          ...recordsByVenue,
-          [control.venue_key]: {
-            venue: control.venue,
-            venue_key: control.venue_key,
+          ...recordsByKey,
+          [riskControlStorageKey(control)]: {
+            action: control.action,
+            scope: control.scope,
+            target_key: control.target_key,
+            wrapper_id: control.wrapper_id ?? null,
+            venue: control.venue ?? null,
+            venue_key: control.venue_key ?? null,
             stopped: control.stopped,
             owner: control.owner,
             updated_ms: nowMs,
@@ -614,17 +698,20 @@ export class AgentRuntime {
           },
         }
         const nextNonces = Object.fromEntries([...Object.entries(nonces), [nonceKey, nowMs]].slice(-100))
-        await this.state.storage.put('venueStopRecords', nextRecords)
-        await this.state.storage.put('venueStopNonces', nextNonces)
-        const records = Object.values(nextRecords).sort((a: any, b: any) => Number(b.updated_ms || 0) - Number(a.updated_ms || 0))
-        await this.state.storage.put('lastVenueStopUpdateMs', nowMs)
+        await this.state.storage.put('riskControlRecords', nextRecords)
+        await this.state.storage.put('riskControlNonces', nextNonces)
+        await this.state.storage.put('lastRiskControlUpdateMs', nowMs)
+        const view = this.riskControlView(nextRecords, control.owner)
         return this.json({
+          ...view,
           status: 'ok',
-          venue: control.venue,
-          venue_key: control.venue_key,
+          action: control.action,
+          scope: control.scope,
+          target_key: control.target_key,
+          wrapper_id: control.wrapper_id ?? null,
+          venue: control.venue ?? null,
+          venue_key: control.venue_key ?? null,
           stopped: control.stopped,
-          venue_stops: records.filter((r: any) => r.stopped).map((r: any) => r.venue),
-          venue_stop_records: records,
           updated_ms: nowMs,
         })
       }
@@ -737,8 +824,8 @@ export class AgentRuntime {
       } catch { /* price read is best-effort; fall through to monitoring */ }
     }
 
-    const controls = await readRuntimeVenueStops(this.env)
-    const result = await runTick(this.env, { wrapperId, market, executorKind, venueStops: controls.venueStops, riskControlsUnavailable: controls.unavailable })
+    const controls = await readRuntimeRiskControls(this.env)
+    const result = await runTick(this.env, { wrapperId, market, executorKind, riskControls: controls.controls, riskControlsUnavailable: controls.unavailable })
     const rsMap: Record<string, string> = {
       stopped_revoked: 'Revoked',
       stopped_expired: 'Expired',
