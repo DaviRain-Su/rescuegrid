@@ -5,7 +5,9 @@
 // current Sui Testnet balances, missing DBUSDC/DEEP/SUI amounts and the exact
 // strict validation command to rerun after funding. It never prints AGENT_KEY.
 import { resolve } from 'node:path'
+import { dirname } from 'node:path'
 import { pathToFileURL } from 'node:url'
+import { mkdirSync, writeFileSync } from 'node:fs'
 import { DEPLOYMENT } from '../src/sui-tx.js'
 import { requireChainDataProvider } from '../src/chain-data-provider.js'
 import { buildExecutionReadiness } from '../src/execution-readiness.js'
@@ -209,12 +211,33 @@ function markdown(handoff) {
   ].join('\n')
 }
 
+export function serializeFundingHandoff(handoff, format = 'json') {
+  const normalized = String(format || 'json').toLowerCase()
+  if (normalized === 'markdown' || normalized === 'md') return markdown(handoff)
+  return JSON.stringify(handoff, null, 2)
+}
+
+export function writeFundingHandoffArtifact(handoff, { outPath, format = 'json' } = {}) {
+  if (!outPath) throw new Error('outPath is required')
+  const resolvedPath = resolve(String(outPath))
+  const body = serializeFundingHandoff(handoff, format)
+  const payload = body.endsWith('\n') ? body : `${body}\n`
+  mkdirSync(dirname(resolvedPath), { recursive: true })
+  writeFileSync(resolvedPath, payload, 'utf8')
+  return {
+    path: resolvedPath,
+    format: String(format || 'json').toLowerCase(),
+    bytes: Buffer.byteLength(payload),
+  }
+}
+
 function help() {
   console.log(`Build a RescueGrid external funding handoff.
 
 Usage:
   node worker/scripts/funding-handoff.mjs [--json]
   node worker/scripts/funding-handoff.mjs --format markdown
+  node worker/scripts/funding-handoff.mjs --format markdown --out .rescuegrid/funding-request.md
   node worker/scripts/funding-handoff.mjs --dbusdc-threshold <amount> --deep-threshold <amount> --sui-gas-threshold <mist>
 
 This is read-only. It prints public Sui Testnet agent, BalanceManager, coin type,
@@ -236,8 +259,21 @@ export async function main(argv = process.argv.slice(2), env = process.env) {
   })
   const handoff = buildFundingHandoff(readiness)
   const format = String(flags.get('--format') || (flags.has('--markdown') ? 'markdown' : 'json')).toLowerCase()
-  if (format === 'markdown') console.log(markdown(handoff))
-  else console.log(JSON.stringify(handoff, null, 2))
+  const outPath = flags.get('--out') || flags.get('--output')
+  if (outPath) {
+    const artifact = writeFundingHandoffArtifact(handoff, { outPath, format })
+    console.log(JSON.stringify({
+      status: 'ok',
+      purpose: handoff.purpose,
+      artifact,
+      chain: handoff.chain,
+      ready_for_strict_execution: handoff.ready_for_strict_execution,
+      blocker_codes: handoff.blocker_codes,
+      execution_claimed: false,
+    }, null, 2))
+  } else {
+    console.log(serializeFundingHandoff(handoff, format))
+  }
   return 0
 }
 

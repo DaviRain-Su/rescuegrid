@@ -333,12 +333,14 @@ Happy path:
 - 输出 agent gas address 的 SUI_MIST observed、required、missing、usable 和 blocker code。
 - 输出 `next_verification.readiness_command="npm run daemon -- status --json"`、`next_verification.funding_watch_command="npm run funding:watch -- --json"` 和 `next_verification.strict_execution_command="npm run demo:execute"`。
 - 支持 `--dbusdc-threshold` / `--deep-threshold` / `--sui-gas-threshold`，且这些 request threshold 只能通过 `buildExecutionReadiness` 提高门槛，不能弱化 Worker 配置 minimum。
+- 支持 `--format markdown --out .rescuegrid/funding-request.md` 生成可转发 funding provider 的 artifact；artifact 必须包含 public agent / BalanceManager / coin type / observed / required / missing / next verification commands，且不得包含任何 secret。
 
 Security / boundary:
 
 - 必须复用 `buildExecutionReadiness`，不能复制一套资金和 signer 判断。
 - 必须是 read-only；不得创建 policy、不得提交 PTB、不得修改 BalanceManager。
 - 响应不得包含 `AGENT_KEY`、owner key、`INTERNAL_AGENT_TICK_TOKEN`、WaaP session file、permission token 或任何 secret value。
+- `--out` 只允许写入 handoff artifact，不得改变 readiness、创建 policy、提交 PTB 或隐式调用 `demo:execute`。
 - `execution_claimed` 必须始终为 `false`；`ready_for_strict_execution=true` 只代表 preflight ready，不能代表已经执行成功。
 
 ### `npm run funding:watch`

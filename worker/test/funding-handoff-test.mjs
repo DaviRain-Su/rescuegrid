@@ -1,6 +1,14 @@
 import assert from 'node:assert/strict'
 import { spawnSync } from 'node:child_process'
-import { buildFundingHandoff, fundingHandoffEnv } from '../scripts/funding-handoff.mjs'
+import { mkdtempSync, readFileSync, rmSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
+import {
+  buildFundingHandoff,
+  fundingHandoffEnv,
+  serializeFundingHandoff,
+  writeFundingHandoffArtifact,
+} from '../scripts/funding-handoff.mjs'
 import { DEPLOYMENT } from '../src/sui-tx.js'
 
 const readiness = {
@@ -79,6 +87,27 @@ assert.equal(handoff.next_verification.funding_watch_command, 'npm run funding:w
 assert.equal(handoff.next_verification.strict_execution_command, 'npm run demo:execute')
 assert.equal(JSON.stringify(handoff).includes('super-secret'), false)
 
+const markdown = serializeFundingHandoff(handoff, 'markdown')
+assert.match(markdown, /RescueGrid Funding Request/)
+assert.match(markdown, /DBUSDC coin type:/)
+assert.match(markdown, /After funding, run:/)
+assert.equal(markdown.includes('super-secret'), false)
+
+const artifactDir = mkdtempSync(join(tmpdir(), 'rescuegrid-funding-'))
+try {
+  const artifactPath = join(artifactDir, 'funding-request.md')
+  const artifact = writeFundingHandoffArtifact(handoff, { outPath: artifactPath, format: 'markdown' })
+  assert.equal(artifact.path, artifactPath)
+  assert.equal(artifact.format, 'markdown')
+  assert(artifact.bytes > 100)
+  const artifactBody = readFileSync(artifactPath, 'utf8')
+  assert.match(artifactBody, /RescueGrid Funding Request/)
+  assert.match(artifactBody, /missing 750/)
+  assert.equal(artifactBody.includes('super-secret'), false)
+} finally {
+  rmSync(artifactDir, { recursive: true, force: true })
+}
+
 const env = fundingHandoffEnv({
   AGENT_KEY: 'super-secret',
   EXECUTION_ENABLED: 'true',
@@ -100,6 +129,7 @@ const help = spawnSync(process.execPath, ['scripts/funding-handoff.mjs', '--help
 assert.equal(help.status, 0, help.stderr)
 assert.match(help.stdout, /external funding handoff/i)
 assert.match(help.stdout, /DBUSDC\/DEEP execution gate/i)
+assert.match(help.stdout, /--out/)
 assert.equal(help.stdout.includes('AGENT_KEY='), false, 'help must not print secret assignment examples')
 
 console.log('\nALL FUNDING HANDOFF TESTS PASS')
