@@ -54,6 +54,16 @@ With Worker `http://localhost:8787` and frontend `http://localhost:5173` running
 - Runtime status evidence covered `sui:testnet`, deployment agent match, known signer kind, execution config mirroring `.dev.vars`, Worker-first data provider and no `AGENT_KEY` / `INTERNAL_AGENT_TICK_TOKEN` value leakage.
 - Funding gate stayed explicit: BalanceManager `DBUSDC_raw=0`, `DEEP_raw=0`, `EXECUTION_ENABLED=false`, and the smoke asserted `EXECUTION_DISABLED` with no execution tx submitted.
 
+## Safety negative paths — verified live (2026-06-03)
+
+With Worker `http://localhost:8787` running, `npm run safety:negative -- --worker-url http://localhost:8787` passed against Sui Testnet:
+
+- Active policy created: tx `5iiumZ4C2JjXbM85mJ8wVgpKh8oasBHu5MxJsJF28CYh`, wrapper `0x72a174fe…14c272b`, mandate `0xa54e88e8…ceed4c33`.
+- Expiring policy created: tx `EXydDTMDVh17EJA1iwxB3nX84kD4vkBtmRmwKucZ1ZLE`, wrapper `0xe5ebf855…132acf17`, mandate `0xca531571…1f68a1e7`.
+- Active policy revoked: tx `EQrRShhZUYK7Zz9fGQgjJagvkkEJ3h4bEqR9A7nK9K5s`, chain status `success`.
+- `/api/execution/validate-plan` blocked `OVER_BUDGET`, `OVER_SLIPPAGE`, `WRONG_POOL`, `WRONG_AGENT`, `MANDATE_MISMATCH`, `POLICY_EXPIRED` and `POLICY_REVOKED`.
+- Every blocker stayed pre-submission: `submitted=false`, `execution_claimed=false`, wrapper/API spend stayed `0 -> 0`, execution-success activity stayed `0 -> 0`, and no `AgentTradeExecuted` chain activity was created.
+
 ## Known gaps / next
 
 1. **DBUSDC funding** — the only true remaining gap, and **self-funding is confirmed impossible** on this testnet: DBUSDC `mint` is TreasuryCap-gated (cap not public), DEEP `mint` returns `FunctionNotFound` on the current package, and a SUI→DBUSDC swap needs DEEP for taker fees (a zero-DEEP swap fills 0 even with a live bid). Needs an **external DBUSDC source** (DeepBook-team faucet, or an address that already holds DBUSDC/DEEP). Run `npm run funding:request` for the current public BalanceManager id, coin types and missing amounts to send to the funding provider. Once the agent BalanceManager holds DBUSDC/DEEP: flip `EXECUTION_ENABLED=true`, run `npm run funding:watch -- --json` to verify readiness without creating a policy, then use `npm run funding:watch -- --wait --run-demo --worker-url http://localhost:8787` or `npm run demo:execute`; strict execution will replay the execution PTB through `worker/src/executor-adapters.js` and fail unless the chain emits `AgentTradeExecuted` with spend increase.
