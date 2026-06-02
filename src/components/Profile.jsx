@@ -92,7 +92,7 @@ function FundingReadiness({ funding, live }) {
           {funding.blockers.map((b) => <span key={b.code} className="badge badge-warn" style={{ fontSize: 9 }}>{b.code}</span>)}
         </div>
       )}
-      {funding.execution_blockers?.some((b) => b.code === 'EXECUTION_DISABLED') && (
+      {funding.funding_ready && funding.execution_blockers?.some((b) => b.code === 'EXECUTION_DISABLED') && (
         <div style={{ fontSize: 10.5, color: 'var(--t2)', marginTop: 8 }}>
           Funding is usable, but live execution remains separately gated by <span className="mono">EXECUTION_ENABLED</span>.
         </div>
