@@ -281,19 +281,14 @@ export const RG = {
     email: 'yw•••••@gmail.com',
     avatar: 'YW',
     memberSince: 'May 2026',
-    network: 'Sui Mainnet',
+    network: 'Sui Testnet',
     salt: '0x9f3c…a017',
     currentEpoch: 612,
     maxEpoch: 614,
     sessionExpires: '~36h',
     ephemeralKey: 'ed25519 · 0x4c8d…71ab',
     gas: { sponsored: 47, saved: 0.0421, station: 'RescueGrid Gas Station' },
-    // connected centralized exchanges (read + trade, never withdraw)
-    exchanges: [
-      { id: 'binance', name: 'Binance', c: '#F0B90B', status: 'connected',    balance: 8420.00, perms: 'Read · Trade', withdraw: false, key: 'bnb_••••7c2a' },
-      { id: 'okx',     name: 'OKX',     c: '#AEB7C2', status: 'connected',    balance: 3180.00, perms: 'Read · Trade', withdraw: false, key: 'okx_••••1f90' },
-      { id: 'bybit',   name: 'Bybit',   c: '#F7A600', status: 'disconnected', balance: 0,       perms: '—',           withdraw: false, key: null },
-    ],
+    exchanges: [],
   },
 }
 

@@ -212,7 +212,7 @@ function YieldMonitor({ onDeploy, onInspect, chain, live, onToast }) {
   );
 }
 
-/* ---------------- Perp arbitrage tab ---------------- */
+/* ---------------- Bluefin hedge tab ---------------- */
 function arbOf(inst) {
   const vs = inst.venues;
   let lo = vs[0], hi = vs[0];
@@ -236,7 +236,7 @@ function PerpArb({ onDeploy }) {
           <div className="eyebrow" style={{ marginBottom: 3 }}>Widest spread right now</div>
           <div style={{ display: 'flex', alignItems: 'baseline', gap: 10 }}>
             <span className="display" style={{ fontSize: 18, fontWeight: 600 }}>{best.sym}-PERP</span>
-            <span className="mono" style={{ fontSize: 12, color: 'var(--t2)' }}>delta-neutral funding capture</span>
+            <span className="mono" style={{ fontSize: 12, color: 'var(--t2)' }}>Sui spot hedge signal</span>
           </div>
         </div>
         <div style={{ flex: 1 }} />
@@ -250,7 +250,7 @@ function PerpArb({ onDeploy }) {
           <div style={{ fontSize: 10.5, color: 'var(--t2)' }}>net edge · APR</div>
         </div>
         <button onClick={() => onDeploy && onDeploy({ scenario: 'funding-arb' })} className="btn btn-primary btn-sm">
-          <Icon name="bolt" size={14} /> Deploy arb
+          <Icon name="bolt" size={14} /> Preview hedge
         </button>
       </div>
 
@@ -318,7 +318,7 @@ function PerpArb({ onDeploy }) {
   );
 }
 
-/* ---------------- Spot arbitrage tab ---------------- */
+/* ---------------- Sui DEX spread tab ---------------- */
 function spotArbOf(inst) {
   const vs = inst.venues;
   let buy = vs[0], sell = vs[0];
@@ -343,7 +343,7 @@ function SpotArb({ onDeploy }) {
           <div className="eyebrow" style={{ marginBottom: 3 }}>Widest spot spread right now</div>
           <div style={{ display: 'flex', alignItems: 'baseline', gap: 10 }}>
             <span className="display" style={{ fontSize: 18, fontWeight: 600 }}>{best.sym}</span>
-            <span className="mono" style={{ fontSize: 12, color: 'var(--t2)' }}>buy low · sell high, across CEX &amp; DEX</span>
+            <span className="mono" style={{ fontSize: 12, color: 'var(--t2)' }}>buy low · sell high, inside Sui</span>
           </div>
         </div>
         <div style={{ flex: 1 }} />
@@ -357,7 +357,7 @@ function SpotArb({ onDeploy }) {
           <div style={{ fontSize: 10.5, color: 'var(--t2)' }}>gross spread</div>
         </div>
         <button onClick={() => onDeploy && onDeploy({ scenario: 'spot' })} className="btn btn-primary btn-sm">
-          <Icon name="bolt" size={14} /> Deploy arb
+          <Icon name="bolt" size={14} /> Preview spread
         </button>
       </div>
 
@@ -448,13 +448,13 @@ function Opportunities({ onDeploy, live, onToast }) {
   const opps = [
     ...yieldOpps,
     ...RG.perps.map(p => { const a = arbOf(p); return { kind: 'perp', sym: p.sym, name: p.sym + '-PERP',
-      sub: 'Long ' + RG.perpVenues[a.lo.v].name + ' · Short ' + RG.perpVenues[a.hi.v].name, cat: 'Perp arb', catC: 'var(--accent)',
+      sub: 'Long ' + RG.perpVenues[a.lo.v].name + ' · Short ' + RG.perpVenues[a.hi.v].name, cat: 'Sui hedge', catC: 'var(--accent)',
       edge: a.spread, unit: 'APR', risk: 'med', scenario: 'funding-arb' }; }),
     ...RG.spots.map(s => { const a = spotArbOf(s); return { kind: 'spot', sym: s.sym, name: s.sym + ' spot',
-      sub: 'Buy ' + RG.spotVenues[a.buy.v].name + ' · Sell ' + RG.spotVenues[a.sell.v].name, cat: 'Spot arb', catC: 'var(--safe)',
+      sub: 'Buy ' + RG.spotVenues[a.buy.v].name + ' · Sell ' + RG.spotVenues[a.sell.v].name, cat: 'Sui spread', catC: 'var(--safe)',
       edge: a.spread, unit: 'spread', risk: 'low', scenario: 'spot' }; }),
   ];
-  const cats = ['all', 'Yield', 'Perp arb', 'Spot arb'];
+  const cats = ['all', 'Yield', 'Sui hedge', 'Sui spread'];
   const rows = opps.filter(o => cat === 'all' || o.cat === cat).sort((a, b) => b.edge - a.edge);
 
   return (
@@ -489,7 +489,7 @@ function Opportunities({ onDeploy, live, onToast }) {
                 <span style={{ fontSize: 11.5, fontWeight: 600, padding: '3px 9px', borderRadius: 7, color: o.catC, background: `color-mix(in srgb, ${o.catC} 14%, transparent)` }}>{o.cat}</span>
               </div>
               <div style={{ display: 'flex', alignItems: 'baseline', gap: 6 }}>
-                <span className="mono display" style={{ fontSize: 18, fontWeight: 600, color: 'var(--accent)' }}>{o.cat === 'Yield' ? '' : '+'}{o.edge.toFixed(o.cat === 'Spot arb' ? 2 : 1)}%</span>
+                <span className="mono display" style={{ fontSize: 18, fontWeight: 600, color: 'var(--accent)' }}>{o.cat === 'Yield' ? '' : '+'}{o.edge.toFixed(o.cat === 'Sui spread' ? 2 : 1)}%</span>
                 <span className="mono" style={{ fontSize: 10.5, color: 'var(--t2)' }}>{o.unit}</span>
               </div>
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 10 }}>
@@ -505,7 +505,7 @@ function Opportunities({ onDeploy, live, onToast }) {
       </div>
       <div style={{ fontSize: 11.5, color: 'var(--t2)', display: 'flex', alignItems: 'center', gap: 7 }}>
         <Icon name="radar" size={13} style={{ color: 'var(--accent)' }} />
-        Every yield, funding-rate and spot spread the agent tracks — ranked by edge across {RG.chains.length} chains + CEX · {rows.length} shown{live && liveYields ? ' · yields live from DefiLlama' : live && livePoolsQuery.isPending ? ' · fetching live yields' : ''} · tap the bolt to deploy.
+        Every Sui yield, Bluefin funding signal and DeepBook/Cetus spread the agent tracks — ranked by edge across Sui-native venues · {rows.length} shown{live && liveYields ? ' · yields live from DefiLlama' : live && livePoolsQuery.isPending ? ' · fetching live yields' : ''} · tap the bolt to deploy.
       </div>
     </div>
   );
@@ -522,10 +522,10 @@ export function MarketsView({ onDeploy, live, onToast }) {
   const trackedTvl = RG.yields.reduce((s, y) => s + y.tvl, 0);
 
   const stats = [
-    { k: 'Tracked TVL', v: fmtTvlM(trackedTvl), sub: `${RG.yields.length} pools · ${RG.chains.length} chains`, icon: 'layers', c: 'var(--sui)' },
-    { k: 'Protocols', v: protoCount, sub: 'DeFi + CEX', icon: 'grid', c: 'var(--t1)' },
+    { k: 'Tracked TVL', v: fmtTvlM(trackedTvl), sub: `${RG.yields.length} Sui pools`, icon: 'layers', c: 'var(--sui)' },
+    { k: 'Protocols', v: protoCount, sub: 'Sui DeFi', icon: 'grid', c: 'var(--t1)' },
     { k: 'Best yield', v: bestApy.toFixed(1) + '%', sub: 'APY', icon: 'percent', c: 'var(--accent)' },
-    { k: 'Best arb edge', v: '+' + bestArb.toFixed(1) + '%', sub: 'perp funding', icon: 'swap', c: 'var(--accent)' },
+    { k: 'Best hedge signal', v: '+' + bestArb.toFixed(1) + '%', sub: 'Bluefin funding', icon: 'swap', c: 'var(--accent)' },
   ];
 
   return (
@@ -544,17 +544,17 @@ export function MarketsView({ onDeploy, live, onToast }) {
         ))}
       </div>
 
-      {/* chains filter — applies to the yields tab */}
+      {/* Sui network filter — applies to the yields tab */}
       {tab === 'yields' && (
         <div style={{ display: 'flex', alignItems: 'center', gap: 9, flexWrap: 'wrap' }}>
           <span className="eyebrow" style={{ display: 'inline-flex', alignItems: 'center', gap: 6, marginRight: 2 }}>
-            <Icon name="globe" size={13} /> chain</span>
+            <Icon name="globe" size={13} /> network</span>
           <button onClick={() => setChain('all')}
             style={{ display: 'flex', alignItems: 'center', gap: 7, padding: '7px 13px', borderRadius: 100, cursor: 'pointer',
               border: `1px solid ${chain === 'all' ? 'var(--border-hi)' : 'var(--border)'}`,
               background: chain === 'all' ? 'var(--glass-hi)' : 'var(--glass-2)',
               color: chain === 'all' ? 'var(--t0)' : 'var(--t2)', fontFamily: 'var(--f-body)', fontSize: 12.5, fontWeight: 600 }}>
-            All chains</button>
+            Sui only</button>
           {RG.chains.map(ch => <ChainChip key={ch.id} ch={ch} active={chain === ch.id} onClick={() => setChain(ch.id)} />)}
         </div>
       )}
@@ -562,7 +562,7 @@ export function MarketsView({ onDeploy, live, onToast }) {
       {/* tab switcher */}
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 14, flexWrap: 'wrap' }}>
         <div style={{ display: 'flex', gap: 4, background: 'var(--glass-2)', border: '1px solid var(--border)', borderRadius: 'var(--r-md)', padding: 4, width: 'fit-content' }}>
-          {[['opps', 'radar', 'Opportunities'], ['yields', 'layers', 'Yield monitor'], ['perps', 'swap', 'Perp arbitrage'], ['spots', 'scale', 'Spot arbitrage']].map(([id, ic, label]) => (
+          {[['opps', 'radar', 'Opportunities'], ['yields', 'layers', 'Yield monitor'], ['perps', 'swap', 'Bluefin hedge'], ['spots', 'scale', 'Sui DEX spreads']].map(([id, ic, label]) => (
             <button key={id} onClick={() => setTab(id)} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '9px 16px',
               borderRadius: 8, border: 'none', cursor: 'pointer', fontFamily: 'var(--f-body)', fontSize: 13, fontWeight: 600,
               background: tab === id ? 'var(--glass-hi)' : 'transparent', color: tab === id ? 'var(--t0)' : 'var(--t2)', transition: 'all .14s' }}>

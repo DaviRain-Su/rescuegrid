@@ -60,15 +60,15 @@ function GuardianRow({ g }) {
 
 /* visual multi-leg builder — add/remove legs, live net-delta, liquidation preview */
 const VENUE_OPTS = {
-  'funding-arb': ['Bluefin', 'Hyperliquid', 'Aevo', 'Binance', 'Bybit', 'Drift'],
-  spot: ['Binance', 'OKX', 'Bybit', 'Cetus', 'DeepBook', 'Raydium', 'Uniswap'],
+  'funding-arb': ['DeepBook', 'Bluefin'],
+  spot: ['DeepBook', 'Cetus', 'Bluefin Spot'],
 }
 const MARK_PX = { 'funding-arb': 4.182, spot: 4.182 }
 
 function defaultLegsFor(scenario) {
-  if (scenario === 'spot') return [{ venue: 'OKX', side: 'long', pct: 50 }, { venue: 'Raydium', side: 'short', pct: 50 }]
-  if (scenario === 'funding-arb') return [{ venue: 'Aevo', side: 'short', pct: 50 }, { venue: 'Hyperliquid', side: 'long', pct: 50 }]
-  return [{ venue: 'Bluefin', side: 'short', pct: 50 }, { venue: 'Hyperliquid', side: 'long', pct: 50 }]
+  if (scenario === 'spot') return [{ venue: 'DeepBook', side: 'long', pct: 50 }, { venue: 'Cetus', side: 'short', pct: 50 }]
+  if (scenario === 'funding-arb') return [{ venue: 'DeepBook', side: 'long', pct: 50 }, { venue: 'Bluefin', side: 'short', pct: 50 }]
+  return [{ venue: 'DeepBook', side: 'long', pct: 50 }, { venue: 'Bluefin', side: 'short', pct: 50 }]
 }
 
 function sliderNumber(value) {

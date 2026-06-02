@@ -143,7 +143,7 @@ export function DataSources({ onToast, live, setLive }) {
               <span style={{ fontSize: 12.5, fontWeight: 600, color: 'var(--warn)' }}>Via backend</span>
             </div>
             <div style={{ fontSize: 11.5, color: 'var(--t1)', lineHeight: 1.5 }}>
-              CEX accounts, order placement, bridging and signing run through a Cloudflare Worker + signer. API keys and the zkLogin executor <strong style={{ color: 'var(--t0)' }}>never touch the browser</strong> — and trading keys are read+trade, never withdraw.
+              DeepBook execution building, policy activation and signing support run through the Cloudflare Worker + Sui signer. The zkLogin executor <strong style={{ color: 'var(--t0)' }}>never touches the browser</strong>, and every action stays inside the scoped Move policy.
             </div>
           </div>
         </div>

@@ -1,7 +1,7 @@
 import { useQuery } from '@tanstack/react-query'
 import { RG } from '../data.js'
 
-const LIVE_CHAINS = new Set(['Sui', 'Aptos', 'Solana', 'Ethereum', 'Base'])
+const LIVE_CHAINS = new Set(['Sui'])
 
 export const defiLlamaPoolsQueryKey = ['defillama', 'yield-pools']
 

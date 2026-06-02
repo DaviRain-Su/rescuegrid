@@ -426,16 +426,16 @@ export function Profile({ account, holdings, policies, funding = null, live = fa
 
         </div>
 
-        {/* ---------- connected exchanges (demo persona) ---------- */}
+        {/* ---------- scoped Sui protocol permissions (demo persona) ---------- */}
         {a.exchanges && a.exchanges.length > 0 && (
           <div className="card" style={{ padding: '16px 18px' }}>
             <div className="card-hd" style={{ padding: 0, marginBottom: 14 }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                 <span style={{ color: 'var(--warn)' }}><Icon name="swap" size={16} /></span>
-                <div className="card-title">Connected exchanges</div>
+                <div className="card-title">Scoped Sui protocols</div>
                 <span className="badge badge-neutral" style={{ fontSize: 9.5 }}>{a.exchanges.filter(e => e.status === 'connected').length} linked</span>
               </div>
-              <Button size="sm" variant="light" className="rg-btn-ghost" onPress={() => onToast && onToast('Connect an exchange with a read + trade API key (no withdraw)', 'var(--sui)')}>
+              <Button size="sm" variant="light" className="rg-btn-ghost" onPress={() => onToast && onToast('Add a Sui protocol scope to a policy', 'var(--sui)')}>
                 <Icon name="plus" size={13} /> Connect
               </Button>
             </div>
@@ -454,8 +454,8 @@ export function Profile({ account, holdings, policies, funding = null, live = fa
                       </div>
                       {on
                         ? <div className="mono" style={{ fontSize: 13.5, fontWeight: 600, marginTop: 3 }}>${fmtUsd(ex.balance, 0)}</div>
-                        : <Button size="sm" className="rg-btn-2" style={{ marginTop: 5 }} onPress={() => onToast && onToast('Linking ' + ex.name + ' — paste a read + trade API key', 'var(--accent)')}>Link account</Button>}
-                      <div className="mono" style={{ fontSize: 10, color: 'var(--t2)', marginTop: 4 }}>{on ? ex.perms + ' · no withdraw' : 'link to enable CEX arb'}</div>
+                        : <Button size="sm" className="rg-btn-2" style={{ marginTop: 5 }} onPress={() => onToast && onToast('Adding ' + ex.name + ' to the policy scope', 'var(--accent)')}>Add scope</Button>}
+                      <div className="mono" style={{ fontSize: 10, color: 'var(--t2)', marginTop: 4 }}>{on ? ex.perms + ' · policy scoped' : 'add to Sui policy scope'}</div>
                     </div>
                   </div>
                 )
@@ -464,7 +464,7 @@ export function Profile({ account, holdings, policies, funding = null, live = fa
             <div style={{ display: 'flex', gap: 9, marginTop: 12, padding: '10px 12px', borderRadius: 'var(--r-sm)', background: 'var(--glass)' }}>
               <span style={{ color: 'var(--warn)', flexShrink: 0, marginTop: 1 }}><Icon name="shield" size={14} /></span>
               <div style={{ fontSize: 10.5, lineHeight: 1.45, color: 'var(--t1)' }}>
-                Exchange keys are <strong style={{ color: 'var(--t0)' }}>read + trade only</strong> — withdrawal is never enabled, so the agent can arbitrage across CEX and on-chain venues but can't move funds off an exchange.
+                Protocol scopes are enforced by the Move policy. The agent can only call the listed Sui venues inside the configured budget, slippage and Guardian limits.
               </div>
             </div>
           </div>

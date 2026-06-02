@@ -8,7 +8,7 @@ A running snapshot of what is built and how it was verified. Demo-facing summary
 
 | Layer | Status | Verified by |
 | --- | --- | --- |
-| **Web dashboard** (Vite + React) | ✅ | `npm run build` (2,419 modules); landing → zkLogin → dashboard, flash-crash demo |
+| **Web dashboard** (Vite + React) | ✅ Sui-only public scope | `npm run build` (2,419 modules); landing → zkLogin → dashboard, flash-crash demo; public Markets/Catalog/Profile/Data Sources hide non-Sui/CEX/bridge content for Hackathon submission |
 | **Move package** `rescuegrid::policy` | ✅ deployed | `sui move test` 8/8; published `0x92f6e3…bb78` |
 | **Worker API** (Cloudflare + Hono) | ✅ all endpoints | `npm test` + `npm run typecheck`; runtime activity log covered |
 | **Sign-in** | ✅ | Sui wallet (Slush/std, no creds) primary; Enoki zkLogin optional |

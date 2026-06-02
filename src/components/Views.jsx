@@ -62,14 +62,12 @@ export function ActivityView({ activity, onTx, live = false, loading = false, so
     { id: 'planned', label: 'Planned / no-op' },
     { id: 'exec', label: 'Trades', sep: true },
     { id: 'rebalance', label: 'Rebalance' },
-    { id: 'bridge', label: 'Bridge' },
     { id: 'guardian', label: 'Guardian' },
     { id: 'policy', label: 'Policy' },
   ]
   const meta = {
     exec: { c: 'var(--accent)', bg: 'var(--accent-dim)', icon: 'bolt', label: 'EXECUTION' },
     rebalance: { c: 'var(--sui)', bg: 'var(--sui-dim)', icon: 'swap', label: 'REBALANCE' },
-    bridge: { c: 'var(--accent)', bg: 'var(--accent-dim)', icon: 'globe', label: 'BRIDGE' },
     guardian: { c: 'var(--danger)', bg: 'var(--danger-dim)', icon: 'shield', label: 'GUARDIAN' },
     fail: { c: 'var(--danger)', bg: 'var(--danger-dim)', icon: 'x', label: 'FAILED' },
     retry: { c: 'var(--warn)', bg: 'var(--warn-dim)', icon: 'refresh', label: 'RETRY' },
@@ -100,11 +98,10 @@ export function ActivityView({ activity, onTx, live = false, loading = false, so
   // synthesize the planned-vs-executed detail for an event
   const expand = (a) => {
     const oc = outcomeOf(a)
-    const px = RG.prices[(a.policy.match(/SUI|DEEP|WAL|BTC|ETH/) || ['SUI'])[0]] || RG.prices.SUI
+    const px = RG.prices[(a.policy.match(/SUI|DEEP|WAL/) || ['SUI'])[0]] || RG.prices.SUI
     const reason = {
       exec: 'A trigger condition in the policy was met, so the agent placed the order within its budget and slippage limits.',
       rebalance: 'Net exposure drifted past the policy threshold; the agent restored the target position.',
-      bridge: 'A leg needed collateral on another chain; the agent bridged funds to keep both sides funded.',
       guardian: 'A pre-execution Guardian check failed, so the agent declined to act and logged the reason.',
       fail: 'The order was submitted but the book moved past the limit before settlement; no funds were spent.',
       retry: 'A prior attempt failed; the agent re-quoted and resubmitted within the same limits.',
@@ -116,7 +113,6 @@ export function ActivityView({ activity, onTx, live = false, loading = false, so
     const plan = {
       exec: ['assert_within_budget(cap, spent)', 'deepbook::place_limit_order(...)', 'log_activity(action="exec")'],
       rebalance: ['read_net_delta()', 'adjust_legs(target≈0)', 'log_activity(action="rebalance")'],
-      bridge: ['assert_within_budget(cap, spent)', 'debridge::send(to, asset, amt)', 'await_settlement()'],
       guardian: ['assert_pool_liquidity(min)', '→ FAILED · abort()', 'log_activity(action="blocked")'],
       fail: ['place_limit_order(...)', '→ book moved · revert()', 'queue_retry()'],
       retry: ['re_quote()', 'place_limit_order(...)', 'log_activity(action="retry")'],

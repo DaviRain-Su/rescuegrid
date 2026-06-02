@@ -5,8 +5,8 @@ import { Icon, TimeChart, ModeBadge, fmtUsd } from './primitives.jsx'
 const STRAT_LIVE = {
   'funding-arb': (p, sc, used, cap) => ({
     legs: [
-      { venue: 'Aevo', side: 'Short', asset: sc, size: '$' + fmtUsd(used, 0), sub: 'funding +18.7% · earns' },
-      { venue: 'Hyperliquid', side: 'Long', asset: sc, size: '$' + fmtUsd(used, 0), sub: 'funding −5.1% · pays' },
+      { venue: 'DeepBook', side: 'Long', asset: sc, size: '$' + fmtUsd(used, 0), sub: 'spot inventory' },
+      { venue: 'Bluefin', side: 'Short', asset: sc, size: '$' + fmtUsd(used, 0), sub: 'perp hedge · funding watched' },
     ],
     delta: { v: '+0.18%', neutral: true },
     pnlU: '+$12.40', pnlR: '+$148.20', carry: '+$172', cost: '−$24',
@@ -16,24 +16,24 @@ const STRAT_LIVE = {
     limits: [
       { k: 'Budget', val: used, cap: cap, pct: used / cap * 100, unit: 'USDC' },
       { k: 'Max slippage', val: '0.4%', cap: '0.5%' },
-      { k: 'Per-venue cap', val: '48%', cap: '60%', pct: 80 },
+      { k: 'Sui venue cap', val: '48%', cap: '60%', pct: 80 },
       { k: 'Funding-flip guard', val: 'net +13.4%', cap: 'unwind if < 0' },
     ],
   }),
   'spot-arb': (p, sc, used, cap) => ({
     legs: [
-      { venue: 'OKX', side: 'Buy', asset: sc, size: '$' + fmtUsd(used, 0), sub: 'cheapest ask' },
-      { venue: 'Raydium', side: 'Sell', asset: sc, size: '$' + fmtUsd(used, 0), sub: 'richest bid' },
+      { venue: 'DeepBook', side: 'Buy', asset: sc, size: '$' + fmtUsd(used, 0), sub: 'cheapest ask' },
+      { venue: 'Cetus', side: 'Sell', asset: sc, size: '$' + fmtUsd(used, 0), sub: 'richest bid' },
     ],
     delta: { v: '+0.05%', neutral: true },
     pnlU: '+$3.10', pnlR: '+$64.80', carry: '+$71', cost: '−$6',
-    orders: [{ side: 'Buy', venue: 'OKX', detail: 'limit @ 4.182 · 240 SUI', status: 'open' }],
+    orders: [{ side: 'Buy', venue: 'DeepBook', detail: 'limit @ 4.182 · 240 SUI', status: 'open' }],
     lastTick: 'Captured +0.21% spread cycle · +$4.10', lastAgo: '1m ago', next: 'on spread > 0.10%',
     approvals: [],
     limits: [
       { k: 'Budget / cycle', val: used, cap: cap, pct: used / cap * 100, unit: 'USDC' },
       { k: 'Min spread', val: '0.21%', cap: '> 0.10%' },
-      { k: 'CEX exposure', val: '$4.2k', cap: 'swept daily' },
+      { k: 'Sui venue exposure', val: '$4.2k', cap: 'policy capped' },
     ],
   }),
   'lp-manage': (p, sc, used, cap) => ({
@@ -124,23 +124,23 @@ function NeutralityMeter({ delta }) {
   );
 }
 
-// cross-chain / cross-venue inventory layout per strategy
+// Sui venue inventory layout per strategy
 const INVENTORY = {
   'funding-arb': {
     nodes: [
-      { id: 'sui', label: 'Sui', sub: 'short leg · Aevo', amt: 1000, c: '#5AA6FF' },
-      { id: 'hl', label: 'Hyperliquid', sub: 'long leg', amt: 920, c: '#7CF5D0' },
+      { id: 'spot', label: 'DeepBook', sub: 'spot leg', amt: 1000, c: '#2EE6CE' },
+      { id: 'perp', label: 'Bluefin', sub: 'perp hedge', amt: 920, c: '#3E7BFF' },
       { id: 'free', label: 'Sui wallet', sub: 'free buffer', amt: 480, c: '#2EE6CE' },
     ],
-    flows: [{ from: 'free', to: 'hl', amt: 80, via: 'deBridge', status: 'in-flight', eta: '~24s' }],
+    flows: [{ from: 'free', to: 'perp', amt: 80, via: 'Sui PTB', status: 'scheduled', eta: 'next tick' }],
   },
   'spot-arb': {
     nodes: [
-      { id: 'okx', label: 'OKX', sub: 'buy venue · CEX', amt: 1000, c: '#AEB7C2' },
-      { id: 'sol', label: 'Solana', sub: 'sell · Raydium', amt: 860, c: '#9945FF' },
-      { id: 'free', label: 'Sui wallet', sub: 'settlement', amt: 140, c: '#2EE6CE' },
+      { id: 'deepbook', label: 'DeepBook', sub: 'buy venue', amt: 1000, c: '#2EE6CE' },
+      { id: 'cetus', label: 'Cetus', sub: 'sell venue', amt: 860, c: '#2FD9E6' },
+      { id: 'free', label: 'Sui wallet', sub: 'free buffer', amt: 140, c: '#2EE6CE' },
     ],
-    flows: [{ from: 'okx', to: 'sol', amt: 240, via: 'Wormhole', status: 'in-flight', eta: '~41s' }],
+    flows: [{ from: 'free', to: 'deepbook', amt: 240, via: 'Sui PTB', status: 'scheduled', eta: 'next tick' }],
   },
 };
 
@@ -158,7 +158,7 @@ function InventoryFlow({ strategy, policy }) {
     }));
     const free = Math.round(budget * 0.25);
     nodes.push({ id: 'free', label: 'Sui wallet', sub: 'free buffer', amt: free, c: '#2EE6CE' });
-    inv = { nodes, flows: [{ from: 'free', to: nodes[0].id, amt: Math.round(free * 0.3), via: key === 'spot-arb' ? 'Wormhole' : 'deBridge', status: 'in-flight', eta: '~24s' }] };
+    inv = { nodes, flows: [{ from: 'free', to: nodes[0].id, amt: Math.round(free * 0.3), via: 'Sui PTB', status: 'scheduled', eta: 'next tick' }] };
   }
   const total = inv.nodes.reduce((s, n) => s + n.amt, 0);
   const W = 460, H = 150, nodeW = 116, nodeH = 64;
@@ -172,9 +172,9 @@ function InventoryFlow({ strategy, policy }) {
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
           <span style={{ color: 'var(--accent)' }}><Icon name="globe" size={16} /></span>
-          <div className="card-title">Cross-chain inventory</div>
+          <div className="card-title">Sui venue inventory</div>
         </div>
-        <span className="badge badge-accent" style={{ fontSize: 9 }}><span className="dot pulse"></span>{inv.flows.length} bridging</span>
+        <span className="badge badge-accent" style={{ fontSize: 9 }}><span className="dot pulse"></span>{inv.flows.length} Sui PTB</span>
       </div>
 
       <svg viewBox={`0 0 ${W} ${H}`} style={{ width: '100%', height: H, display: 'block', overflow: 'visible' }}>
@@ -210,19 +210,18 @@ function InventoryFlow({ strategy, policy }) {
       {(() => {
         const n = inv.nodes.find(x => x.id === openNode);
         if (!n) return null;
-        const isCex = /Binance|OKX|Bybit/.test(n.label);
         const isWallet = /wallet/i.test(n.label) || n.id === 'free';
         const holdings = isWallet
           ? [['USDC', '100%', 'idle buffer']]
           : isCex
-          ? [['USDC margin', '100%', 'cross'], ['unrealized', n.amt > 1500 ? '+0.4%' : '−0.1%', 'mark-to-market']]
+          ? [['USDC margin', '100%', 'Sui'], ['unrealized', n.amt > 1500 ? '+0.4%' : '-0.1%', 'mark-to-market']]
           : [['collateral', '100%', n.sub], ['funding accrued', '+$2.1', 'this window']];
         return (
           <div className="fade-up" style={{ marginTop: 10, padding: '12px 14px', borderRadius: 'var(--r-md)', background: 'var(--glass)', border: `1px solid color-mix(in srgb, ${n.c} 40%, var(--border))` }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 9, marginBottom: 9 }}>
               <span style={{ width: 9, height: 9, borderRadius: isCex ? 2 : '50%', background: n.c, flexShrink: 0 }} />
               <span style={{ fontSize: 12.5, fontWeight: 600 }}>{n.label}</span>
-              <span className="badge badge-neutral" style={{ fontSize: 8.5 }}>{isCex ? 'CEX' : isWallet ? 'wallet' : 'on-chain'}</span>
+              <span className="badge badge-neutral" style={{ fontSize: 8.5 }}>{isWallet ? 'wallet' : 'Sui venue'}</span>
               <div style={{ flex: 1 }} />
               <span className="mono" style={{ fontSize: 13, fontWeight: 600 }}>${fmtUsd(n.amt, 0)}</span>
               <button onClick={() => setOpenNode(null)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--t2)', padding: 2 }}><Icon name="x" size={13} /></button>
@@ -256,7 +255,7 @@ function InventoryFlow({ strategy, policy }) {
         ))}
         <div style={{ fontSize: 10.5, color: 'var(--t2)', display: 'flex', alignItems: 'center', gap: 6, marginTop: 2 }}>
           <Icon name="shield" size={12} style={{ color: 'var(--sui)' }} />
-          Total inventory ${fmtUsd(total, 0)} · the agent bridges only between its own legs, never to an external address.
+          Total inventory ${fmtUsd(total, 0)} · every leg stays inside Sui venues scoped by the policy.
         </div>
       </div>
     </div>
@@ -350,7 +349,7 @@ export function ActiveStrategy({ p, activity, onBack, onToggle, onRebalance, onR
   const liveDeltaN = L.delta.neutral ? +(jit(2) * 0.3).toFixed(2) : baseDelta;
   const liveDelta = { v: (liveDeltaN >= 0 ? '+' : '−') + Math.abs(liveDeltaN).toFixed(2) + '%', neutral: Math.abs(liveDeltaN) <= 5 };
   // attach a live mark price to each leg
-  const markBase = { SUI: 4.182, DEEP: 0.1043, BTC: 68420, ETH: 3290, WAL: 0.627 }[sc] || 4.182;
+  const markBase = { SUI: 4.182, DEEP: 0.1043, WAL: 0.627 }[sc] || 4.182;
   L.legs = L.legs.map((l, i) => {
     const mk = markBase * (1 + (active ? jit(i + 3) * 0.0011 : 0));
     return { ...l, mark: markBase < 1 ? mk.toFixed(4) : mk.toFixed(markBase > 1000 ? 0 : 3) };
