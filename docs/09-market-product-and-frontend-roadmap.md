@@ -359,7 +359,7 @@ Reasoning:
 - ChainDataProvider and GraphQL migration.
 - Seal/Walrus private strategy records.
 - SignerAdapter / local daemon / WaaP-style external signer.
-- Current signer status transparency is implemented in Profile and Risk Center via `/api/runtime/status`; the local-daemon WaaP CLI boundary is now test-covered and visible in the UI, while live WaaP approval/privilege UX and production execution remain future work.
+- Current signer status transparency is implemented in Profile and Risk Center via `/api/runtime/status`; the local-daemon WaaP CLI boundary is now test-covered and visible in the UI, and runtime activity preserves signer approval blockers (`signer_kind`, `approval_state`, `WAAP_APPROVAL_*`). Live WaaP session approval/privilege UX and production execution remain future work.
 - Cross-venue inventory rebalancing.
 - Strategy marketplace with copy/follow and vault-like UX.
 

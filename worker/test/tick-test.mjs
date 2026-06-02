@@ -1,6 +1,7 @@
 // E7 — decideTick state-machine unit tests (docs §8 / §7 actions).
 import { buildFundingReadiness } from '../src/read-surfaces.js'
-import { classifyExecutionResolution, decideTick, fundingReadinessBlock } from '../src/tick.js'
+import { SIGNER_KIND_WAAP } from '../src/signer-adapters.js'
+import { classifyExecutionResolution, decideTick, fundingReadinessBlock, signerSubmissionBlock } from '../src/tick.js'
 
 let fail = 0
 const check = (name, got, want) => {
@@ -82,6 +83,25 @@ check('funding block prefers missing DBUSDC as primary blocker', unfundedDisable
 check('funding block includes disabled flag', unfundedDisabled.blocker_codes.includes('EXECUTION_DISABLED'), true)
 check('funding block includes missing DEEP', unfundedDisabled.blocker_codes.includes('INSUFFICIENT_DEEP'), true)
 check('funding block never claims execution', unfundedDisabled.execution_claimed, false)
+
+const waapApprovalPending = signerSubmissionBlock(
+  Object.assign(new Error('waap signer is waiting for owner approval'), { code: 'WAAP_APPROVAL_PENDING' }),
+  { kind: SIGNER_KIND_WAAP },
+)
+check('waap approval pending -> blocked', waapApprovalPending.action, 'blocked')
+check('waap approval pending code stable', waapApprovalPending.code, 'WAAP_APPROVAL_PENDING')
+check('waap approval pending keeps signer kind', waapApprovalPending.signer_kind, SIGNER_KIND_WAAP)
+check('waap approval pending exposes approval state', waapApprovalPending.approval_state, 'pending')
+check('waap approval pending never claims execution', waapApprovalPending.execution_claimed, false)
+
+const waapDenied = signerSubmissionBlock(
+  Object.assign(new Error('waap signer transaction was denied by owner approval flow'), { code: 'WAAP_APPROVAL_DENIED' }),
+  { kind: SIGNER_KIND_WAAP },
+)
+check('waap approval denied -> blocked', waapDenied.action, 'blocked')
+check('waap approval denied exposes approval state', waapDenied.approval_state, 'denied')
+
+check('generic submit error is not signer block', signerSubmissionBlock(Object.assign(new Error('boom'), { code: 'SUI_RPC_ERROR' }), { kind: 'worker-secret' }), null)
 
 const beforeWrapper = { spent_amount: '0' }
 const afterUnchangedWrapper = { spent_amount: '0' }

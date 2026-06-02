@@ -4,7 +4,16 @@
 import { DEPLOYMENT } from './sui-tx.js'
 import { buildFundingReadiness } from './read-surfaces.js'
 import { EXECUTOR_KIND_DEEPBOOK } from './executor-adapters.js'
-import { resolveSignerAdapter, signerExecutionEnabled } from './signer-adapters.js'
+import {
+  SIGNER_CODE_WAAP_APPROVAL_DENIED,
+  SIGNER_CODE_WAAP_APPROVAL_PENDING,
+  SIGNER_CODE_WAAP_NO_DIGEST,
+  SIGNER_CODE_WAAP_POLICY_BLOCKED,
+  SIGNER_CODE_WAAP_RUNNER_MISSING,
+  SIGNER_CODE_WAAP_TIMEOUT,
+  resolveSignerAdapter,
+  signerExecutionEnabled,
+} from './signer-adapters.js'
 import { requireChainDataProvider } from './chain-data-provider.js'
 import {
   buildProposedTrade,
@@ -15,6 +24,15 @@ import {
   prepareRuntimeExecution,
   readinessBlock,
 } from './runtime-core.js'
+
+export const SIGNER_SUBMISSION_BLOCKER_CODES = Object.freeze([
+  SIGNER_CODE_WAAP_APPROVAL_PENDING,
+  SIGNER_CODE_WAAP_APPROVAL_DENIED,
+  SIGNER_CODE_WAAP_POLICY_BLOCKED,
+  SIGNER_CODE_WAAP_TIMEOUT,
+  SIGNER_CODE_WAAP_NO_DIGEST,
+  SIGNER_CODE_WAAP_RUNNER_MISSING,
+])
 
 export {
   EXECUTION_BLOCKER_LABELS,
@@ -129,6 +147,29 @@ async function checkFunding(chainData, proposed, executionEnabled) {
     requiredSuiGasMist: '1',
   })
   return fundingReadinessBlock(funding)
+}
+
+function approvalStateForSignerCode(code) {
+  if (code === SIGNER_CODE_WAAP_APPROVAL_PENDING) return 'pending'
+  if (code === SIGNER_CODE_WAAP_APPROVAL_DENIED) return 'denied'
+  if (code === SIGNER_CODE_WAAP_POLICY_BLOCKED) return 'policy_blocked'
+  if (code === SIGNER_CODE_WAAP_TIMEOUT) return 'timeout'
+  return null
+}
+
+export function signerSubmissionBlock(error, signerAdapter = {}) {
+  const code = error?.code ? String(error.code) : null
+  if (!SIGNER_SUBMISSION_BLOCKER_CODES.includes(code)) return null
+  return readinessBlock({
+    code,
+    detail: `Execution blocked by ${signerAdapter.kind || 'signer'}: ${String(error?.message || code)}`,
+    extra: {
+      submitted: false,
+      signer_kind: signerAdapter.kind || null,
+      approval_state: approvalStateForSignerCode(code),
+      execution_success_evidence: false,
+    },
+  })
 }
 
 /**
@@ -255,6 +296,14 @@ export async function runTick(env, p) {
     })
     return { ...result, adapter_result: adapter.parseExecutionResult(result), wrapper_id: p.wrapperId, mandate_id: wrapper.mandate_id }
   } catch (e) {
+    const signerBlock = signerSubmissionBlock(e, signerAdapter)
+    if (signerBlock) {
+      return {
+        ...signerBlock,
+        wrapper_id: p.wrapperId,
+        mandate_id: wrapper.mandate_id,
+      }
+    }
     return {
       ...executionNonSuccess({
         detail: `Execution submission error: ${String(e?.message || e)}`,

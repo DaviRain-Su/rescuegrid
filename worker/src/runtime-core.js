@@ -46,6 +46,12 @@ export const EXECUTION_BLOCKER_LABELS = {
   STRATEGY_STOPPED: 'Strategy emergency stop',
   VENUE_STOPPED: 'Venue emergency stop',
   RISK_CONTROLS_UNAVAILABLE: 'Risk controls unavailable',
+  WAAP_APPROVAL_PENDING: 'WaaP approval pending',
+  WAAP_APPROVAL_DENIED: 'WaaP approval denied',
+  WAAP_POLICY_BLOCKED: 'WaaP policy blocked',
+  WAAP_TIMEOUT: 'WaaP timeout',
+  WAAP_NO_DIGEST: 'WaaP digest missing',
+  WAAP_RUNNER_MISSING: 'WaaP runner missing',
 }
 
 function blockerLabel(code) {

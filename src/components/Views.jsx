@@ -148,6 +148,8 @@ function statusOfActivity(a, outcome) {
 
 function approvalOfActivity(a) {
   if (a.requireApproval || a.requires_approval || a.human_approval_required) return 'required'
+  if (a.approval_state && a.approval_state !== 'not-required') return 'required'
+  if ((a.blocker_codes || []).some((code) => String(code).startsWith('WAAP_APPROVAL_'))) return 'required'
   if (/approve|approval|sign-off|supervised|awaiting/i.test(`${a.title || ''} ${a.detail || ''}`)) return 'required'
   return 'not-required'
 }

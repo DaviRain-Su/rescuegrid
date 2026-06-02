@@ -76,6 +76,27 @@ const NOW = Date.UTC(2026, 5, 2, 13, 0, 0)
 
 {
   const event = runtimeEventFromTickResult({
+    action: 'blocked',
+    code: 'WAAP_APPROVAL_PENDING',
+    blocker_codes: ['WAAP_APPROVAL_PENDING'],
+    blocker_labels: ['WaaP approval pending'],
+    detail: 'Execution blocked by waap: waap signer is waiting for owner approval',
+    signer_kind: 'waap',
+    approval_state: 'pending',
+    execution_claimed: false,
+    execution_success_evidence: false,
+  }, { wrapperId: WRAPPER, nowMs: NOW + 4 })
+  const feed = runtimeEventToFeedItem(event)
+  assert.equal(event.signer_kind, 'waap')
+  assert.equal(event.approval_state, 'pending')
+  assert.equal(feed.signer_kind, 'waap')
+  assert.equal(feed.approval_state, 'pending')
+  assert.deepEqual(feed.blocker_codes, ['WAAP_APPROVAL_PENDING'])
+  assert.equal(feed.execution_claimed, false)
+}
+
+{
+  const event = runtimeEventFromTickResult({
     action: 'executed',
     tx_digest: 'digest',
     spend_delta: '100000',

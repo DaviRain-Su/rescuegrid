@@ -14,7 +14,7 @@ const ACTION_META = {
   blocked: {
     kind: 'guardian',
     title: 'Agent tick blocked',
-    detail: 'Guardian or funding readiness blocked execution before any transaction was submitted.',
+    detail: 'Guardian, funding readiness or signer controls blocked execution before any transaction was submitted.',
   },
   executed: {
     kind: 'exec',
@@ -146,6 +146,8 @@ export function runtimeEventFromTickResult(result, { wrapperId, nowMs = Date.now
     blockers,
     execution_blockers: executionBlockers,
     funding_criteria: fundingCriteria,
+    signer_kind: result?.signer_kind || null,
+    approval_state: result?.approval_state || null,
   }
 }
 
@@ -208,6 +210,8 @@ export function runtimeEventToFeedItem(event, policyLabel = shortWrapperId(event
     execution_blockers: normalizeEvidenceRows(event?.execution_blockers),
     funding_criteria: normalizeEvidenceRows(event?.funding_criteria),
     balances: event?.balances || null,
+    signer_kind: event?.signer_kind || null,
+    approval_state: event?.approval_state || null,
     execution_claimed: Boolean(event?.execution_claimed),
     execution_success_evidence: Boolean(event?.execution_success_evidence),
   }

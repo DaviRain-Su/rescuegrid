@@ -231,6 +231,7 @@ Security / boundary:
 - WaaP submit 测试必须证明 adapter 先把 RescueGrid PTB serialize 成 `tx_json`，把 sender 固定为部署 agent address，再交给 runner；不得调用 Sui SDK keypair signer。
 - WaaP submit 测试必须覆盖单 JSON 与 newline-delimited JSON 输出；多行输出优先使用 `event=result`，并能从 `digest`、`txDigest`、`transactionDigest`、`txHash` 或 `hash` 中提取 Sui digest。
 - WaaP submit 测试必须把 `approval_pending` / `approval_denied` / `policy_blocked` / timeout 映射为 `WAAP_APPROVAL_PENDING`、`WAAP_APPROVAL_DENIED`、`WAAP_POLICY_BLOCKED`、`WAAP_TIMEOUT`，不能把等待审批或策略拒绝误报为成功。
+- Runtime tick 测试必须证明上述 WaaP signer 状态会进入 `blocked` tick result，保留 `signer_kind` 和 `approval_state`，并保持 `submitted=false`、`execution_claimed=false`。
 - WaaP permission token 可以从 env 传入 runner，但 status、logs、errors 和 config file 不得包含 token 值。
 - `execution.enabled` 只有在 signer available 且 `EXECUTION_ENABLED=true` 时才为 true。
 - Profile / Accounts UI 必须把 status 作为可见状态展示，不能把 `execution_configured=true` 当成可执行；Risk Center signer health 也必须从同一 runtime signer status 派生，而不是只展示静态 signer 行。
@@ -513,6 +514,7 @@ MVP desktop viewport:
 - `npm run test:auth-wallets` covers the frontend sign-in option contract: standard wallets and Enoki wallets are split, Google zkLogin gets a visible "Continue with Google" label, Enoki-only availability is not reported as "no wallet", and configured-but-not-mounted Enoki shows a provider-loading state.
 - `npm run test:wallet-flow` covers the frontend wallet orchestration contract with a mock signer: parse -> build `tx_json` -> wallet sign -> `waitForTransaction(showObjectChanges/showEvents)` -> require `PolicyCreated.wrapper_id` -> activate runtime, plus revoke build -> wallet sign.
 - Activity view shows events and budget within one 5 second polling interval after chain state changes.
+- Activity view preserves signer approval evidence (`signer_kind`, `approval_state`, `WAAP_APPROVAL_*`) and the approval filter treats WaaP approval rows as approval-required blockers.
 - Revoke button changes state to revoked within one 5 second polling interval.
 - Policy Inspect names the real MoveGate Mandate + RescuePolicyWrapper model and does not show stale AgentPolicy, AgentCap, or sponsored-gas claims.
 - Profile / Accounts shows the live runtime signer kind, deployment agent, execution blocker, Worker data-provider status, known signer kinds and WaaP/local-daemon external signer boundary when `VITE_WORKER_URL` is configured.
