@@ -1,11 +1,14 @@
 import assert from 'node:assert/strict'
 import {
+  ADAPTER_INTERFACE_METHODS,
   EXECUTOR_KIND_DEEPBOOK,
   REGISTERED_EXECUTOR_KINDS,
   deepbookAdapter,
   getExecutorAdapter,
+  listExecutorAdapters,
   unsupportedExecutor,
   unsupportedExecutorTarget,
+  validateExecutorAdapter,
 } from '../src/executor-adapters.js'
 import { DEPLOYMENT } from '../src/sui-tx.js'
 
@@ -26,7 +29,29 @@ const proposed = {
 }
 
 {
+  assert.deepEqual(ADAPTER_INTERFACE_METHODS, [
+    'supportsTarget',
+    'targetId',
+    'readMarket',
+    'liquidityGate',
+    'volumeGate',
+    'planExecution',
+    'preview',
+    'buildPtb',
+    'parseExecutionResult',
+  ])
+  assert.deepEqual(validateExecutorAdapter(deepbookAdapter), {
+    ok: true,
+    kind: EXECUTOR_KIND_DEEPBOOK,
+    missing_methods: [],
+    missing_properties: [],
+  })
+  assert.equal(validateExecutorAdapter({ kind: 'bad' }).ok, false)
   assert.deepEqual(REGISTERED_EXECUTOR_KINDS, [EXECUTOR_KIND_DEEPBOOK])
+  assert.deepEqual(listExecutorAdapters(), [{
+    kind: EXECUTOR_KIND_DEEPBOOK,
+    interface_methods: ADAPTER_INTERFACE_METHODS,
+  }])
   assert.equal(getExecutorAdapter(EXECUTOR_KIND_DEEPBOOK), deepbookAdapter)
   assert.equal(getExecutorAdapter('cetus'), null)
   assert.equal(deepbookAdapter.supportsTarget(POOL.pool_id), true)
@@ -51,8 +76,34 @@ const proposed = {
   assert.equal(plan.quote_amount, proposed.amount)
   assert.equal(plan.estimated_slippage_bps, proposed.estimated_slippage_bps)
   assert.equal(plan.action_type, DEPLOYMENT.rescuegrid.action_deepbook_rescue)
+  assert.equal(plan.liquidity_gate.ok, true)
+  assert.equal(plan.liquidity_gate.name, 'liquidity')
+  assert.equal(plan.volume_gate.ok, true)
+  assert.equal(plan.volume_gate.name, 'volume')
+  assert.equal(deepbookAdapter.preview(plan).some((line) => line.includes('Executor: deepbook')), true)
   assert.ok(plan.preview.some((line) => line.includes('Executor: deepbook')))
   assert.ok(plan.preview.some((line) => line.includes('Expected event: AgentTradeExecuted')))
+}
+
+{
+  const market = { pool_id: POOL.pool_id, price: '1000000', quantity: '1' }
+  assert.equal(deepbookAdapter.readMarket({ market }), market)
+  assert.equal(deepbookAdapter.readMarket(), null)
+  assert.deepEqual(deepbookAdapter.parseExecutionResult({
+    action: 'executed',
+    tx_digest: '0xabc',
+    submitted: true,
+    execution_claimed: true,
+    detail: 'ok',
+  }), {
+    action: 'executed',
+    code: null,
+    digest: '0xabc',
+    submitted: true,
+    execution_claimed: true,
+    readiness_state: null,
+    detail: 'ok',
+  })
 }
 
 {
