@@ -22,6 +22,7 @@ import {
 } from './runtime-activity.js'
 import { AGENT_ADDRESS } from './config.js'
 import { DEFAULT_TICK_INTERVAL_SECONDS } from './config.js'
+import { getExecutorAdapter, unsupportedExecutor } from './executor-adapters.js'
 import type { ParseDefaults, Strategy } from './types.js'
 
 export interface Env {
@@ -120,6 +121,9 @@ app.post('/api/policies', async (c) => {
   if (!owner || !strategy) return c.json({ status: 'error', code: 'BAD_REQUEST', message: 'owner and strategy required.' }, 400)
   if (strategy.owner !== owner) return c.json({ status: 'error', code: 'OWNER_MISMATCH', message: 'strategy.owner != owner.' }, 422)
   if (strategy.agent !== AGENT_ADDRESS) return c.json({ status: 'error', code: 'AGENT_MISMATCH', message: 'strategy.agent != deployment agent.' }, 422)
+  if (!getExecutorAdapter(strategy.executor_kind)) {
+    return c.json({ status: 'error', code: 'UNSUPPORTED_EXECUTOR', message: unsupportedExecutor(strategy.executor_kind).detail }, 422)
+  }
 
   // recompute hash from the canonical strategy (no strategy_hash field inside)
   const recomputed = strategyHash(strategy)
@@ -448,6 +452,7 @@ export class AgentRuntime {
       await this.state.storage.put('wrapperId', wrapperId)
       await this.state.storage.put('runtime_state', 'Monitoring')
       await this.state.storage.put('errorCount', 0)
+      await this.state.storage.put('executorKind', strategy?.executor_kind || 'deepbook')
       if (strategy?.trigger) {
         await this.state.storage.put('monitor', {
           threshold_pct: Number(strategy.trigger.threshold_pct) || 0,
@@ -472,6 +477,7 @@ export class AgentRuntime {
         last_action: (await this.state.storage.get('lastAction')) ?? null,
         error_count: (await this.state.storage.get('errorCount')) ?? 0,
         monitor: (await this.state.storage.get('monitor')) ?? null,
+        executor_kind: (await this.state.storage.get('executorKind')) ?? 'deepbook',
         last_price: (await this.state.storage.get('lastPrice')) ?? null,
         peak_price: (await this.state.storage.get('peakPrice')) ?? null,
         drawdown_pct: (await this.state.storage.get('drawdownPct')) ?? null,
@@ -532,6 +538,7 @@ export class AgentRuntime {
     // threshold came from the strategy handed in at activate (not on-chain).
     let market: { triggerMet: boolean; price: string } | undefined
     const monitor = (await this.state.storage.get<{ threshold_pct: number; asset: string }>('monitor')) ?? null
+    const executorKind = (await this.state.storage.get<string>('executorKind')) ?? 'deepbook'
     if (monitor && monitor.threshold_pct > 0) {
       try {
         const price = await this.monitorPrice(monitor.asset)
@@ -550,7 +557,7 @@ export class AgentRuntime {
       } catch { /* price read is best-effort; fall through to monitoring */ }
     }
 
-    const result = await runTick(this.env, { wrapperId, market })
+    const result = await runTick(this.env, { wrapperId, market, executorKind })
     const rsMap: Record<string, string> = {
       stopped_revoked: 'Revoked',
       stopped_expired: 'Expired',

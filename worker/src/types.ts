@@ -18,6 +18,7 @@ export interface Strategy {
   owner: string
   agent: string
   chain: 'sui:testnet'
+  executor_kind: 'deepbook'
   pool_id: string
   budget_coin_type: string
   budget_ceiling: string
@@ -28,6 +29,7 @@ export interface Strategy {
 
 export interface ParseDefaults {
   chain?: string
+  executor_kind?: string
   pool_id?: string
   max_slippage_bps?: number
   expires_in_seconds?: number

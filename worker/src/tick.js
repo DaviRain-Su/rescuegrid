@@ -3,10 +3,10 @@
 // no_op | blocked | executed | stopped_revoked | stopped_expired | error.
 import { runGuardian } from './guardian.js'
 import { readWrapper, readMandate, readBalanceManagerBalance, readClockTimestampMs } from './chain.js'
-import { buildExecutionTx } from './deepbook.js'
 import { DEPLOYMENT } from './sui-tx.js'
 import { keypairFromWorkerEnv } from './secret-safe-signer.js'
 import { buildFundingReadiness } from './read-surfaces.js'
+import { EXECUTOR_KIND_DEEPBOOK, getExecutorAdapter, unsupportedExecutor } from './executor-adapters.js'
 
 export const EXECUTION_BLOCKER_LABELS = {
   EXECUTION_DISABLED: 'Execution disabled',
@@ -25,6 +25,7 @@ export const EXECUTION_BLOCKER_LABELS = {
   UNRESOLVED_TRANSACTION: 'Unresolved transaction',
   INVALID_AUTHORIZATION: 'Invalid authorization',
   FORCE_TRIGGER_DISABLED: 'Force trigger disabled',
+  UNSUPPORTED_EXECUTOR: 'Unsupported executor',
 }
 
 function blockerLabel(code) {
@@ -292,7 +293,7 @@ async function checkFunding(client, proposed, executionEnabled) {
 /**
  * Full tick with chain reads + gated execution.
  * @param {object} env worker env (AGENT_KEY, EXECUTION_ENABLED, DEMO_MODE)
- * @param {object} p { wrapperId, forceTrigger, nowMs, market }
+ * @param {object} p { wrapperId, forceTrigger, nowMs, market, executorKind }
  */
 export async function runTick(env, p) {
   const client = (await import('./sui-tx.js')).getClient()
@@ -312,7 +313,12 @@ export async function runTick(env, p) {
   }
   const executionEnabled = env?.EXECUTION_ENABLED === 'true' && !!env?.AGENT_KEY
 
-  const expectedPoolId = DEPLOYMENT.deepbook.pools[DEPLOYMENT.deepbook.default_pool]?.pool_id
+  const executorKind = p.executorKind || EXECUTOR_KIND_DEEPBOOK
+  const adapter = getExecutorAdapter(executorKind)
+  if (!adapter) return { ...unsupportedExecutor(executorKind), wrapper_id: p.wrapperId, mandate_id: wrapper.mandate_id }
+
+  const expectedPoolId = adapter.targetId(wrapper)
+  const plan = adapter.planExecution({ wrapper, mandate, proposed, nowMs, market: p.market })
   const decision = decideTick({ wrapper, mandate, triggerMet, proposed, nowMs, executionEnabled, expectedAgentId: DEPLOYMENT.agent.address, expectedPoolId })
   if (decision.action !== 'execute') return { ...decision, wrapper_id: p.wrapperId, mandate_id: wrapper.mandate_id }
 
@@ -324,14 +330,7 @@ export async function runTick(env, p) {
   // execute: build + sign + submit (only reached when executionEnabled)
   try {
     const kp = keypairFromWorkerEnv(env)
-    const pool = Object.values(DEPLOYMENT.deepbook.pools).find((x) => x.pool_id === wrapper.pool_id)
-    const tx = buildExecutionTx({
-      wrapperId: p.wrapperId, mandateId: wrapper.mandate_id,
-      balanceManagerId: DEPLOYMENT.agent.balance_manager_id,
-      pool, quoteAmount: proposed.amount, baseReceived: p.market?.baseReceived ?? '0',
-      price: p.market?.price ?? '0', quantity: p.market?.quantity ?? '0',
-      slippageBps: proposed.estimated_slippage_bps, clientOrderId: nowMs, expireMs: nowMs + 3600_000,
-    })
+    const tx = adapter.buildPtb(plan, { wrapperId: p.wrapperId, mandateId: wrapper.mandate_id, wrapper, market: p.market, nowMs })
     const submitted = await client.signAndExecuteTransaction({ signer: kp, transaction: tx, options: { showEffects: true, showEvents: true } })
     if (!submitted.digest) {
       return {

@@ -44,6 +44,10 @@ export function toUnits(human, decimals) {
 export function parseIntent(text, owner, defaults = {}, nowMs = Date.now()) {
   const t = (text || '').trim()
   if (!t) return { status: 'error', code: 'INTENT_AMBIGUOUS', message: 'Empty intent.' }
+  const executor_kind = defaults.executor_kind ?? 'deepbook'
+  if (executor_kind !== 'deepbook') return { status: 'error', code: 'UNSUPPORTED_EXECUTOR', message: 'Executor adapter is not registered.' }
+  const chain = defaults.chain ?? CHAIN
+  if (chain !== CHAIN) return { status: 'error', code: 'UNSUPPORTED_CHAIN', message: `Chain ${chain} is not supported by the Sui Testnet MVP.` }
 
   const asset = (t.match(/\b(SUI|DEEP|WAL)\b/i)?.[1] || 'SUI').toUpperCase()
   const poolCfg = POOL_BY_ASSET[asset]
@@ -78,6 +82,7 @@ export function parseIntent(text, owner, defaults = {}, nowMs = Date.now()) {
 
   const strategy = {
     version: '1', strategy_type: 'risk_response', owner, agent: AGENT_ADDRESS, chain: CHAIN,
+    executor_kind,
     pool_id: defaults.pool_id ?? poolCfg.pool_id,
     budget_coin_type: BUDGET_COIN_TYPE, budget_ceiling,
     trigger: { metric: 'price_drop_pct', asset, threshold_pct },
@@ -93,6 +98,7 @@ export function parseIntent(text, owner, defaults = {}, nowMs = Date.now()) {
 
   const ptb_preview = [
     `Create MoveGate Mandate and RescuePolicyWrapper for owner ${owner}`,
+    `Use ${executor_kind} executor adapter`,
     `Allow agent ${AGENT_ADDRESS} to trade only pool ${strategy.pool_id}`,
     `Set budget ceiling to ${budgetNum} USDC`,
     `Set max slippage to ${(max_slippage_bps / 100).toFixed(2)}%`,
