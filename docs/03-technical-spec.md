@@ -863,8 +863,38 @@ Response:
     "pattern": "Sui access object + Seal policy + Walrus blob id",
     "agent_can_decrypt_by_default": false,
     "worker_can_decrypt_by_default": false,
-    "on_chain_payload_policy": "hashes_and_blob_ids_only"
+    "on_chain_payload_policy": "hashes_and_blob_ids_only",
+    "optimistic_concurrency": "writers must pass expected_current_version before adding a new Walrus blob version"
   },
+  "object_contract": {
+    "object_type": "rescuegrid::private_record::PolicyPrivateRecord",
+    "implementation_status": "contract_only",
+    "ownership": "shared_object",
+    "required_fields": [
+      "wrapper_id: ID",
+      "mandate_id: ID",
+      "owner: address",
+      "strategy_hash: vector<u8>",
+      "current_version: u64",
+      "latest_walrus_blob_id: vector<u8>",
+      "seal_access_object_id: ID"
+    ],
+    "blocker_code": "POLICY_PRIVATE_RECORD_MOVE_NOT_IMPLEMENTED"
+  },
+  "operation_contracts": [
+    { "id": "create_policy_private_record" },
+    { "id": "add_private_record_version" },
+    { "id": "grant_private_record_reader" },
+    { "id": "revoke_private_record_reader" },
+    { "id": "archive_policy_private_record" }
+  ],
+  "event_contracts": [
+    { "id": "PolicyPrivateRecordCreated" },
+    { "id": "PolicyPrivateRecordVersionAdded" },
+    { "id": "PolicyPrivateRecordReaderGranted" },
+    { "id": "PolicyPrivateRecordReaderRevoked" },
+    { "id": "PolicyPrivateRecordArchived" }
+  ],
   "record_contracts": [
     { "id": "strategy_snapshot" },
     { "id": "backtest_report" },
@@ -880,11 +910,17 @@ Rules:
 - `PRIVATE_RECORD_PROVIDER=seal-walrus` without both Seal and Walrus posture configured returns `provider_status=unavailable` and `PRIVATE_RECORDS_CONFIG_REQUIRED`.
 - `PRIVATE_RECORD_PROVIDER=seal-walrus` with Seal and Walrus posture configured returns `provider_status=not_validated`, not ready. Configured posture is not encrypted storage proof.
 - The endpoint must define exactly four initial record contracts: `strategy_snapshot`, `backtest_report`, `agent_reasoning_trace` and `incident_report`.
+- The endpoint must define the future shared object contract `rescuegrid::private_record::PolicyPrivateRecord`, but `implementation_status` must remain `contract_only` until the Move module is implemented and tested.
+- `PolicyPrivateRecord` must anchor wrapper id, mandate id, owner, `strategy_hash`, current version, latest Walrus blob id, latest content hash, Seal policy/access object ids, timestamps and archive status.
+- Version rows must include version, previous version, schema id, content hash, Walrus blob id, payload size, writer and timestamp. Writes must pass `expected_current_version` to avoid silent overwrite.
+- Operation contracts must cover create, add version, grant reader, revoke reader and archive. They are not mutation-enabled until the Move module exists.
+- Event contracts must cover record created, version added, reader granted, reader revoked and archived, and must not emit plaintext, ciphertext or secret values.
 - Every record contract must require client-side encryption and set `signing_secret_allowed=false`.
 - Chain anchors may store wrapper id, mandate id, owner, `strategy_hash`, Seal access object id, Walrus blob id, content hash and version. On-chain payloads must be hashes and blob ids only.
 - The agent and Worker cannot decrypt private records by default. Owner-delegated readers must be explicit.
 - Output must not include Seal/Walrus endpoint URLs, access-token values, owner key values, WaaP session values, permission-token values, raw hidden model reasoning text or Worker secret values. Secret key names such as `AGENT_KEY` may appear only as disallowed schema metadata.
 - Private record storage cannot submit transactions or relax Guardian, MoveGate or `RescuePolicyWrapper` checks.
+- Revoking a reader must remove future decrypt authorization, but RescueGrid must not claim it can claw back already-downloaded ciphertext or plaintext.
 
 ### `npm run chain-data:status`
 

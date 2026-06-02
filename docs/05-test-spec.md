@@ -270,16 +270,23 @@ Happy path:
 
 - 默认返回 `provider.kind=none`、`provider.provider_status=disabled`、`provider.blocker_code=PRIVATE_RECORDS_DISABLED`。
 - 返回 `record_contracts`，且 id 必须包含且仅包含 `strategy_snapshot`、`backtest_report`、`agent_reasoning_trace`、`incident_report`。
+- 返回 `object_contract.object_type=rescuegrid::private_record::PolicyPrivateRecord`、`implementation_status=contract_only`、`ownership=shared_object` 和 `blocker_code=POLICY_PRIVATE_RECORD_MOVE_NOT_IMPLEMENTED`。
+- `object_contract` 必须包含 `current_version`、`latest_walrus_blob_id`、`seal_access_object_id`、version table 字段和 reader ACL 字段。
+- 返回 `operation_contracts`，且 id 必须包含且仅包含 `create_policy_private_record`、`add_private_record_version`、`grant_private_record_reader`、`revoke_private_record_reader`、`archive_policy_private_record`。
+- `add_private_record_version` 必须要求 `expected_current_version`，并在 preconditions 中声明它等于 object current version。
+- 返回 `event_contracts`，且 id 必须包含且仅包含 `PolicyPrivateRecordCreated`、`PolicyPrivateRecordVersionAdded`、`PolicyPrivateRecordReaderGranted`、`PolicyPrivateRecordReaderRevoked`、`PolicyPrivateRecordArchived`。
+- 每个 event contract 必须有 `plaintext_allowed=false` 和 `secret_values_allowed=false`。
 - 每个 record contract 必须有 encrypted payload fields、chain anchor fields、authorized readers、disallowed fields、required redactions、consumers、`client_side_encryption_required=true` 和 `signing_secret_allowed=false`。
 - `PRIVATE_RECORD_PROVIDER=seal-walrus` 但 Seal/Walrus 姿态不完整时，返回 `provider_status=unavailable` 和 `PRIVATE_RECORDS_CONFIG_REQUIRED`。
 - `PRIVATE_RECORD_PROVIDER=seal-walrus` 且 Seal/Walrus 姿态完整时，返回 `provider_status=not_validated`，不能返回 ready。
-- Data Sources UI 必须显示 Private policy records 的 provider、contract count、secret blocker 和 provider blocker，不能暗示已经启用 Seal/Walrus 存储。
+- Data Sources UI 必须显示 Private policy records 的 provider、record count、object contract status、operation/event count 和 provider/object blocker，不能暗示已经启用 Seal/Walrus 存储。
 
 Security / boundary:
 
 - 响应不得包含 Seal/Walrus endpoint URL、endpoint token、`AGENT_KEY`、owner key、WaaP token、WaaP session file、raw hidden model reasoning 或 Worker secret。
 - `AGENT_KEY`、owner wallet private key、WaaP permission token 和 raw hidden model reasoning 只能作为 disallowed schema metadata 出现，不能作为 payload。
 - `storage_hot_path_unchanged` 和 `execution_hot_path_unchanged` 必须保持 true，直到真实 Seal/Walrus write/read、Sui ACL 和 chain-anchor 验证落地。
+- Reader revoke 只能声明移除未来 decrypt authorization，不得声称能追回已下载的 ciphertext 或 plaintext。
 
 ### `npm run chain-data:status`
 

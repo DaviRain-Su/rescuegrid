@@ -90,6 +90,8 @@ RescueGrid translation:
 - Versioned updates can become on-chain events, giving "what changed, when" provenance.
 - Optimistic concurrency from the CRM save flow maps well to strategy-edit UX: if the policy version changed, refresh and ask the user to re-apply edits.
 
+Implementation status: J6 is now mapped into `/api/private-records/contract` as a Sui Stack CRM-style object contract. The future `PolicyPrivateRecord` shared object stores wrapper/mandate/owner anchors, current version, latest content hash, Walrus blob id and Seal access object id; version rows store immutable encrypted payload references; event contracts expose created/version/grant/revoke/archive history without plaintext or secret values. Operation contracts require owner or authorized writer checks and optimistic `expected_current_version`, but all operations stay `not_implemented` until a Move module and Seal/Walrus validation exist.
+
 This is not needed for the current hackathon-critical path. It becomes useful when RescueGrid needs private strategy history, team/shared policies, or persistent research notes.
 
 ## 4. WaaP for Agents

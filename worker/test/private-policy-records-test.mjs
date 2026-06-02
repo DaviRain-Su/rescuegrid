@@ -1,5 +1,8 @@
 import assert from 'node:assert/strict'
 import {
+  POLICY_PRIVATE_RECORD_OBJECT_CONTRACT,
+  PRIVATE_RECORD_EVENT_CONTRACTS,
+  PRIVATE_RECORD_OPERATION_CONTRACTS,
   PRIVATE_POLICY_RECORD_CONTRACTS,
   PRIVATE_RECORD_PROVIDER_NONE,
   PRIVATE_RECORD_PROVIDER_SEAL_WALRUS,
@@ -83,8 +86,42 @@ import {
   assert.equal(contract.access_model.agent_can_decrypt_by_default, false)
   assert.equal(contract.access_model.worker_can_decrypt_by_default, false)
   assert.equal(contract.access_model.on_chain_payload_policy, 'hashes_and_blob_ids_only')
+  assert.equal(contract.access_model.optimistic_concurrency.includes('expected_current_version'), true)
+  assert.equal(contract.object_contract.object_type, 'rescuegrid::private_record::PolicyPrivateRecord')
+  assert.equal(contract.object_contract.implementation_status, 'contract_only')
+  assert.equal(contract.object_contract.ownership, 'shared_object')
+  assert.equal(contract.object_contract.plaintext_allowed_on_chain, false)
+  assert.equal(contract.object_contract.ciphertext_allowed_on_chain, false)
+  assert.equal(contract.object_contract.signing_secret_allowed, false)
+  assert.equal(contract.object_contract.required_fields.includes('current_version: u64'), true)
+  assert.equal(contract.object_contract.required_fields.includes('latest_walrus_blob_id: vector<u8>'), true)
+  assert.equal(contract.object_contract.version_table_fields.includes('previous_version: u64'), true)
+  assert.equal(contract.operation_contracts.length, 5)
+  assert.equal(contract.operation_contracts.every((row) => row.mutation_allowed === false), true)
+  assert.equal(contract.event_contracts.length, 5)
+  assert.equal(contract.event_contracts.every((row) => row.plaintext_allowed === false), true)
   assert.equal(text.includes('AGENT_KEY'), true, 'secret key name may appear only as disallowed schema metadata')
   assert.equal(text.includes('permission-secret'), false)
+}
+
+{
+  assert.equal(POLICY_PRIVATE_RECORD_OBJECT_CONTRACT.blocker_code, 'POLICY_PRIVATE_RECORD_MOVE_NOT_IMPLEMENTED')
+  assert.equal(POLICY_PRIVATE_RECORD_OBJECT_CONTRACT.acl_fields.includes('reader_set: table address -> ReaderGrant'), true)
+  const createOp = PRIVATE_RECORD_OPERATION_CONTRACTS.find((row) => row.id === 'create_policy_private_record')
+  const addVersionOp = PRIVATE_RECORD_OPERATION_CONTRACTS.find((row) => row.id === 'add_private_record_version')
+  const revokeReaderOp = PRIVATE_RECORD_OPERATION_CONTRACTS.find((row) => row.id === 'revoke_private_record_reader')
+  assert.equal(createOp.preconditions.includes('wrapper owner matches signer'), true)
+  assert.equal(addVersionOp.required_inputs.includes('expected_current_version'), true)
+  assert.equal(addVersionOp.preconditions.includes('expected_current_version equals object current_version'), true)
+  assert.equal(revokeReaderOp.preconditions.some((row) => row.includes('cannot be clawed back')), true)
+  assert.deepEqual(PRIVATE_RECORD_EVENT_CONTRACTS.map((row) => row.id), [
+    'PolicyPrivateRecordCreated',
+    'PolicyPrivateRecordVersionAdded',
+    'PolicyPrivateRecordReaderGranted',
+    'PolicyPrivateRecordReaderRevoked',
+    'PolicyPrivateRecordArchived',
+  ])
+  assert.equal(PRIVATE_RECORD_EVENT_CONTRACTS.every((row) => row.secret_values_allowed === false), true)
 }
 
 {

@@ -184,6 +184,9 @@ function PrivatePolicyRecordCard({ data, query }) {
   const warn = provider.provider_status && provider.provider_status !== 'ready';
   const tone = ready ? 'safe' : warn ? 'warn' : 'neutral';
   const contracts = data?.record_contracts || [];
+  const objectContract = data?.object_contract || {};
+  const operations = data?.operation_contracts || [];
+  const events = data?.event_contracts || [];
   return (
     <div className="card" style={{ padding: '15px 17px', display: 'flex', flexDirection: 'column', gap: 12, minWidth: 0 }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 9 }}>
@@ -197,8 +200,8 @@ function PrivatePolicyRecordCard({ data, query }) {
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: 8 }}>
             {[
               ['Provider', provider.kind || 'none'],
-              ['Contracts', contracts.length],
-              ['Secrets', provider.signing_secret_allowed ? 'allowed' : 'blocked'],
+              ['Records', contracts.length],
+              ['Object', objectContract.implementation_status || 'contract'],
             ].map(([k, v]) => (
               <div key={k} style={{ padding: '9px 10px', borderRadius: 8, background: 'var(--glass)', border: '1px solid var(--border)' }}>
                 <div className="eyebrow" style={{ fontSize: 8.5 }}>{k}</div>
@@ -213,9 +216,19 @@ function PrivatePolicyRecordCard({ data, query }) {
                 <span style={{ color: row.client_side_encryption_required ? 'var(--warn)' : 'var(--t2)', marginLeft: 5 }}>contract</span>
               </span>
             ))}
+            {operations.length > 0 && (
+              <span className="badge badge-neutral" style={{ fontSize: 9.5 }}>
+                operations<span style={{ color: 'var(--warn)', marginLeft: 5 }}>{operations.length}</span>
+              </span>
+            )}
+            {events.length > 0 && (
+              <span className="badge badge-neutral" style={{ fontSize: 9.5 }}>
+                events<span style={{ color: 'var(--warn)', marginLeft: 5 }}>{events.length}</span>
+              </span>
+            )}
           </div>
           <div className="mono" style={{ fontSize: 10, color: 'var(--t2)', lineHeight: 1.45 }}>
-            {provider.blocker_code || 'PRIVATE_RECORD_CONTRACT_ONLY'} · encrypted storage hot path unchanged
+            {objectContract.blocker_code || provider.blocker_code || 'PRIVATE_RECORD_CONTRACT_ONLY'} · encrypted storage hot path unchanged
           </div>
         </>
       ) : (
