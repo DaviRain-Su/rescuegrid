@@ -8,6 +8,7 @@ import { useState } from 'react'
 import { RG } from '../data.js'
 import { Icon, Token, useAnimatedNumber, fmtUsd } from './primitives.jsx'
 import { Button } from '@heroui/react'
+import { signerHealthRows, signerKindBadges } from '../queries/signer-health.js'
 
 function CopyChip({ text, label, full }) {
   const [copied, setCopied] = useState(false)
@@ -107,8 +108,12 @@ function RuntimeAuthorityStatus({ runtimeStatus }) {
   const execution = runtimeStatus.execution || {}
   const provider = runtimeStatus.chain_data_provider || {}
   const agent = runtimeStatus.agent || {}
+  const runtimeSignerRows = signerHealthRows(runtimeStatus)
+  const externalSigner = runtimeSignerRows.find((row) => row.id === 'external-waap-signer' || row.id === 'external-signer')
+  const knownSignerKinds = signerKindBadges(runtimeStatus)
   const signerReady = Boolean(signer.available && signer.execution_enabled)
   const modeClass = signerReady ? 'badge-safe' : signer.available ? 'badge-warn' : 'badge-neutral'
+  const externalClass = externalSigner?.status === 'ok' ? 'badge-safe' : externalSigner?.warning ? 'badge-warn' : 'badge-neutral'
   return (
     <div style={{ marginTop: 14, paddingTop: 14, borderTop: '1px solid var(--border)' }}>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, marginBottom: 10 }}>
@@ -136,11 +141,32 @@ function RuntimeAuthorityStatus({ runtimeStatus }) {
           {execution.enabled ? 'enabled' : execution.blocker_code || 'blocked'}
         </span>
       </MetaRow>
-      <MetaRow icon="layers" iconColor="var(--t2)" label="Data provider" last>
+      <MetaRow icon="layers" iconColor="var(--t2)" label="Data provider">
         <span className="mono" style={{ fontSize: 11.5, color: 'var(--t1)' }}>
           {provider.kind || 'json-rpc'}{provider.graphql_configured ? ' · graphql configured' : ''}
         </span>
       </MetaRow>
+      {externalSigner && (
+        <MetaRow icon="cpu" iconColor={externalSigner.status === 'ok' ? 'var(--safe)' : externalSigner.warning ? 'var(--warn)' : 'var(--t2)'} label="External signer">
+          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 5, maxWidth: 420 }}>
+            <span className={`badge ${externalClass}`} style={{ fontSize: 9 }}>
+              <span className={externalSigner.status === 'ok' ? 'dot pulse' : 'dot'}></span>{externalSigner.name} · {externalSigner.status}
+            </span>
+            <span className="mono" style={{ fontSize: 10, color: 'var(--t2)', lineHeight: 1.35 }}>
+              {externalSigner.detail}
+            </span>
+          </div>
+        </MetaRow>
+      )}
+      {knownSignerKinds.length > 0 && (
+        <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', justifyContent: 'flex-end', paddingTop: 10 }}>
+          {knownSignerKinds.map((kind) => (
+            <span key={kind} className={`badge ${kind === signer.kind ? 'badge-sui' : 'badge-neutral'}`} style={{ fontSize: 8.5 }}>
+              {kind}
+            </span>
+          ))}
+        </div>
+      )}
       {!signerReady && signer.unavailable_detail && (
         <div style={{ display: 'flex', gap: 8, marginTop: 10, padding: '9px 11px', borderRadius: 'var(--r-sm)', background: 'var(--glass)', color: 'var(--t2)', fontSize: 10.5, lineHeight: 1.45 }}>
           <span style={{ color: 'var(--warn)', flexShrink: 0 }}><Icon name="alert" size={13} /></span>

@@ -228,7 +228,8 @@ Security / boundary:
 - WaaP submit 测试必须证明 adapter 先把 RescueGrid PTB serialize 成 `tx_json`，把 sender 固定为部署 agent address，再交给 runner；不得调用 Sui SDK keypair signer。
 - WaaP permission token 可以从 env 传入 runner，但 status、logs、errors 和 config file 不得包含 token 值。
 - `execution.enabled` 只有在 signer available 且 `EXECUTION_ENABLED=true` 时才为 true。
-- Profile / Accounts UI 必须把 status 作为可见状态展示，不能把 `execution_configured=true` 当成可执行。
+- Profile / Accounts UI 必须把 status 作为可见状态展示，不能把 `execution_configured=true` 当成可执行；Risk Center signer health 也必须从同一 runtime signer status 派生，而不是只展示静态 signer 行。
+- 当 `known_signer_kinds` 包含 `waap` 时，前端必须显示 WaaP 是 local-daemon-only external signer boundary；在 Cloud Worker 模式选中 `SIGNER_KIND=waap` 时必须显示不可用 blocker，而不是暗示云端可直接运行 `waap-cli`。
 
 ### `GET /api/execution/readiness`
 
@@ -421,7 +422,8 @@ MVP desktop viewport:
 - Activity view shows events and budget within one 5 second polling interval after chain state changes.
 - Revoke button changes state to revoked within one 5 second polling interval.
 - Policy Inspect names the real MoveGate Mandate + RescuePolicyWrapper model and does not show stale AgentPolicy, AgentCap, or sponsored-gas claims.
-- Profile / Accounts shows the live runtime signer kind, deployment agent, execution blocker and Worker data-provider status when `VITE_WORKER_URL` is configured.
+- Profile / Accounts shows the live runtime signer kind, deployment agent, execution blocker, Worker data-provider status, known signer kinds and WaaP/local-daemon external signer boundary when `VITE_WORKER_URL` is configured.
+- Risk Center signer/executor health prefers live `/api/runtime/status` rows and raises signer warnings from those rows when available; static `RG.signers` is only the no-runtime fallback.
 - Primary buttons have text labels and disabled/loading states.
 
 Post-MVP mobile viewport:

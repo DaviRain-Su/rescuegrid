@@ -237,7 +237,7 @@ Required modules:
 - Guardian rule editor;
 - "what the agent cannot do" capability matrix.
 
-Implementation status: `src/components/Risk.jsx` now implements the K7 Risk Center surface. It shows global budget and daily loss caps, per-strategy pause/resume controls, Sui venue stop/resume controls, per-venue exposure caps, liquidation watch, oracle health, signer/executor health, stale-data warning summaries, Guardian preset editing/simulation and the capability matrix. In live wallet mode, global / strategy / venue stop/resume signs a Sui personal message and writes `/api/risk/controls`; Worker ticks read the persisted owner-scoped controls and block matching submissions with `GLOBAL_STOPPED`, `STRATEGY_STOPPED` or `VENUE_STOPPED` before PTB signing. Demo mode keeps a local preview state.
+Implementation status: `src/components/Risk.jsx` now implements the K7 Risk Center surface. It shows global budget and daily loss caps, per-strategy pause/resume controls, Sui venue stop/resume controls, per-venue exposure caps, liquidation watch, oracle health, live runtime signer/executor health, stale-data warning summaries, Guardian preset editing/simulation and the capability matrix. In live wallet mode, signer rows and signer warnings are derived from `/api/runtime/status`, including WaaP's local-daemon-only external signer boundary; demo/no-runtime mode keeps the static signer fallback. Global / strategy / venue stop/resume signs a Sui personal message and writes `/api/risk/controls`; Worker ticks read the persisted owner-scoped controls and block matching submissions with `GLOBAL_STOPPED`, `STRATEGY_STOPPED` or `VENUE_STOPPED` before PTB signing. Demo mode keeps a local preview state.
 
 ### G. Agent Activity Ledger v2
 
@@ -281,7 +281,7 @@ Required modules:
 - capability list per Sui venue/protocol;
 - reauth/revoke buttons.
 
-Implementation status: Profile now consumes `/api/runtime/status` when live Worker reads are enabled. The surface shows the deployment agent address, signer kind, execution blocker and chain data-provider mode next to policy/funding readiness. This covers the minimum cloud-agent transparency needed for the hackathon branch. J7 now has a local-daemon-only WaaP CLI signer boundary, but the UI still needs a richer follow-up state for daemon liveness, WaaP approval status, privilege scope and external signer health.
+Implementation status: Profile now consumes `/api/runtime/status` when live Worker reads are enabled. The surface shows the deployment agent address, signer kind, known signer kinds, execution blocker, chain data-provider mode and external signer boundary next to policy/funding readiness. J7 now has a local-daemon-only WaaP CLI signer boundary, and Profile/Risk show that WaaP cannot run from the Cloud Worker. Richer daemon liveness, WaaP approval status and privilege-scope UX remain future work.
 
 ## 4. Design brief
 
@@ -359,7 +359,7 @@ Reasoning:
 - ChainDataProvider and GraphQL migration.
 - Seal/Walrus private strategy records.
 - SignerAdapter / local daemon / WaaP-style external signer.
-- Current signer status transparency is implemented in Profile via `/api/runtime/status`; the local-daemon WaaP CLI boundary is now test-covered, while live WaaP approval/privilege UX and production execution remain future work.
+- Current signer status transparency is implemented in Profile and Risk Center via `/api/runtime/status`; the local-daemon WaaP CLI boundary is now test-covered and visible in the UI, while live WaaP approval/privilege UX and production execution remain future work.
 - Cross-venue inventory rebalancing.
 - Strategy marketplace with copy/follow and vault-like UX.
 

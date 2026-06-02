@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { RG } from '../data.js'
 import { Icon, fmtUsd, adapterColor } from './primitives.jsx'
+import { signerHealthRows, signerWarningRows } from '../queries/signer-health.js'
 
 function RiskBar({ pct, warn = 65, danger = 85 }) {
   const c = pct > danger ? 'var(--danger)' : pct > warn ? 'var(--warn)' : 'var(--accent)';
@@ -162,6 +163,7 @@ export function RiskCenter({
   riskControlsLoading = false,
   riskControlPending = false,
   riskControlSource = 'local',
+  runtimeStatus = null,
 }) {
   const [localStoppedVenues, setLocalStoppedVenues] = useState(() => new Set());
   const controlledVenueStops = Array.isArray(venueStops);
@@ -174,6 +176,7 @@ export function RiskCenter({
   const lossPct = rb.dailyLossUsed / rb.dailyLossCap * 100;
   const activeCount = policies.filter(p => p.status === 'active').length;
   const terminalStatuses = new Set(['revoked', 'expired']);
+  const signerRows = signerHealthRows(runtimeStatus, RG.signers);
   const staleWarnings = [
     ...RG.oracles.filter(o => o.status !== 'ok').map(o => ({
       id: `oracle-${o.feed}`,
@@ -182,13 +185,7 @@ export function RiskCenter({
       detail: `age ${o.age} · deviation ±${o.dev}`,
       severity: o.status === 'stale' ? 'warn' : 'danger',
     })),
-    ...RG.signers.filter(s => s.status !== 'ok').map(s => ({
-      id: `signer-${s.name}`,
-      kind: s.kind === 'cloud' ? 'Cloud signer' : s.kind === 'daemon' ? 'Local daemon' : 'Signer',
-      label: s.name,
-      detail: s.detail,
-      severity: s.status === 'offline' ? 'warn' : 'danger',
-    })),
+    ...signerWarningRows(runtimeStatus, RG.signers),
     ...policies.filter(p => p.runtime_state_stale || p.runtimeStateStale).map(p => ({
       id: `policy-${p.id}`,
       kind: 'Runtime state',
@@ -494,12 +491,12 @@ export function RiskCenter({
         {/* signer health */}
         <RCard title="Signer & executor" icon="key">
           <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-            {RG.signers.map((s, i) => {
-              const h = HEALTH[s.status] || HEALTH.ok;
+            {signerRows.map((s, i) => {
+              const h = s.warning && s.status === 'offline' ? HEALTH.warn : HEALTH[s.status] || HEALTH.ok;
               return (
-                <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 11, padding: '11px 13px', borderRadius: 'var(--r-sm)', background: 'var(--glass)', border: '1px solid var(--border)', opacity: s.status === 'offline' ? .68 : 1 }}>
+                <div key={s.id || i} style={{ display: 'flex', alignItems: 'center', gap: 11, padding: '11px 13px', borderRadius: 'var(--r-sm)', background: 'var(--glass)', border: '1px solid var(--border)', opacity: s.status === 'offline' && !s.warning ? .68 : 1 }}>
                   <span style={{ width: 28, height: 28, borderRadius: 8, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', background: h[1], color: h[0] }}>
-                    <Icon name={s.kind === 'wallet' ? 'wallet' : s.kind === 'cloud' ? 'cloud' : 'cpu'} size={15} />
+                    <Icon name={s.kind === 'wallet' ? 'wallet' : s.kind === 'cloud' ? 'cloud' : s.kind === 'external' ? 'key' : 'cpu'} size={15} />
                   </span>
                   <div style={{ flex: 1, minWidth: 0 }}>
                     <div style={{ fontSize: 12.5, fontWeight: 600 }}>{s.name}</div>

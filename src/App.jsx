@@ -880,6 +880,7 @@ export default function App({ onExit }) {
               riskControlsLoading={liveReadsEnabled && riskControlsQuery.isFetching}
               riskControlPending={riskControlMutation.isPending}
               riskControlSource={liveReadsEnabled && riskControlsQuery.data?.status === 'ok' ? 'worker' : 'local'}
+              runtimeStatus={liveReadsEnabled ? liveRuntimeStatus : null}
             />}
             {view === 'strategies' && <StrategyMarketplace onDeploy={(s) => { setSeed(s); setView('new') }} onToast={showToast} onOpen={openStrategy} />}
             {view === 'strategy-detail' && <StrategyDetail id={stratId} onBack={() => setView('strategies')} onDeploy={(s) => { setSeed(s); setView('new') }} onToast={showToast} />}
