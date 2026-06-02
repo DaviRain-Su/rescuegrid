@@ -133,6 +133,15 @@ export function getAdapterCandidates() {
   }))
 }
 
+/** GET /api/protocols/watch-boundaries — watch-only protocol risk boundaries. */
+export function getProtocolWatchBoundaries() {
+  return workerGet('/api/protocols/watch-boundaries').catch((e) => ({
+    status: 'error',
+    code: WORKER_CONFIGURED ? 'WORKER_READ_FAILED' : 'WORKER_NOT_CONFIGURED',
+    message: String(e?.message || e),
+  }))
+}
+
 /** GET /api/balances?owner= — real wallet token holdings valued via market. */
 export function getBalances(owner) {
   return read(`/api/balances?owner=${owner}`, () => chainRead.getBalances(owner))

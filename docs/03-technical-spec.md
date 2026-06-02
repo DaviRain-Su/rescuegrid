@@ -108,6 +108,13 @@ Current target schema findings:
 - Lending adapters require lending market id/type, reserve id or reserve coin type, obligation id, and owner proof (`obligation_owner_cap_id` for Suilend-like flows or `obligation_key_id` for Scallop-like flows). Guardian must read fresh reserve and obligation state, health factor, LTV, withdrawal liquidity and oracle freshness before any repay/withdraw/borrow PTB is built.
 - NAVI and AlphaLend remain research-pending in code until package addresses, SDK APIs and position semantics are verified.
 
+H6 watch-only boundary findings:
+
+- `/api/protocols/watch-boundaries` is the authoritative Worker read surface for watch-only protocols. It must include Bucket, Current, SpringSui, Haedal, Volo, AlphaFi, Kai, Mole, Ondo, KAIO, MatrixDock, Ember, Bluefin Pro, Sudo and DipCoin.
+- Every watch-only boundary must expose readable state, risk domains, required future target fields and explicit no-execution reasons. Every row must remain `registered_executor=false`, `execution_enabled=false`, `autonomous_execution_allowed=false` and `execution_blocker_code=WATCH_ONLY_BOUNDARY`.
+- Bucket/Current rows focus on CDP, peg, borrow health, liquidation and liquidity state. LST/vault rows focus on exchange rate, redemption liquidity, withdrawal delay, vault NAV, strategy weights and drawdown. RWA rows focus on issuer, redemption, settlement and secondary liquidity. Perps rows focus on funding, mark/index, open interest, margin requirement and liquidation buffer.
+- DipCoin is allowed only as `registry_status=roadmap_only` until it enters the current Sui coverage baseline or an official read API is verified.
+
 ## 4. Move Package Surface
 
 ### 架构：MoveGate + RescuePolicyWrapper

@@ -104,6 +104,8 @@ Current H3 implementation status: `/api/protocols` exposes the Sui protocol cove
 
 Current H4/H5 implementation status: `/api/adapters/candidates` exposes the Sui-only adapter constraint registry. Cetus, Turbos and Momentum are represented as CLMM candidates with `clmm_pool_id` / tick-range / position semantics; Bluefin Spot is represented as a route-constrained spot aggregator candidate, not a broad signer target. Suilend and Scallop have SDK-confirmed lending schemas with lending market, reserve, obligation and owner-cap/key constraints. NAVI and AlphaLend remain `research_pending` until SDK/package-address and position semantics are verified. All rows keep `registered_executor=false` and `execution_enabled=false`.
 
+Current H6 implementation status: `/api/protocols/watch-boundaries` exposes 15 Sui-only watch boundaries for Bucket, Current, SpringSui, Haedal, Volo, AlphaFi, Kai, Mole, Ondo, KAIO, MatrixDock, Ember, Bluefin Pro, Sudo and DipCoin. The registry records readable state, redemption/liquidity/issuer/margin risk domains, future target fields and no-execution reasons. DipCoin is `roadmap_only` because it is not in the current DefiLlama top-26 registry baseline; all rows keep `registered_executor=false`, `execution_enabled=false` and `execution_blocker_code=WATCH_ONLY_BOUNDARY`.
+
 ## Phase I - Post-MVP Multivenue Expansion
 
 Phase I is a product expansion track, not a hackathon dependency. Planning baseline: [`docs/06-post-mvp-multivenue-roadmap.md`](06-post-mvp-multivenue-roadmap.md).

@@ -11,6 +11,7 @@ import { requireChainDataProvider } from './chain-data-provider.js'
 import { DEPLOYMENT } from './sui-tx.js'
 import { getSuiAdapterCandidateData } from './sui-adapter-candidates.js'
 import { getSuiProtocolCoverage } from './sui-protocol-registry.js'
+import { getSuiWatchOnlyBoundaryData } from './sui-watch-only-boundaries.js'
 import { getSuiWatchData } from './sui-watch-registry.js'
 import { runTick, validateExecutionPlan } from './tick.js'
 import { validateForceTrigger, validateTickAuthorization, validateTickBody } from './tick-auth.js'
@@ -265,6 +266,11 @@ app.get('/api/protocols/watchlist', (c) => {
 app.get('/api/adapters/candidates', (c) => {
   const includeResearchPending = c.req.query('include_research_pending') !== 'false'
   return c.json(getSuiAdapterCandidateData({ includeResearchPending }))
+})
+
+app.get('/api/protocols/watch-boundaries', (c) => {
+  const includeRoadmapOnly = c.req.query('include_roadmap_only') !== 'false'
+  return c.json(getSuiWatchOnlyBoundaryData({ includeRoadmapOnly }))
 })
 
 app.get('/api/balances', async (c) => {
