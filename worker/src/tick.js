@@ -21,6 +21,7 @@ export const EXECUTION_BLOCKER_LABELS = {
   WRONG_POOL: 'Wrong pool',
   WRONG_AGENT: 'Wrong agent',
   MANDATE_MISMATCH: 'Mandate/wrapper mismatch',
+  EXECUTION_FAILED: 'Execution failed',
   UNRESOLVED_TRANSACTION: 'Unresolved transaction',
   INVALID_AUTHORIZATION: 'Invalid authorization',
   FORCE_TRIGGER_DISABLED: 'Force trigger disabled',
@@ -42,6 +43,93 @@ function readinessBlock({ action = 'blocked', code, detail, extra = {} }) {
     execution_claimed: false,
     detail,
     ...extra,
+  }
+}
+
+function executionNonSuccess({ code = 'UNRESOLVED_TRANSACTION', detail, digest, submitted = false, extra = {} }) {
+  return readinessBlock({
+    action: 'error',
+    code,
+    detail,
+    extra: {
+      submitted,
+      tx_digest: digest,
+      readiness_state: 'blocked',
+      execution_success_evidence: false,
+      ...extra,
+    },
+  })
+}
+
+function toBigIntOrNull(value) {
+  try {
+    return BigInt(value)
+  } catch {
+    return null
+  }
+}
+
+function tradeEventsForWrapper(events, wrapperId) {
+  return (events || []).filter((e) => {
+    if (!String(e.type || '').endsWith('::policy::AgentTradeExecuted')) return false
+    const eventWrapper = e.parsedJson?.wrapper_id ?? e.data?.wrapper_id
+    return eventWrapper === wrapperId
+  })
+}
+
+export function classifyExecutionResolution({ submitted, resolved, beforeWrapper, afterWrapper, wrapperId }) {
+  const evidence = resolved ?? submitted ?? {}
+  const digest = evidence.digest ?? submitted?.digest
+  const status = evidence.effects?.status?.status
+  if (status !== 'success') {
+    const error = evidence.effects?.status?.error
+    return executionNonSuccess({
+      code: 'EXECUTION_FAILED',
+      detail: `Execution failed: ${error || status || 'Sui RPC did not return successful effects.'}`,
+      digest,
+      submitted: Boolean(digest),
+      extra: {
+        effects_status: status ?? null,
+      },
+    })
+  }
+
+  const events = tradeEventsForWrapper(evidence.events, wrapperId)
+  const beforeSpent = toBigIntOrNull(beforeWrapper?.spent_amount)
+  const afterSpent = toBigIntOrNull(afterWrapper?.spent_amount)
+  const spendIncreased = beforeSpent != null && afterSpent != null && afterSpent > beforeSpent
+  const hasTradeEvent = events.length > 0
+
+  if (!hasTradeEvent || !spendIncreased) {
+    return executionNonSuccess({
+      code: 'UNRESOLVED_TRANSACTION',
+      detail: 'Execution remains unresolved: successful effects alone are not accepted without AgentTradeExecuted event evidence and an on-chain spend increase.',
+      digest,
+      submitted: Boolean(digest),
+      extra: {
+        effects_status: status,
+        agent_trade_event_found: hasTradeEvent,
+        spend_increased: spendIncreased,
+        spend_before: beforeWrapper?.spent_amount ?? null,
+        spend_after: afterWrapper?.spent_amount ?? null,
+      },
+    })
+  }
+
+  return {
+    action: 'executed',
+    detail: 'Rescue order executed with resolved Sui success, AgentTradeExecuted event, and on-chain spend increase.',
+    tx_digest: digest,
+    submitted: true,
+    readiness_state: 'executed',
+    execution_claimed: true,
+    execution_success_evidence: true,
+    effects_status: status,
+    agent_trade_event_found: true,
+    spend_increased: true,
+    spend_before: beforeWrapper.spent_amount,
+    spend_after: afterWrapper.spent_amount,
+    spend_delta: (afterSpent - beforeSpent).toString(),
   }
 }
 
@@ -244,10 +332,60 @@ export async function runTick(env, p) {
       price: p.market?.price ?? '0', quantity: p.market?.quantity ?? '0',
       slippageBps: proposed.estimated_slippage_bps, clientOrderId: nowMs, expireMs: nowMs + 3600_000,
     })
-    const res = await client.signAndExecuteTransaction({ signer: kp, transaction: tx, options: { showEffects: true } })
-    const ok = res.effects?.status?.status === 'success'
-    return { action: ok ? 'executed' : 'error', detail: ok ? 'Rescue order executed.' : `Execution failed: ${res.effects?.status?.error}`, tx_digest: res.digest, wrapper_id: p.wrapperId }
+    const submitted = await client.signAndExecuteTransaction({ signer: kp, transaction: tx, options: { showEffects: true, showEvents: true } })
+    if (!submitted.digest) {
+      return {
+        ...executionNonSuccess({
+          detail: 'Execution submission did not return a transaction digest; no success is claimed.',
+          submitted: false,
+        }),
+        wrapper_id: p.wrapperId,
+        mandate_id: wrapper.mandate_id,
+      }
+    }
+
+    let resolved = submitted
+    try {
+      if (typeof client.waitForTransaction === 'function') {
+        resolved = await client.waitForTransaction({
+          digest: submitted.digest,
+          options: { showEffects: true, showEvents: true },
+        })
+      }
+    } catch (e) {
+      return {
+        ...executionNonSuccess({
+          detail: `Execution remains unresolved: Sui RPC did not resolve digest ${submitted.digest}. ${String(e?.message || e)}`,
+          digest: submitted.digest,
+          submitted: true,
+        }),
+        wrapper_id: p.wrapperId,
+        mandate_id: wrapper.mandate_id,
+      }
+    }
+
+    let afterWrapper = null
+    try {
+      afterWrapper = await readWrapper(client, p.wrapperId)
+    } catch {
+      afterWrapper = null
+    }
+    const result = classifyExecutionResolution({
+      submitted,
+      resolved,
+      beforeWrapper: wrapper,
+      afterWrapper,
+      wrapperId: p.wrapperId,
+    })
+    return { ...result, wrapper_id: p.wrapperId, mandate_id: wrapper.mandate_id }
   } catch (e) {
-    return { action: 'error', detail: `Execution error: ${String(e?.message || e)}`, wrapper_id: p.wrapperId }
+    return {
+      ...executionNonSuccess({
+        detail: `Execution submission error: ${String(e?.message || e)}`,
+        submitted: false,
+      }),
+      wrapper_id: p.wrapperId,
+      mandate_id: wrapper.mandate_id,
+    }
   }
 }

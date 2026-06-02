@@ -1,6 +1,6 @@
 // E7 — decideTick state-machine unit tests (docs §8 / §7 actions).
 import { buildFundingReadiness } from '../src/read-surfaces.js'
-import { decideTick, fundingReadinessBlock } from '../src/tick.js'
+import { classifyExecutionResolution, decideTick, fundingReadinessBlock } from '../src/tick.js'
 
 let fail = 0
 const check = (name, got, want) => {
@@ -71,6 +71,47 @@ check('funding block prefers missing DBUSDC as primary blocker', unfundedDisable
 check('funding block includes disabled flag', unfundedDisabled.blocker_codes.includes('EXECUTION_DISABLED'), true)
 check('funding block includes missing DEEP', unfundedDisabled.blocker_codes.includes('INSUFFICIENT_DEEP'), true)
 check('funding block never claims execution', unfundedDisabled.execution_claimed, false)
+
+const WRAPPER_ID = '0xWRAP'
+const beforeWrapper = { spent_amount: '0' }
+const afterUnchangedWrapper = { spent_amount: '0' }
+const afterSpentWrapper = { spent_amount: '100000' }
+const failedDigest = classifyExecutionResolution({
+  submitted: { digest: 'failed-digest', effects: { status: { status: 'failure', error: 'MoveAbort' } } },
+  beforeWrapper,
+  afterWrapper: afterUnchangedWrapper,
+  wrapperId: WRAPPER_ID,
+})
+check('failed execution digest remains error', failedDigest.action, 'error')
+check('failed execution digest uses stable failure code', failedDigest.code, 'EXECUTION_FAILED')
+check('failed execution digest is submitted but not claimed', failedDigest.submitted, true)
+check('failed execution digest never claims execution', failedDigest.execution_claimed, false)
+
+const successWithoutEvidence = classifyExecutionResolution({
+  submitted: { digest: 'unresolved-digest', effects: { status: { status: 'success' } } },
+  resolved: { digest: 'unresolved-digest', effects: { status: { status: 'success' } }, events: [] },
+  beforeWrapper,
+  afterWrapper: afterUnchangedWrapper,
+  wrapperId: WRAPPER_ID,
+})
+check('success effects without event/spend remains error', successWithoutEvidence.action, 'error')
+check('success effects without event/spend is unresolved', successWithoutEvidence.code, 'UNRESOLVED_TRANSACTION')
+check('success effects without event/spend never claims execution', successWithoutEvidence.execution_claimed, false)
+
+const resolvedSuccess = classifyExecutionResolution({
+  submitted: { digest: 'success-digest', effects: { status: { status: 'success' } } },
+  resolved: {
+    digest: 'success-digest',
+    effects: { status: { status: 'success' } },
+    events: [{ type: '0x1::policy::AgentTradeExecuted', parsedJson: { wrapper_id: WRAPPER_ID } }],
+  },
+  beforeWrapper,
+  afterWrapper: afterSpentWrapper,
+  wrapperId: WRAPPER_ID,
+})
+check('resolved success with event and spend is executed', resolvedSuccess.action, 'executed')
+check('resolved success can claim execution', resolvedSuccess.execution_claimed, true)
+check('resolved success records spend delta', resolvedSuccess.spend_delta, '100000')
 
 console.log(fail === 0 ? '\nALL TICK TESTS PASS' : `\n${fail} FAILED`)
 process.exit(fail === 0 ? 0 : 1)
