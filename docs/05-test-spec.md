@@ -336,6 +336,7 @@ MVP desktop viewport:
 - Dashboard loads without console errors.
 - Login shows owner address.
 - Intent input accepts the sample strategy.
+- If Worker intent parsing returns an error or the Worker parse request fails, the strategy builder shows an explicit parse error card instead of silently presenting demo data as a live parse result.
 - Preview panel shows all critical policy parameters.
 - Confirm flow creates Policy and updates state.
 - Activity view shows events and budget within one 5 second polling interval after chain state changes.

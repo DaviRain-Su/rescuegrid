@@ -218,9 +218,15 @@ export function NewStrategy({ onDone, mode, setMode, seed }) {
               backtest = h.status === 'ok' && h.prices.length > 2 ? runBacktest(h.prices, { thresholdPct: th, budget: bud }) : null
             } catch { backtest = null }
         }
-      } catch {
-          preview = null
-          previewSource = null
+      } catch (e) {
+          preview = workerPreview
+            ? {
+                status: 'error',
+                code: 'WORKER_PARSE_FAILED',
+                message: String(e?.message || e || 'Worker parse request failed.'),
+              }
+            : null
+          previewSource = workerPreview ? 'Worker' : null
           backtest = null
       }
     } else {
