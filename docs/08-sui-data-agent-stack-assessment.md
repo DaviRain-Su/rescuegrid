@@ -171,6 +171,8 @@ Recommended use:
 - Add these skills to future agent/coding setup instructions.
 - Use them when implementing GraphQL/gRPC migration, PTB changes, Move upgrades, Walrus/Seal storage, or Walrus Sites deployment.
 
+Implementation status: J8 is now captured in [`docs/10-engineering-setup.md`](10-engineering-setup.md). The setup doc maps `accessing-data`, `ptbs`, `object-model`, `frontend-apps`, `sui-build-test`, `move-unit-testing`, `sui-publish`, `walrus-sites` and `walrus-sites-publishing` to RescueGrid work areas, required validation commands and security guardrails. These skills remain a developer workflow aid, not a runtime dependency.
+
 ## Product implications
 
 Near-term implementation:
