@@ -177,6 +177,63 @@ export async function listPoliciesByOwner(owner) {
   return out
 }
 
+export function isActivePolicySnapshot({ mandate, nowMs = Date.now() }) {
+  if (!mandate) return false
+  if (mandate.revoked) return false
+  return nowMs < Number(mandate.expires_at_ms)
+}
+
+export async function countActivePoliciesByDeployment({
+  client = getClient(),
+  limit = 10,
+  nowMs = Date.now(),
+  maxPages = 20,
+  pageSize = 50,
+} = {}) {
+  const seenWrappers = new Set()
+  let active = 0
+  let scanned = 0
+  let cursor = null
+  let pagesScanned = 0
+  for (let page = 0; page < maxPages; page++) {
+    const res = await client.queryEvents({
+      query: { MoveEventModule: { package: RG.package_id, module: 'policy' } },
+      cursor,
+      limit: pageSize,
+      order: 'descending',
+    })
+    pagesScanned = page + 1
+    for (const e of res.data || []) {
+      if (!String(e.type).endsWith('::policy::PolicyCreated')) continue
+      const wrapperId = e.parsedJson?.wrapper_id
+      if (!wrapperId || seenWrappers.has(wrapperId)) continue
+      seenWrappers.add(wrapperId)
+      scanned += 1
+      const wrapper = await readWrapper(client, wrapperId)
+      const mandate = wrapper ? await readMandate(client, wrapper.mandate_id) : null
+      if (isActivePolicySnapshot({ mandate, nowMs })) active += 1
+      if (active >= limit) {
+        return {
+          active,
+          limit,
+          limit_reached: true,
+          scanned,
+          pages_scanned: page + 1,
+        }
+      }
+    }
+    if (!res.hasNextPage) break
+    cursor = res.nextCursor
+  }
+  return {
+    active,
+    limit,
+    limit_reached: false,
+    scanned,
+    pages_scanned: pagesScanned,
+  }
+}
+
 /** Real portfolio summary for an owner: aggregates + per-policy positions. */
 export async function getOwnerSummary(owner, nowMs = Date.now()) {
   const client = getClient()

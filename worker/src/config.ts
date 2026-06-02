@@ -10,6 +10,7 @@ export const MAX_ALLOWED_SLIPPAGE_BPS = 500
 export const MAX_POLICY_LIFETIME_SECONDS = 604800 // 7 days
 export const DEFAULT_TICK_INTERVAL_SECONDS = 60
 export const ACTION_DEEPBOOK_RESCUE = 1
+export const MAX_ACTIVE_POLICIES_PER_DEPLOYMENT = 10
 
 // The single MVP agent address (deployment-controlled).
 export const AGENT_ADDRESS = CONFIG.agent.address

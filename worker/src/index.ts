@@ -7,7 +7,7 @@ import { bodyLimit } from 'hono/body-limit'
 import { parseIntent } from './parse.js'
 import { strategyHash } from './strategy-core.js'
 import { buildCreatePolicyTx, buildRevokeTx } from './sui-tx.js'
-import { getActivity, listPoliciesByOwner, listActivityByOwner, getOwnerSummary, getMarket, getBalances, readWrapper, readBalanceManagerBalance, policyEventsToFeedItems } from './chain.js'
+import { countActivePoliciesByDeployment, getActivity, listPoliciesByOwner, listActivityByOwner, getOwnerSummary, getMarket, getBalances, readWrapper, readBalanceManagerBalance, policyEventsToFeedItems } from './chain.js'
 import { getClient, DEPLOYMENT } from './sui-tx.js'
 import { runTick, validateExecutionPlan } from './tick.js'
 import { validateForceTrigger, validateTickAuthorization } from './tick-auth.js'
@@ -20,8 +20,7 @@ import {
   shortWrapperId,
   sortActivityItems,
 } from './runtime-activity.js'
-import { AGENT_ADDRESS } from './config.js'
-import { DEFAULT_TICK_INTERVAL_SECONDS } from './config.js'
+import { AGENT_ADDRESS, DEFAULT_TICK_INTERVAL_SECONDS, MAX_ACTIVE_POLICIES_PER_DEPLOYMENT } from './config.js'
 import { getExecutorAdapter, unsupportedExecutor, unsupportedExecutorTarget } from './executor-adapters.js'
 import type { ParseDefaults, Strategy } from './types.js'
 
@@ -135,12 +134,34 @@ app.post('/api/policies', async (c) => {
     return c.json({ status: 'error', code: 'HASH_MISMATCH', message: 'strategy_hash does not match server recomputation.' }, 422)
   }
 
+  let activePolicyLimit
+  try {
+    activePolicyLimit = await countActivePoliciesByDeployment({
+      limit: MAX_ACTIVE_POLICIES_PER_DEPLOYMENT,
+    })
+  } catch (e) {
+    return c.json({ status: 'error', code: 'CHAIN_READ_FAILED', message: String((e as Error).message) }, 502)
+  }
+  if (activePolicyLimit.limit_reached) {
+    return c.json({
+      status: 'error',
+      code: 'ACTIVE_POLICY_LIMIT_REACHED',
+      message: `Deployment already has ${activePolicyLimit.active} active policies; max is ${activePolicyLimit.limit}.`,
+      active_policy_count: activePolicyLimit.active,
+      max_active_policies: activePolicyLimit.limit,
+      scanned_policies: activePolicyLimit.scanned,
+      pages_scanned: activePolicyLimit.pages_scanned,
+    }, 409)
+  }
+
   const tx = buildCreatePolicyTx({ strategy: { ...strategy, strategy_hash: recomputed }, ownerAddress: owner })
   return c.json({
     status: 'ok',
     tx_json: tx.serialize(),
     strategy_hash: recomputed,
     agent_address: AGENT_ADDRESS,
+    active_policy_count: activePolicyLimit.active,
+    max_active_policies: activePolicyLimit.limit,
     sign_with: 'owner signer (frontend wallet or scripted Testnet validation key); read PolicyCreated for wrapper_id',
   })
 })
