@@ -159,6 +159,8 @@ Phase K is based on [`docs/09-market-product-and-frontend-roadmap.md`](09-market
 | K7 | Commit | 3h | Risk Center | Show global budget, venue caps, liquidation watch list, oracle/source health, signer status, stale-data warnings and emergency-stop controls |
 | K8 | Commit | 3h | Agent Ledger v2 | Add strategy/venue/status filters plus expandable rows for reason, input snapshot, execution plan, Guardian result, tx/order id and budget impact |
 
+Current K2/K4 implementation status: Strategy Marketplace and Strategy Detail now consume Worker adapter readiness through `src/queries/adapter-surfaces.js`. Catalog tabs include Funding and Perps, strategy cards show read-only/coming-soon/available states, and adapter badges reflect exact Worker blockers such as `FUNDING_GATED`, `READ_ONLY_ADAPTER`, `READ_ONLY_LENDING_ADAPTER` and `RESEARCH_PENDING_READ_ONLY`. Non-DeepBook templates open read-model detail instead of jumping to policy preview; detail pages show the same adapter readiness plus current read-only permissions.
+
 Current K3 implementation status: Market Monitor now consumes Worker adapter surfaces through `src/queries/adapter-surfaces.js`. The Sui DEX Spreads tab shows `/api/adapters/dex-reads` counts, spread rows and execution blockers; the Yield Monitor shows `/api/adapters/lending-reads` counts, health rows and lending execution blockers. Data Sources also shows both Worker adapter surfaces alongside the feed list. These UI surfaces are read-only and must not imply non-DeepBook execution.
 
 ## Hackathon Critical Path

@@ -1,14 +1,18 @@
 import { useState } from 'react'
 import { RG } from '../data.js'
 import { Icon, TimeChart } from './primitives.jsx'
+import { okAdapterSurface, useDexReadAdapters, useLendingReadAdapters } from '../queries/adapter-surfaces.js'
 
 const STATUS_META = {
   available: { cls: 'badge-safe',    label: 'available' },
   testnet:   { cls: 'badge-warn',    label: 'testnet' },
+  read_only: { cls: 'badge-sui',     label: 'read-only' },
   soon:      { cls: 'badge-neutral', label: 'coming soon' },
 };
 const CAT_C = {
   'Risk Response': 'var(--danger)',
+  'Funding':       '#A78BFA',
+  'Perps':         '#8C7BFF',
   'Arbitrage':     'var(--accent)',
   'Lending':       'var(--safe)',
   'LP':            'var(--sui)',
@@ -21,25 +25,93 @@ function adapterColor(name) {
   const m = {};
   Object.values(RG.protocols).forEach(p => { m[p.name] = p.c; });
   Object.assign(m, {
-    RescueGrid: '#2EE6CE', 'Sui venues': 'var(--t3)',
+    'Bluefin Pro': '#3E7BFF',
+    RescueGrid: '#2EE6CE',
+    'Sui venues': 'var(--t3)',
   });
   return m[name] || 'var(--t2)';
 }
 
-function StrategyCard({ s, onDeploy, onToast, onOpen }) {
-  const st = STATUS_META[s.status];
+const ADAPTER_ALIASES = {
+  'AlphaLend': ['AlphaLend', 'alphalend'],
+  'Bluefin Spot': ['Bluefin Spot', 'bluefin-spot'],
+  Cetus: ['Cetus CLMM', 'Cetus', 'cetus-clmm'],
+  DeepBook: ['DeepBook V3', 'DeepBook'],
+  Momentum: ['Momentum', 'momentum'],
+  NAVI: ['NAVI Lending', 'NAVI', 'navi-lending'],
+  Scallop: ['Scallop Lend', 'Scallop', 'scallop-lend'],
+  Suilend: ['Suilend', 'suilend'],
+  Turbos: ['Turbos', 'turbos'],
+}
+
+function surfaceRowsForAdapter(name, surfaces) {
+  const aliases = new Set([name, ...(ADAPTER_ALIASES[name] || [])].map((x) => x.toLowerCase()))
+  return surfaces
+    .flatMap((surface) => surface?.adapters || [])
+    .filter((row) => aliases.has(String(row.protocol_name || '').toLowerCase()) || aliases.has(String(row.protocol_slug || '').toLowerCase()))
+}
+
+function summarizeReadiness(strategy, dexSurface, lendingSurface) {
+  const surfaces = [dexSurface, lendingSurface].filter(Boolean)
+  const surfacesKnown = surfaces.length > 0
+  const rows = []
+  const missing = []
+  for (const adapter of strategy.adapters || []) {
+    const matched = surfaceRowsForAdapter(adapter, surfaces)
+    if (matched.length === 0) missing.push(adapter)
+    else matched.forEach((row) => rows.push({ ...row, catalog_adapter: adapter }))
+  }
+
+  const blockers = [...new Set(rows.map((row) => row.execution_blocker_code).filter(Boolean))]
+  const onlyRegisteredExecutors = rows.length > 0 && rows.every((row) => row.execution_adapter_registered)
+  const readOnly = rows.some((row) => !row.execution_adapter_registered || row.autonomous_execution_allowed === false)
+  const hasDeepBookOnlyStatic = (strategy.adapters || []).length > 0 && strategy.adapters.every((adapter) => adapter === 'DeepBook')
+
+  return {
+    surfacesKnown,
+    rows,
+    missing,
+    blockers,
+    readOnly,
+    staticDeepBookOnly: !surfacesKnown && hasDeepBookOnlyStatic,
+    canPreviewPolicy: strategy.status !== 'soon' && Boolean(strategy.scenario) && (
+      !surfacesKnown ? hasDeepBookOnlyStatic : rows.length > 0 && missing.length === 0 && onlyRegisteredExecutors
+    ),
+  }
+}
+
+function ReadinessBadge({ row }) {
+  const cls = row.execution_adapter_registered ? 'badge-warn' : 'badge-neutral'
+  const model = row.quote_model || row.health_model || row.adapter_kind
+  return (
+    <span className={`badge ${cls}`} style={{ fontSize: 9.5 }}>
+      {row.protocol_name}
+      <span className="mono" style={{ marginLeft: 5 }}>{row.execution_blocker_code || model}</span>
+    </span>
+  )
+}
+
+function StrategyCard({ s, readiness, onDeploy, onToast, onOpen }) {
+  const st = STATUS_META[s.status] || STATUS_META.soon;
   const cc = CAT_C[s.cat] || 'var(--accent)';
-  const deployable = s.status !== 'soon' && s.scenario;
+  const deployable = readiness.canPreviewPolicy;
+  const readOnly = s.status === 'read_only' || readiness.readOnly || readiness.missing.length > 0;
 
   const action = (e) => {
     if (e) e.stopPropagation();
     if (s.status === 'soon') { onToast && onToast('Coming soon — we’ll flag it the moment the adapter ships', 'var(--sui)'); return; }
     if (s.watch) { onToast && onToast('Watchtower armed — monitoring only, zero execution authority', 'var(--safe)'); return; }
-    if (s.scenario) { onDeploy && onDeploy({ scenario: s.scenario }); return; }
+    if (deployable) { onDeploy && onDeploy({ scenario: s.scenario }); return; }
+    if (readOnly) {
+      onToast && onToast('Read-only adapter boundary — inspect the required surfaces before this can deploy', 'var(--sui)');
+      onOpen && onOpen(s.id);
+      return;
+    }
     onToast && onToast('On testnet — request early access to preview this policy', 'var(--warn)');
   };
   const btnLabel = s.status === 'soon' ? 'Coming soon'
     : s.watch ? 'Start monitoring'
+    : readOnly && !deployable ? 'View read model'
     : s.scenario ? (s.status === 'testnet' ? 'Preview (testnet)' : 'Preview policy')
     : 'Notify me';
 
@@ -85,6 +157,20 @@ function StrategyCard({ s, onDeploy, onToast, onOpen }) {
         ))}
       </div>
 
+      {/* live readiness */}
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, minHeight: 22 }}>
+        {readiness.rows.length > 0
+          ? readiness.rows.slice(0, 3).map((row) => <ReadinessBadge key={`${row.catalog_adapter}:${row.id}`} row={row} />)
+          : readiness.staticDeepBookOnly
+          ? <span className="badge badge-warn" style={{ fontSize: 9.5 }}>DeepBook <span className="mono" style={{ marginLeft: 5 }}>worker optional</span></span>
+          : <span className="badge badge-neutral" style={{ fontSize: 9.5 }}>
+              {readiness.surfacesKnown ? 'adapter not wired' : 'worker surface offline'}
+            </span>}
+        {readiness.missing.slice(0, 2).map((adapter) => (
+          <span key={adapter} className="badge badge-neutral" style={{ fontSize: 9.5 }}>{adapter} <span className="mono" style={{ marginLeft: 5 }}>future</span></span>
+        ))}
+      </div>
+
       {/* risk taxonomy */}
       <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
         {s.risks.length === 0
@@ -117,12 +203,25 @@ function StrategyCard({ s, onDeploy, onToast, onOpen }) {
 
 export function StrategyMarketplace({ onDeploy, onToast, onOpen }) {
   const [cat, setCat] = useState('All');
-  const cats = ['All', 'Risk Response', 'Arbitrage', 'Lending', 'LP', 'Rebalance', 'Automation', 'Watchtower'];
+  const dexReadQuery = useDexReadAdapters();
+  const lendingReadQuery = useLendingReadAdapters();
+  const dexSurface = okAdapterSurface(dexReadQuery);
+  const lendingSurface = okAdapterSurface(lendingReadQuery);
+  const cats = ['All', 'Risk Response', 'Funding', 'Perps', 'Arbitrage', 'Lending', 'LP', 'Rebalance', 'Automation', 'Watchtower'];
   const list = RG.catalog.filter(s => cat === 'All' || s.cat === cat);
   const counts = {
     available: RG.catalog.filter(s => s.status === 'available').length,
     testnet: RG.catalog.filter(s => s.status === 'testnet').length,
+    readOnly: RG.catalog.filter(s => s.status === 'read_only').length,
     soon: RG.catalog.filter(s => s.status === 'soon').length,
+  };
+  const surfaceCounts = {
+    dex: dexSurface?.counts?.total_adapters ?? 0,
+    lending: lendingSurface?.counts?.total_adapters ?? 0,
+    blockers: new Set([
+      ...Object.keys(dexSurface?.counts?.by_execution_blocker_code || {}),
+      ...Object.keys(lendingSurface?.counts?.by_execution_blocker_code || {}),
+    ]).size,
   };
 
   return (
@@ -136,13 +235,34 @@ export function StrategyMarketplace({ onDeploy, onToast, onOpen }) {
           </div>
         </div>
         <div style={{ display: 'flex', gap: 22 }}>
-          {[['available', counts.available, 'var(--safe)'], ['testnet', counts.testnet, 'var(--warn)'], ['coming soon', counts.soon, 'var(--t2)']].map(([k, v, c]) => (
+          {[['available', counts.available, 'var(--safe)'], ['testnet', counts.testnet, 'var(--warn)'], ['read-only', counts.readOnly, 'var(--sui)'], ['coming soon', counts.soon, 'var(--t2)']].map(([k, v, c]) => (
             <div key={k}>
               <div className="mono display" style={{ fontSize: 22, fontWeight: 600, color: c }}>{v}</div>
               <div style={{ fontSize: 11, color: 'var(--t2)' }}>{k}</div>
             </div>
           ))}
         </div>
+      </div>
+
+      <div className="card" style={{ padding: '14px 18px', display: 'flex', alignItems: 'center', gap: 14, flexWrap: 'wrap' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 9, minWidth: 220 }}>
+          <span style={{ color: 'var(--sui)' }}><Icon name="shield" size={16} /></span>
+          <div>
+            <div className="card-title" style={{ fontSize: 13 }}>Worker adapter readiness</div>
+            <div className="mono" style={{ fontSize: 10.5, color: 'var(--t2)', marginTop: 2 }}>Sui-only read surfaces, not broad execution authority</div>
+          </div>
+        </div>
+        {[
+          ['DEX read adapters', surfaceCounts.dex],
+          ['Lending reads', surfaceCounts.lending],
+          ['Blocker classes', surfaceCounts.blockers],
+        ].map(([k, v]) => (
+          <span key={k} className="badge badge-neutral" style={{ fontSize: 9.5 }}>{k}: <span className="mono" style={{ marginLeft: 4 }}>{v}</span></span>
+        ))}
+        <div style={{ flex: 1 }} />
+        <span className={`badge ${dexSurface || lendingSurface ? 'badge-sui' : 'badge-neutral'}`} style={{ fontSize: 9.5 }}>
+          {dexSurface || lendingSurface ? 'worker linked' : 'worker surface offline'}
+        </span>
       </div>
 
       {/* category tabs */}
@@ -156,7 +276,16 @@ export function StrategyMarketplace({ onDeploy, onToast, onOpen }) {
 
       {/* grid */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 16 }}>
-        {list.map(s => <StrategyCard key={s.id} s={s} onDeploy={onDeploy} onToast={onToast} onOpen={onOpen} />)}
+        {list.map(s => (
+          <StrategyCard
+            key={s.id}
+            s={s}
+            readiness={summarizeReadiness(s, dexSurface, lendingSurface)}
+            onDeploy={onDeploy}
+            onToast={onToast}
+            onOpen={onOpen}
+          />
+        ))}
       </div>
     </div>
   );
@@ -169,13 +298,18 @@ const DETAIL_PARSED = {
 };
 
 export function StrategyDetail({ id, onBack, onDeploy, onToast }) {
+  const dexReadQuery = useDexReadAdapters();
+  const lendingReadQuery = useLendingReadAdapters();
+  const dexSurface = okAdapterSurface(dexReadQuery);
+  const lendingSurface = okAdapterSurface(lendingReadQuery);
   const s = RG.catalog.find(c => c.id === id);
   if (!s) return null;
   const d = (RG.detail && RG.detail[id]) || {};
   const cc = CAT_C[s.cat] || 'var(--accent)';
-  const st = STATUS_META[s.status];
+  const st = STATUS_META[s.status] || STATUS_META.soon;
   const parsed = s.scenario && DETAIL_PARSED[s.scenario] ? RG[DETAIL_PARSED[s.scenario]] : null;
-  const deployable = s.status !== 'soon' && s.scenario;
+  const readiness = summarizeReadiness(s, dexSurface, lendingSurface);
+  const deployable = readiness.canPreviewPolicy;
 
   // derive sane fallbacks for non-authored strategies
   const thesis = d.thesis || s.blurb;
@@ -184,6 +318,13 @@ export function StrategyDetail({ id, onBack, onDeploy, onToast }) {
   const net = d.net || null;
   const riskParts = d.risk || s.risks.map(k => ({ key: k, level: 'warn', note: (RG.riskTax[k] ? RG.riskTax[k].label : k) + ' exposure applies — sized and capped by policy.' }));
   const permissions = d.permissions || ['Act only on scoped venues', 'Read price + rate feeds', 'Never withdraw or transfer funds off-app'];
+  const permissionRows = s.status === 'read_only'
+    ? [
+        'Read Sui protocol state and adapter metadata only',
+        'No autonomous swap, supply, withdraw, borrow or perps execution',
+        'Future policy must add wrapper target constraints before deployment',
+      ]
+    : permissions;
   const timeline = d.timeline || [{ t: 'trigger', d: 'Condition met' }, { t: 't0', d: 'Agent executes within policy' }, { t: 'ongoing', d: 'Monitor, rebalance, log on-chain' }];
   const guardian = (parsed && parsed.guardian) || [];
   const hist = (parsed && parsed.backtest && parsed.backtest.curve) || null;
@@ -337,6 +478,41 @@ export function StrategyDetail({ id, onBack, onDeploy, onToast }) {
             </div>
           </Card>
 
+          <Card title="Adapter readiness" icon="layers">
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+              {!readiness.surfacesKnown && (
+                <div style={{ fontSize: 12, color: 'var(--t2)', lineHeight: 1.45 }}>
+                  Worker adapter surfaces are offline in this session. Live mode shows exact Sui adapter blockers here.
+                </div>
+              )}
+              {readiness.rows.map((row) => (
+                <div key={`${row.catalog_adapter}:${row.id}`} style={{ display: 'flex', gap: 10, alignItems: 'flex-start', padding: '10px 12px', borderRadius: 'var(--r-sm)', background: 'var(--glass)', border: '1px solid var(--border)' }}>
+                  <span style={{ color: row.execution_adapter_registered ? 'var(--warn)' : 'var(--sui)', marginTop: 1 }}>
+                    <Icon name={row.execution_adapter_registered ? 'bolt' : 'eye'} size={14} />
+                  </span>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ display: 'flex', gap: 7, alignItems: 'center', flexWrap: 'wrap' }}>
+                      <span style={{ fontSize: 12.5, fontWeight: 600 }}>{row.protocol_name}</span>
+                      <ReadinessBadge row={row} />
+                    </div>
+                    <div style={{ fontSize: 11, color: 'var(--t2)', marginTop: 3, lineHeight: 1.4 }}>
+                      {row.quote_model || row.health_model || row.adapter_kind} · {row.sdk_status}
+                    </div>
+                  </div>
+                </div>
+              ))}
+              {readiness.missing.map((adapter) => (
+                <div key={adapter} style={{ display: 'flex', gap: 10, alignItems: 'flex-start', padding: '10px 12px', borderRadius: 'var(--r-sm)', background: 'var(--glass)', border: '1px solid var(--border)' }}>
+                  <span style={{ color: 'var(--t2)', marginTop: 1 }}><Icon name="clock" size={14} /></span>
+                  <div>
+                    <div style={{ fontSize: 12.5, fontWeight: 600 }}>{adapter}</div>
+                    <div style={{ fontSize: 11, color: 'var(--t2)', marginTop: 3 }}>No current Sui execution adapter; keep this template watch/read-only.</div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </Card>
+
           {/* historical */}
           {hist && (
             <Card title="Backtest · 30d" icon="spark">
@@ -355,9 +531,9 @@ export function StrategyDetail({ id, onBack, onDeploy, onToast }) {
           )}
 
           {/* permissions */}
-          <Card title="Required permissions" icon="key">
+          <Card title={s.status === 'read_only' ? 'Current permissions' : 'Required permissions'} icon="key">
             <div style={{ display: 'flex', flexDirection: 'column', gap: 9 }}>
-              {permissions.map((p, i) => (
+              {permissionRows.map((p, i) => (
                 <div key={i} style={{ display: 'flex', gap: 9, alignItems: 'flex-start', fontSize: 12, color: 'var(--t1)' }}>
                   <span style={{ color: /never|no /i.test(p) ? 'var(--danger)' : 'var(--safe)', flexShrink: 0, marginTop: 1 }}>
                     <Icon name={/never|no /i.test(p) ? 'x' : 'check'} size={13} stroke={2.4} /></span>

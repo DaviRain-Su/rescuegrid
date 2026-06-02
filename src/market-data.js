@@ -27,10 +27,10 @@ function strategyParsed({ intent, summary, params, ptb, guardian, meta, stats, v
 export function attachMarketData(RG) {
   RG.parsedFundingArb = strategyParsed({
     intent: 'Sui-native perp hedge',
-    summary: 'Hedge spot SUI inventory with a scoped Bluefin SUI-PERP short while the policy keeps collateral, funding and liquidation limits inside Sui-only venues.',
+    summary: 'Hedge spot SUI inventory with a scoped Bluefin Pro SUI-PERP short while the policy keeps collateral, funding and liquidation limits inside Sui-only venues.',
     params: [
       { k: 'Pair', v: 'SUI-PERP' },
-      { k: 'Legs', v: 'Long DeepBook spot / Short Bluefin perp' },
+      { k: 'Legs', v: 'Long DeepBook spot / Short Bluefin Pro perp' },
       { k: 'Funding', v: '+12.4% APR watched' },
       { k: 'Notional', v: '<= 1,000 USDC' },
       { k: 'Rebalance', v: 'each funding window' },
@@ -43,9 +43,9 @@ export function attachMarketData(RG) {
       { op: 'MoveCall', fn: 'policy::log_activity', args: 'action=sui-perp-hedge', note: 'on-chain activity log' },
     ],
     guardian: [
-      { level: 'pass', label: 'Sui venue scope', detail: 'Both legs stay inside Sui-native venues: DeepBook spot and Bluefin perp.' },
+      { level: 'pass', label: 'Sui venue scope', detail: 'Both legs stay inside Sui-native venues: DeepBook spot and Bluefin Pro perp.' },
       { level: 'pass', label: 'Funding watched', detail: 'The agent tracks funding but does not claim risk-free carry.' },
-      { level: 'warn', label: 'Liquidation buffer', detail: 'The Bluefin leg has liquidation risk; Guardian keeps a margin buffer before resizing.' },
+      { level: 'warn', label: 'Liquidation buffer', detail: 'The Bluefin Pro leg has liquidation risk; Guardian keeps a margin buffer before resizing.' },
       { level: 'pass', label: 'Budget ceiling', detail: 'Policy hard-caps total collateral at 2,000 USDC on-chain.' },
     ],
     meta: { name: 'SUI Perp Hedge', strategy: 'funding-arb', budget: 2000, scope: 'SUI-PERP', slip: 0.5 },
@@ -146,13 +146,13 @@ export function attachMarketData(RG) {
 
   RG.catalog = [
     { id: 'risk-grid', name: 'Risk Response Grid', cat: 'Risk Response', status: 'available', scenario: 'safe', icon: 'shield', blurb: 'Auto-deploy a DeepBook buy ladder, pause or reduce exposure when SUI drops, volatility spikes, or liquidity thins.', metric: { l: 'Trigger', v: '-8% / 1h' }, adapters: ['DeepBook'], risks: ['market', 'liquidity'], capital: '500+ USDC' },
-    { id: 'sui-perp-hedge', name: 'Sui Perp Hedge', cat: 'Risk Response', status: 'testnet', scenario: 'funding-arb', icon: 'swap', blurb: 'Hedge SUI spot inventory with a scoped Bluefin SUI-PERP short, with funding and liquidation guards.', metric: { l: 'Funding watched', v: '+12.4% APR' }, adapters: ['DeepBook', 'Bluefin'], risks: ['funding', 'liq', 'liquidity'], capital: '2,000+ USDC' },
-    { id: 'sui-spot-spread', name: 'Sui DEX Spread Capture', cat: 'Arbitrage', status: 'testnet', scenario: 'spot', icon: 'scale', blurb: 'Compare DeepBook and Cetus spot prices and execute only when the same-chain spread clears fees and slippage.', metric: { l: 'Spread', v: '+0.19%' }, adapters: ['DeepBook', 'Cetus'], risks: ['liquidity', 'market'], capital: '2,000+ USDC' },
-    { id: 'lend-optimizer', name: 'Sui Lending Rate Optimizer', cat: 'Lending', status: 'available', scenario: 'lend', icon: 'percent', blurb: 'Route idle stablecoins across Scallop, NAVI and Suilend, migrating only when the edge beats the move cost.', metric: { l: 'Best APY', v: '7.4%' }, adapters: ['Scallop', 'NAVI', 'Suilend'], risks: ['contract', 'liquidity'], capital: '5,000 USDC' },
-    { id: 'borrow-guardian', name: 'Borrow Health Guardian', cat: 'Lending', status: 'testnet', scenario: null, icon: 'shield', blurb: 'Watch Sui lending health and auto-repay or deleverage before liquidation when LTV worsens.', metric: { l: 'Action', v: 'auto-repay' }, adapters: ['Suilend', 'NAVI'], risks: ['liq', 'oracle'], capital: 'collateral' },
-    { id: 'lp-range', name: 'Cetus LP Range Manager', cat: 'LP', status: 'available', scenario: 'lp', icon: 'droplet', blurb: 'Place a concentrated Cetus range, compound fees and auto re-center as price drifts, exiting on volatility.', metric: { l: 'Fee APR', v: '~28%' }, adapters: ['Cetus'], risks: ['market', 'liquidity'], capital: '1,000+ USDC' },
+    { id: 'sui-perp-hedge', name: 'Sui Perp Hedge', cat: 'Funding', status: 'read_only', scenario: 'funding-arb', icon: 'swap', blurb: 'Hedge SUI spot inventory with a scoped Bluefin Pro SUI-PERP short, with funding and liquidation guards.', metric: { l: 'Funding watched', v: '+12.4% APR' }, adapters: ['DeepBook', 'Bluefin Pro'], risks: ['funding', 'liq', 'liquidity'], capital: '2,000+ USDC' },
+    { id: 'sui-spot-spread', name: 'Sui DEX Spread Capture', cat: 'Arbitrage', status: 'read_only', scenario: 'spot', icon: 'scale', blurb: 'Compare DeepBook and Cetus spot prices and execute only when the same-chain spread clears fees and slippage.', metric: { l: 'Spread', v: '+0.19%' }, adapters: ['DeepBook', 'Cetus'], risks: ['liquidity', 'market'], capital: '2,000+ USDC' },
+    { id: 'lend-optimizer', name: 'Sui Lending Rate Optimizer', cat: 'Lending', status: 'read_only', scenario: 'lend', icon: 'percent', blurb: 'Route idle stablecoins across Scallop, NAVI and Suilend, migrating only when the edge beats the move cost.', metric: { l: 'Best APY', v: '7.4%' }, adapters: ['Scallop', 'NAVI', 'Suilend'], risks: ['contract', 'liquidity'], capital: '5,000 USDC' },
+    { id: 'borrow-guardian', name: 'Borrow Health Guardian', cat: 'Lending', status: 'read_only', scenario: null, icon: 'shield', blurb: 'Watch Sui lending health and auto-repay or deleverage before liquidation when LTV worsens.', metric: { l: 'Action', v: 'auto-repay' }, adapters: ['Suilend', 'NAVI'], risks: ['liq', 'oracle'], capital: 'collateral' },
+    { id: 'lp-range', name: 'Cetus LP Range Manager', cat: 'LP', status: 'read_only', scenario: 'lp', icon: 'droplet', blurb: 'Place a concentrated Cetus range, compound fees and auto re-center as price drifts, exiting on volatility.', metric: { l: 'Fee APR', v: '~28%' }, adapters: ['Cetus'], risks: ['market', 'liquidity'], capital: '1,000+ USDC' },
     { id: 'dca', name: 'DeepBook DCA / Accumulation', cat: 'Automation', status: 'available', scenario: 'dca', icon: 'target', blurb: 'Schedule recurring SUI or DEEP buys by time, volatility band or drawdown level.', metric: { l: 'Cadence', v: 'daily xN' }, adapters: ['DeepBook'], risks: ['market'], capital: '100+ / run' },
-    { id: 'tpsl', name: 'Sui Take-Profit / Stop-Loss', cat: 'Automation', status: 'testnet', scenario: 'hedge', icon: 'activity', blurb: 'Trailing stop, take-profit and stop-loss automation for Sui positions through scoped DeepBook and Bluefin actions.', metric: { l: 'Type', v: 'trailing' }, adapters: ['DeepBook', 'Bluefin'], risks: ['market', 'liquidity'], capital: 'position' },
+    { id: 'tpsl', name: 'Sui Take-Profit / Stop-Loss', cat: 'Perps', status: 'read_only', scenario: 'hedge', icon: 'activity', blurb: 'Trailing stop, take-profit and stop-loss automation for Sui positions through scoped DeepBook and Bluefin Pro actions.', metric: { l: 'Type', v: 'trailing' }, adapters: ['DeepBook', 'Bluefin Pro'], risks: ['market', 'liquidity'], capital: 'position' },
     { id: 'peg-rescue', name: 'Sui Stablecoin / Peg Rescue', cat: 'Risk Response', status: 'soon', scenario: null, icon: 'shield', blurb: 'On depeg, pool imbalance or oracle mismatch: reduce exposure, swap to safer Sui collateral, or pause the strategy.', metric: { l: 'Trigger', v: 'depeg' }, adapters: ['Cetus', 'DeepBook'], risks: ['oracle', 'liquidity'], capital: '-' },
     { id: 'rebalancer', name: 'Sui Portfolio Rebalancer', cat: 'Rebalance', status: 'soon', scenario: null, icon: 'scale', blurb: 'Hold target weights across SUI, DEEP, WAL, stables, LP and lending positions; rebalance when drift exceeds a band.', metric: { l: 'Trigger', v: 'drift > 5%' }, adapters: ['DeepBook', 'Cetus', 'Scallop'], risks: ['market', 'liquidity'], capital: '-' },
     { id: 'watchtower', name: 'Sui Alert-Only Watchtower', cat: 'Watchtower', status: 'available', scenario: null, watch: true, icon: 'eye', blurb: 'Monitor any Sui market or position with zero execution authority, then upgrade to an autonomous policy when ready.', metric: { l: 'Authority', v: 'none' }, adapters: ['DeepBook', 'Cetus', 'Scallop'], risks: [], capital: 'free' },
@@ -160,10 +160,10 @@ export function attachMarketData(RG) {
 
   RG.detail = {
     'sui-perp-hedge': {
-      thesis: 'Sui perp funding and mark-price drift can create a useful hedge signal. RescueGrid keeps the visible scope inside Sui: DeepBook spot inventory and a Bluefin SUI-PERP hedge, both bounded by the same Move policy.',
+      thesis: 'Sui perp funding and mark-price drift can create a useful hedge signal. RescueGrid keeps the visible scope inside Sui: DeepBook spot inventory and a Bluefin Pro SUI-PERP hedge, both bounded by the same Move policy.',
       legs: [
         { venue: 'DeepBook', asset: 'SUI spot', side: 'Long', size: '1,000 USDC', collateral: 'USDC', exp: 'spot inventory', expC: 'var(--safe)' },
-        { venue: 'Bluefin', asset: 'SUI-PERP', side: 'Short', size: '1,000 USDC', collateral: 'USDC', exp: 'hedges downside', expC: 'var(--safe)' },
+        { venue: 'Bluefin Pro', asset: 'SUI-PERP', side: 'Short', size: '1,000 USDC', collateral: 'USDC', exp: 'hedges downside', expC: 'var(--safe)' },
       ],
       yield: [
         { label: 'Funding watched', v: '+12.4%', c: 'var(--safe)' },
@@ -173,13 +173,13 @@ export function attachMarketData(RG) {
       net: { label: 'Hedge value', v: 'Sui-only risk reduction' },
       risk: [
         { key: 'funding', level: 'warn', note: 'Funding can flip; the policy unwinds if net carry becomes unfavorable.' },
-        { key: 'liq', level: 'warn', note: 'The Bluefin leg has liquidation risk; Guardian enforces a margin buffer.' },
-        { key: 'liquidity', level: 'pass', note: 'DeepBook and Bluefin depth are checked before any action.' },
+        { key: 'liq', level: 'warn', note: 'The Bluefin Pro leg has liquidation risk; Guardian enforces a margin buffer.' },
+        { key: 'liquidity', level: 'pass', note: 'DeepBook and Bluefin Pro depth are checked before any action.' },
       ],
-      permissions: ['Trade DeepBook SUI/USDC within scope', 'Open or close Bluefin SUI-PERP hedge within scope', 'Read Sui oracle and funding feeds', 'Never withdraw or transfer externally'],
+      permissions: ['Trade DeepBook SUI/USDC within scope', 'Open or close Bluefin Pro SUI-PERP hedge within scope', 'Read Sui oracle and funding feeds', 'Never withdraw or transfer externally'],
       timeline: [
         { t: 'trigger', d: 'SUI downside or funding condition crosses threshold' },
-        { t: 't0', d: 'Size DeepBook spot and Bluefin hedge under the policy cap' },
+        { t: 't0', d: 'Size DeepBook spot and Bluefin Pro hedge under the policy cap' },
         { t: 'each window', d: 'Re-check funding, delta and liquidation buffer' },
         { t: 'on flip', d: 'Unwind or resize the hedge and return to monitoring' },
       ],
