@@ -598,6 +598,8 @@ Data source rules:
 - `chain_activity` maps those chain events into the dashboard feed format.
 - `runtime_activity` contains Durable Object runtime events.
 - `activity` is the timestamp-sorted merge of `chain_activity` and runtime feed items.
+- `activity` must de-duplicate items with the same transaction digest. When a runtime execution item and a chain event refer to the same digest, the chain event wins because it is the authoritative success evidence.
+- Durable Object runtime activity must be idempotent for transaction-bearing events: replaying the same digest must not create duplicate success rows. A later event with stronger success evidence may replace an earlier unresolved/error row for the same digest.
 - `runtime_state` comes from Durable Object state.
 - If chain state conflicts with runtime state, chain state wins and `runtime_state_stale` is true.
 

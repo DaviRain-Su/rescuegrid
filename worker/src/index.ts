@@ -17,8 +17,8 @@ import {
   runtimeErrorEvent,
   runtimeEventFromTickResult,
   runtimeEventToFeedItem,
+  mergeActivityItems,
   shortWrapperId,
-  sortActivityItems,
 } from './runtime-activity.js'
 import { AGENT_ADDRESS, DEFAULT_TICK_INTERVAL_SECONDS, MAX_ACTIVE_POLICIES_PER_DEPLOYMENT } from './config.js'
 import { getExecutorAdapter, unsupportedExecutor, unsupportedExecutorTarget } from './executor-adapters.js'
@@ -191,7 +191,7 @@ app.get('/api/policies/:wrapper_id/activity', async (c) => {
       runtime: runtimeState,
       runtime_activity: runtimeActivity,
       chain_activity: chainActivity,
-      activity: sortActivityItems([...runtimeFeed, ...chainActivity]),
+      activity: mergeActivityItems(runtimeFeed, chainActivity),
     }, 200)
   } catch (e) {
     return c.json({ status: 'error', code: 'CHAIN_READ_FAILED', message: String((e as Error).message) }, 502)
@@ -304,7 +304,7 @@ app.get('/api/activity', async (c) => {
     const runtimeActivity = await runtimeFeedForWrappers(c.env, policies.map((p: any) => p.wrapper_id).filter(Boolean))
     return c.json({
       status: 'ok',
-      activity: sortActivityItems([...runtimeActivity, ...chainActivity]).slice(0, 100),
+      activity: mergeActivityItems(runtimeActivity, chainActivity).slice(0, 100),
       sources: {
         chain_events: chainActivity.length,
         runtime_events: runtimeActivity.length,

@@ -155,7 +155,7 @@ export function ActivityView({ activity, onTx, live = false, loading = false, so
           <div className="card" style={{ overflow: 'hidden' }}>
             {filtered.filter(a => a.date === date).map((a, i) => {
               const m = meta[a.kind] || meta.monitor
-              const key = a.t + a.title
+              const key = a.id || a.dedupe_key || a.tx || `${a.t}-${a.title}-${i}`
               const isOpen = open === key
               const ex = expand(a)
               const oc = OUTCOME[ex.oc]

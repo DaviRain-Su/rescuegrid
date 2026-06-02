@@ -173,6 +173,7 @@ Happy path:
 - `chain_activity` 单独返回链上 feed rows，便于确认链上审计证据没有被 runtime log 覆盖。
 - budget 数字以字符串返回，避免 JS integer loss。
 - 当链上状态与 Durable Object runtime state 冲突时，链上状态优先，`runtime_state_stale=true`。
+- 同一个 tx digest 只能在合并后的 `activity` 中出现一次；若 runtime 成功记录和链上 `AgentTradeExecuted` 同时存在，链上事件优先。
 
 Error:
 
@@ -202,6 +203,7 @@ Error:
 - adapter plan failed 返回 `error`，不提交交易。
 - unknown executor 返回 `UNSUPPORTED_EXECUTOR`，不提交交易。
 - Deepbook transaction failed 返回 `error`，不更新成功状态。
+- 同一个已提交 digest 被重试或重新读取时，runtime activity 不重复展示成功；若先记录 unresolved/error，后续同 digest 得到 `AgentTradeExecuted` + spend increase 证据时，可以用成功记录替换旧 unresolved/error。
 - 缺失或错误 internal token 时返回 `401` 或 `403`，不运行 tick。
 - 生产部署或 `RESCUEGRID_DEMO_MODE=false` 时提交 `force_trigger=true` 返回 `FORCE_TRIGGER_DISABLED`。
 

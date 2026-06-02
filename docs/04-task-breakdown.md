@@ -77,7 +77,7 @@
 | F1 | Commit | 3h | 固化 `deepbook` ExecutorAdapter | 基于 Phase B 结论实现选定 pool 的 market read、plan、preview、PTB build |
 | F2 | Commit | 3h | 集成 Deepbook SDK/Transaction Builder | Worker 能构建交易 payload |
 | F3 | Commit | 3h | 把 authorize_action、Deepbook call、ActionReceipt 和 Wrapper record 放入同一执行链路 | 成功交易会产生 MoveGate ActionReceipt 和 `AgentTradeExecuted` |
-| F4 | Commit | 2h | 失败恢复和幂等处理 | 重试不会重复扣预算或重复展示成功 |
+| F4 | Commit | 2h | 失败恢复和幂等处理 | 重试不会重复扣预算；runtime activity 按 tx digest 去重，chain `AgentTradeExecuted` 胜过同 digest runtime 成功行，后续更强成功证据可替换旧 unresolved/error 行 |
 
 ## Phase G - Demo Hardening
 

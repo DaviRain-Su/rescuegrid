@@ -90,7 +90,7 @@ Observed final mission evidence is Testnet-only:
 - Browser/API surfaces were verified on `http://localhost:5175` with live Worker reads to `http://localhost:8787`.
 - Scripted agent-key Testnet validation created, listed, surfaced in UI/API, and revoked a current-run policy; chain and Worker reads stayed consistent post-revoke.
 - `npm run demo:loop` is the G2 live demo validator: create -> activate/monitor -> force tick -> revoke -> post-revoke tick. In the current funding state it should report the documented execution gate, not a fake fill.
-- Funding/readiness, tick auth, trigger-not-met, Guardian safety, revoked/failed/unresolved paths all remained non-success with unchanged spend and no execution-success activity.
+- Funding/readiness, tick auth, trigger-not-met, Guardian safety, revoked/failed/unresolved paths all remained non-success with unchanged spend and no execution-success activity; transaction-bearing runtime activity is idempotent by digest, and chain success evidence wins over duplicate runtime success rows.
 - Successful real DeepBook execution was not run and should remain documented as deferred until the DBUSDC/DEEP gate is satisfied.
 
 ## Tech

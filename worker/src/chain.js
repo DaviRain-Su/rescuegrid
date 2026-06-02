@@ -77,10 +77,12 @@ export function policyEventToFeedItem(event, policyLabel = shortWrapperId(event?
   const type = String(event?.type || '')
   const { t, date, timestamp_ms } = eventDateParts(event?.timestamp_ms)
   const base = {
+    id: event?.tx ? `chain:${event.tx}:${type || 'event'}` : null,
     t,
     date,
     policy: policyLabel,
     tx: event?.tx || null,
+    tx_digest: event?.tx || null,
     risk: null,
     mode: 'cloud',
     source: 'chain',

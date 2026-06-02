@@ -466,7 +466,7 @@ export function ActiveStrategy({ p, activity, onBack, onToggle, onRebalance, onR
                   {log.map((a, i) => {
                     const fm = { exec: ['var(--accent)', 'bolt'], rebalance: ['var(--sui)', 'swap'], guardian: ['var(--danger)', 'shield'], policy: ['var(--sui)', 'grid'] }[a.kind] || ['var(--t1)', 'eye'];
                     return (
-                      <div key={i} style={{ display: 'flex', gap: 11, padding: '10px 0', borderTop: i ? '1px solid var(--border)' : 'none' }}>
+                      <div key={a.id || a.dedupe_key || a.tx || `${a.t}-${i}`} style={{ display: 'flex', gap: 11, padding: '10px 0', borderTop: i ? '1px solid var(--border)' : 'none' }}>
                         <span style={{ width: 24, height: 24, borderRadius: 7, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'var(--glass-hi)', color: fm[0] }}><Icon name={fm[1]} size={13} /></span>
                         <div style={{ flex: 1, minWidth: 0 }}>
                           <div style={{ fontSize: 12.5, fontWeight: 600 }}>{a.title}</div>

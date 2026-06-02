@@ -2,7 +2,9 @@ import assert from 'node:assert/strict'
 import {
   MAX_RUNTIME_ACTIVITY,
   appendRuntimeActivity,
+  mergeActivityItems,
   runtimeErrorEvent,
+  runtimeEventDedupeKey,
   runtimeEventFromTickResult,
   runtimeEventToFeedItem,
   shortWrapperId,
@@ -81,6 +83,73 @@ const NOW = Date.UTC(2026, 5, 2, 13, 0, 0)
   }
   assert.equal(events.length, MAX_RUNTIME_ACTIVITY)
   assert.equal(events[0].timestamp_ms, NOW + MAX_RUNTIME_ACTIVITY + 4)
+}
+
+{
+  const first = runtimeEventFromTickResult({
+    action: 'executed',
+    tx_digest: 'same-digest',
+    spend_delta: '100000',
+    execution_claimed: true,
+    execution_success_evidence: true,
+  }, { wrapperId: WRAPPER, nowMs: NOW + 10 })
+  const duplicate = runtimeEventFromTickResult({
+    action: 'executed',
+    tx_digest: 'same-digest',
+    spend_delta: '100000',
+    execution_claimed: true,
+    execution_success_evidence: true,
+  }, { wrapperId: WRAPPER, nowMs: NOW + 11 })
+  let events = appendRuntimeActivity([], first)
+  events = appendRuntimeActivity(events, duplicate)
+  assert.equal(events.length, 1)
+  assert.equal(events[0].tx_digest, 'same-digest')
+  assert.equal(runtimeEventDedupeKey(events[0]), 'tx:same-digest')
+}
+
+{
+  const unresolved = runtimeEventFromTickResult({
+    action: 'error',
+    code: 'UNRESOLVED_TRANSACTION',
+    tx_digest: 'eventually-success',
+    execution_claimed: false,
+    execution_success_evidence: false,
+  }, { wrapperId: WRAPPER, nowMs: NOW + 12 })
+  const resolved = runtimeEventFromTickResult({
+    action: 'executed',
+    tx_digest: 'eventually-success',
+    spend_delta: '100000',
+    execution_claimed: true,
+    execution_success_evidence: true,
+  }, { wrapperId: WRAPPER, nowMs: NOW + 13 })
+  let events = appendRuntimeActivity([], unresolved)
+  events = appendRuntimeActivity(events, resolved)
+  assert.equal(events.length, 1)
+  assert.equal(events[0].action, 'executed')
+  assert.equal(events[0].execution_success_evidence, true)
+}
+
+{
+  const runtime = runtimeEventToFeedItem(runtimeEventFromTickResult({
+    action: 'executed',
+    tx_digest: 'chain-wins',
+    spend_delta: '100000',
+    execution_claimed: true,
+    execution_success_evidence: true,
+  }, { wrapperId: WRAPPER, nowMs: NOW + 14 }))
+  const chain = {
+    source: 'chain',
+    kind: 'exec',
+    title: 'AgentTradeExecuted',
+    tx: 'chain-wins',
+    tx_digest: 'chain-wins',
+    timestamp_ms: NOW + 15,
+    execution_claimed: true,
+  }
+  const merged = mergeActivityItems([runtime], [chain])
+  assert.equal(merged.length, 1)
+  assert.equal(merged[0].source, 'chain')
+  assert.equal(merged[0].tx, 'chain-wins')
 }
 
 {

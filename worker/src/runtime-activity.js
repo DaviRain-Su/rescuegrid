@@ -53,6 +53,39 @@ function normalizeStringArray(value) {
   return Array.isArray(value) ? value.map(String).filter(Boolean) : []
 }
 
+function txDigestOf(value) {
+  return value?.tx_digest || value?.tx || null
+}
+
+export function runtimeEventDedupeKey(event) {
+  const txDigest = txDigestOf(event)
+  if (txDigest) return `tx:${txDigest}`
+  const action = String(event?.action || '')
+  if (action === 'activated' && event?.wrapper_id) return `runtime:${event.wrapper_id}:activated`
+  return event?.dedupe_key || null
+}
+
+function runtimeEventStrength(event) {
+  if (event?.action === 'executed' && event?.execution_claimed && event?.execution_success_evidence) return 4
+  if (event?.action === 'executed' && event?.execution_claimed) return 3
+  if (txDigestOf(event)) return 2
+  return 1
+}
+
+function activityItemDedupeKey(item) {
+  const txDigest = txDigestOf(item)
+  return txDigest ? `tx:${txDigest}` : null
+}
+
+function activityItemStrength(item) {
+  if (item?.source === 'chain' && item?.kind === 'exec') return 5
+  if (item?.source === 'chain') return 4
+  if (item?.execution_claimed && item?.execution_success_evidence) return 3
+  if (item?.execution_claimed) return 2
+  if (txDigestOf(item)) return 1
+  return 0
+}
+
 /**
  * @param {Record<string, any>} result
  * @param {{wrapperId?: string | null, nowMs?: number}=} options
@@ -65,12 +98,15 @@ export function runtimeEventFromTickResult(result, { wrapperId, nowMs = Date.now
   const blockerLabels = normalizeStringArray(result?.blocker_labels)
   const detail = String(result?.detail || (blockerLabels.length ? blockerLabels.join('; ') : meta.detail))
   const txDigest = result?.tx_digest || result?.tx || null
-  const idParts = [nowMs, wrapperId || 'unknown', action, txDigest || code || 'runtime']
+  const eventWrapperId = wrapperId || result?.wrapper_id || null
+  const dedupeKey = runtimeEventDedupeKey({ action, wrapper_id: eventWrapperId, tx_digest: txDigest })
+  const idParts = [nowMs, eventWrapperId || 'unknown', action, txDigest || code || 'runtime']
   return {
-    id: idParts.map(String).join(':'),
+    id: dedupeKey || idParts.map(String).join(':'),
+    dedupe_key: dedupeKey,
     source: 'runtime',
     timestamp_ms: nowMs,
-    wrapper_id: wrapperId || result?.wrapper_id || null,
+    wrapper_id: eventWrapperId,
     mandate_id: result?.mandate_id || null,
     action,
     code,
@@ -109,6 +145,14 @@ export function runtimeErrorEvent(error, { wrapperId, nowMs = Date.now() } = {})
 
 export function appendRuntimeActivity(events, event, max = MAX_RUNTIME_ACTIVITY) {
   const prior = Array.isArray(events) ? events : []
+  const key = runtimeEventDedupeKey(event)
+  if (key) {
+    const existing = prior.find((item) => runtimeEventDedupeKey(item) === key)
+    if (existing && runtimeEventStrength(existing) >= runtimeEventStrength(event)) {
+      return prior.slice(0, max)
+    }
+    return [event, ...prior.filter((item) => runtimeEventDedupeKey(item) !== key)].slice(0, max)
+  }
   return [event, ...prior].slice(0, max)
 }
 
@@ -118,6 +162,8 @@ export function runtimeEventToFeedItem(event, policyLabel = shortWrapperId(event
   const { date, t } = dateParts(event?.timestamp_ms)
   const spendDelta = event?.spend_delta != null ? Number(event.spend_delta) / 1e6 : 0
   return {
+    id: event?.id || null,
+    dedupe_key: event?.dedupe_key || runtimeEventDedupeKey(event),
     t,
     date,
     kind: meta.kind,
@@ -130,13 +176,43 @@ export function runtimeEventToFeedItem(event, policyLabel = shortWrapperId(event
     mode: 'cloud',
     source: 'runtime',
     timestamp_ms: Number(event?.timestamp_ms) || 0,
+    wrapper_id: event?.wrapper_id || null,
+    mandate_id: event?.mandate_id || null,
     action,
+    tx_digest: event?.tx_digest || event?.tx || null,
     blocker_codes: normalizeStringArray(event?.blocker_codes),
     blocker_labels: normalizeStringArray(event?.blocker_labels),
     execution_claimed: Boolean(event?.execution_claimed),
+    execution_success_evidence: Boolean(event?.execution_success_evidence),
   }
 }
 
 export function sortActivityItems(items) {
   return [...(Array.isArray(items) ? items : [])].sort((a, b) => Number(b.timestamp_ms || 0) - Number(a.timestamp_ms || 0))
+}
+
+export function dedupeActivityItems(items) {
+  const out = []
+  const keyed = new Map()
+  for (const item of Array.isArray(items) ? items : []) {
+    const key = activityItemDedupeKey(item)
+    if (!key) {
+      out.push(item)
+      continue
+    }
+    const existingIndex = keyed.get(key)
+    if (existingIndex == null) {
+      keyed.set(key, out.length)
+      out.push(item)
+      continue
+    }
+    const existing = out[existingIndex]
+    const stronger = activityItemStrength(item) > activityItemStrength(existing)
+    if (stronger) out[existingIndex] = item
+  }
+  return out
+}
+
+export function mergeActivityItems(...groups) {
+  return sortActivityItems(dedupeActivityItems(groups.flat()))
 }
