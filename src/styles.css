@@ -264,3 +264,10 @@ textarea:focus { border-color: var(--accent) !important; box-shadow: 0 0 0 3px v
   .rg-navitem .badge { display: none !important; }
   .rg-subtitle { display: none; }
 }
+
+/* market monitor rows + clickable mode badge (ported from design) */
+.mkt-row:hover { background: var(--glass); }
+.mkt-deploy { opacity: .82; }
+.mkt-row:hover .mkt-deploy { opacity: 1; }
+.mkt-deploy:hover { filter: brightness(1.1); }
+.mode-badge:hover { border-color: var(--accent) !important; color: var(--accent) !important; }

@@ -25,6 +25,8 @@ import { NewStrategy } from './components/NewStrategy.jsx'
 import { ActivityView, PoliciesView } from './components/Views.jsx'
 import { Profile } from './components/Profile.jsx'
 import { PolicyInspect, TxDrawer } from './components/Detail.jsx'
+import { MarketsView } from './components/Markets.jsx'
+import { AgentRuntimeDrawer } from './components/MarketDrawers.jsx'
 import { useTweaks, TweaksPanel, TweakSection, TweakColor, TweakRadio, TweakToggle } from './components/TweaksPanel.jsx'
 import { Button } from '@heroui/react'
 
@@ -57,6 +59,10 @@ export default function App({ onExit }) {
   const [view, setView] = useState('dashboard')
   const [inspect, setInspect] = useState(null)
   const [txView, setTxView] = useState(null)
+  const [seed, setSeed] = useState(null)
+  const [liveFeed, setLiveFeed] = useState(false)
+  const [runtimeOpen, setRuntimeOpen] = useState(false)
+  const [runtimeMode, setRuntimeMode] = useState(null)
   const [mode, setMode] = useState('cloud')
   const [agentOn, setAgentOn] = useState(true)
   const [crashState, setCrashState] = useState('idle')
@@ -109,6 +115,13 @@ export default function App({ onExit }) {
   }, [crashState, t.liveJitter])
 
   const showToast = (msg, c) => { setToast({ msg, c }); setTimeout(() => setToast(null), 2600) }
+
+  // open the agent runtime drawer from any mode/agent badge (global event)
+  useEffect(() => {
+    const h = (e) => { setRuntimeMode(e.detail || null); setRuntimeOpen(true) }
+    window.addEventListener('rg:runtime', h)
+    return () => window.removeEventListener('rg:runtime', h)
+  }, [])
   const pushNotif = (kind, title) => setNotifs(n => [{ id: ++notifId.current, kind, title, time: 'now', read: false }, ...n])
   const unread = notifs.filter(n => !n.read).length
 
@@ -337,6 +350,12 @@ export default function App({ onExit }) {
     dashboard: { t: 'Command center', s: 'Live portfolio, risk and autonomous agent activity' },
     new: { t: 'New strategy', s: 'Turn natural language into a safe, autonomous agent policy' },
     activity: { t: 'Agent activity', s: 'Every autonomous decision and on-chain execution' },
+    markets: { t: 'Markets monitor', s: 'Cross-protocol DeFi yields and perp funding arbitrage' },
+    strategies: { t: 'Strategy catalog', s: 'Policy-constrained strategy templates across venues' },
+    'strategy-detail': { t: 'Strategy detail', s: 'Thesis, legs, yield and risk decomposition' },
+    active: { t: 'Active strategy', s: 'Live position, exposure and execution' },
+    risk: { t: 'Risk center', s: 'Global limits, liquidation watch and kill switches' },
+    data: { t: 'Data sources', s: 'Where every live feed comes from — and what needs a backend' },
     policies: { t: 'Policies', s: 'The on-chain authority you grant the agent' },
     profile: { t: 'Profile & wallet', s: 'Your identity, balances and agent authorization' },
   }
@@ -353,6 +372,7 @@ export default function App({ onExit }) {
             <div className="eyebrow" style={{ padding: '0 13px 8px' }}>Workspace</div>
             <NavItem icon="dashboard" label="Dashboard" active={view === 'dashboard'} onClick={() => setView('dashboard')} />
             <NavItem icon="activity" label="Agent activity" active={view === 'activity'} onClick={() => setView('activity')} badge={shownActivity.length} />
+            <NavItem icon="radar" label="Markets monitor" active={view === 'markets'} onClick={() => setView('markets')} />
             <NavItem icon="shield" label="Policies" active={view === 'policies'} onClick={() => setView('policies')} />
             <NavItem icon="wallet" label="Profile & wallet" active={view === 'profile'} onClick={() => setView('profile')} />
           </div>
@@ -532,6 +552,7 @@ export default function App({ onExit }) {
             {view === 'dashboard' && <Dashboard state={state} live={liveReadsEnabled ? { summary: liveSummary, market: liveMarket, activity: liveActivity } : null} />}
             {view === 'new' && <NewStrategy mode={mode} setMode={setMode} onDone={deployPolicy} />}
             {view === 'activity' && <ActivityView activity={shownActivity} onTx={setTxView} live={liveReadsEnabled} loading={liveReadsEnabled && liveLoading} />}
+            {view === 'markets' && <MarketsView onDeploy={(s) => { setSeed(s); setView('new') }} live={liveFeed} onToast={showToast} />}
             {view === 'policies' && <PoliciesView policies={policies} onRevoke={handleRevoke} onInspect={setInspect} live={liveReadsEnabled} readOnly={readOnlyLiveMode} loading={liveReadsEnabled && liveLoading} />}
             {view === 'profile' && <Profile
               live={liveReadsEnabled}
@@ -556,6 +577,7 @@ export default function App({ onExit }) {
 
         {inspect && <PolicyInspect p={inspect} activity={shownActivity} onClose={() => setInspect(null)} onRevoke={handleRevoke} onTx={setTxView} readOnly={readOnlyLiveMode} />}
         {txView && <TxDrawer tx={txView} onClose={() => setTxView(null)} />}
+        {runtimeOpen && <AgentRuntimeDrawer mode={runtimeMode || mode} onClose={() => { setRuntimeOpen(false); setRuntimeMode(null) }} onToast={showToast} />}
 
         {/* toast */}
         {toast && (
