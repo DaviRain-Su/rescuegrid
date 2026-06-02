@@ -45,6 +45,7 @@ npm run test:activity-ledger        # Agent Activity normalization / signer evid
 npm run test:session-mode           # live/read-only/demo session boundaries
 npm run test:wallet-flow            # mock wallet create/revoke orchestration
 npm run test:wallet-evidence        # wallet click-through evidence artifact contract
+npm run test:mission-readiness      # PRD readiness gate contract
 cd move/rescuegrid && sui move test # Move tests
 npm run config                      # sanitized Testnet deployment IDs
 npm run wallet:evidence -- --format markdown --out .rescuegrid/wallet-clickthrough-evidence.md
@@ -52,6 +53,7 @@ npm run wallet:evidence:verify -- --input .rescuegrid/wallet-clickthrough-eviden
 npm run funding:request             # secret-safe external DBUSDC/DEEP funding handoff
 npm run funding:request -- --format markdown --out .rescuegrid/funding-request.md
 npm run funding:watch -- --json     # secret-safe readiness watch; no policy while blocked
+npm run mission:readiness           # final PRD gate; currently expected to be blocked
 npm run chain-data:status -- --json # secret-safe ChainDataProvider status; add --probe for bounded live read
 npm run safety:negative             # live Testnet validate-plan safety proof; creates/revokes test policies
 npm run demo:loop                   # create -> activate/tick -> revoke live demo evidence
@@ -125,6 +127,7 @@ Observed final mission evidence is Testnet-only:
 - Latest live run passed on 2026-06-03: active create tx `5iiumZ4C2JjXbM85mJ8wVgpKh8oasBHu5MxJsJF28CYh`, expiring create tx `EXydDTMDVh17EJA1iwxB3nX84kD4vkBtmRmwKucZ1ZLE`, revoke tx `EQrRShhZUYK7Zz9fGQgjJagvkkEJ3h4bEqR9A7nK9K5s`, blocker codes `OVER_BUDGET`, `OVER_SLIPPAGE`, `WRONG_POOL`, `WRONG_AGENT`, `MANDATE_MISMATCH`, `POLICY_EXPIRED`, `POLICY_REVOKED`, all with `submitted=false`, `execution_claimed=false` and spend `0 -> 0`.
 - `npm run demo:loop` is the G2 live demo validator: create -> activate/monitor -> force tick -> revoke -> post-revoke tick. In the current funding state it should report the documented execution gate, not a fake fill. `npm run demo:execute` is the strict variant: it preflights execution readiness before policy creation, then requires `AgentTradeExecuted`, `execution_claimed=true` and an on-chain spend increase.
 - `npm run wallet:evidence -- --format markdown --out .rescuegrid/wallet-clickthrough-evidence.md` is the read-only browser-wallet evidence artifact generator. `npm run wallet:evidence:verify -- --input .rescuegrid/wallet-clickthrough-evidence.md` verifies a filled artifact by checking the create/revoke tx digests against Sui `PolicyCreated` / `PolicyRevoked` events and optional Worker detail reads. The generated blank artifact is not itself proof that the browser wallet flow was clicked.
+- `npm run mission:readiness` is the secret-safe final PRD gate. It checks required validation scripts, verifies the filled wallet artifact, reads the same execution funding readiness contract used by `funding:watch`, and requires a strict `demo:execute` report proving `AgentTradeExecuted`. In the current state it should return non-zero with `status=blocked`, because the wallet artifact is not filled, DBUSDC/DEEP funding is not ready, and no strict execution report exists.
 - Latest demo-loop run passed on 2026-06-03: create tx `49dk3PCrukukRLkuKFEJc1s3QQwAj4cc2E1v8uxP1fSv`, wrapper `0x2a358220…948593e`, forced tick `EXECUTION_DISABLED` with `execution_claimed=false` and spend `0 -> 0`, revoke tx `CuK54YNnw7vb5PxxQy2p66JdvKfSvzy8K8VXUPzYfCQg`, post-revoke tick `POLICY_REVOKED`.
 - Funding/readiness, tick auth, trigger-not-met, Guardian safety, revoked/failed/unresolved paths all remained non-success with unchanged spend and no execution-success activity; transaction-bearing runtime activity is idempotent by digest, and chain success evidence wins over duplicate runtime success rows.
 - Live policy lists reconcile Durable Object runtime state with chain state; terminal chain state wins and stale runtime rows surface as `runtime_state_stale`.
