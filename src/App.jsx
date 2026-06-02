@@ -76,13 +76,13 @@ function mixHex(hex, toward, t) {
   return `rgb(${m[0]}, ${m[1]}, ${m[2]})`
 }
 
-function NavItem({ icon, label, active, onClick, badge }) {
+function NavItem({ icon, label, active, onClick, badge, badgeClass = 'badge-accent' }) {
   return (
     <button onClick={onClick} className={`rg-navitem${active ? ' is-active' : ''}`}>
       <span className="rg-navlamp" aria-hidden="true" />
       <span className="rg-navicon"><Icon name={icon} size={18} /></span>
       <span className="rg-navlabel" style={{ flex: 1 }}>{label}</span>
-      {badge != null && <span className="badge badge-accent" style={{ fontSize: 9.5, padding: '2px 7px' }}>{badge}</span>}
+      {badge != null && <span className={`badge ${badgeClass}`} style={{ fontSize: 9.5, padding: '2px 7px' }}>{badge}</span>}
     </button>
   )
 }
@@ -90,6 +90,77 @@ function NavItem({ icon, label, active, onClick, badge }) {
 function apiFailure(label, result) {
   const message = result?.message || result?.code || 'unknown error'
   return new Error(`${label}: ${message}`)
+}
+
+function buildSourceMeta({ live, loading, readOnly, meta, count }) {
+  if (!live) {
+    return {
+      kind: 'demo',
+      label: 'demo feed',
+      title: 'Demo data',
+      navBadge: 'demo',
+      badgeClass: 'badge-neutral',
+      icon: 'eye',
+      tone: 'neutral',
+      detail: 'Local sample policies and activity for walkthroughs. These rows are not on-chain executions.',
+    }
+  }
+
+  if (loading) {
+    return {
+      kind: 'loading',
+      label: 'loading live',
+      title: 'Loading live reads',
+      navBadge: '…',
+      badgeClass: 'badge-neutral',
+      icon: 'refresh',
+      tone: 'neutral',
+      detail: 'Waiting for Worker or chain data. Demo rows are not mixed into this live view.',
+    }
+  }
+
+  if (meta?.source === 'error') {
+    return {
+      kind: 'error',
+      label: 'live read error',
+      title: 'Live reads unavailable',
+      navBadge: 'err',
+      badgeClass: 'badge-warn',
+      icon: 'alert',
+      tone: 'warn',
+      error: meta.error,
+      detail: 'The live dashboard query failed. Demo rows are not used as a fallback in this view.',
+    }
+  }
+
+  if (meta?.source === 'chain_fallback') {
+    return {
+      kind: 'fallback',
+      label: 'fallback · read-only',
+      title: 'Direct-chain read-only fallback',
+      navBadge: count,
+      badgeClass: 'badge-warn',
+      icon: 'alert',
+      tone: 'warn',
+      error: meta.error,
+      detail: readOnly
+        ? 'Worker reads failed, so the app is showing direct chain data with write actions disabled.'
+        : 'Worker reads failed, so the app is showing direct chain data for the connected account.',
+    }
+  }
+
+  return {
+    kind: 'worker',
+    label: 'worker · testnet',
+    title: 'Live Worker reads',
+    navBadge: count,
+    badgeClass: 'badge-accent',
+    icon: 'link',
+    tone: 'live',
+    detail: readOnly
+      ? 'Reads come from the configured Worker on Sui Testnet. Wallet signing is disabled in read-only mode.'
+      : 'Reads come from the configured Worker on Sui Testnet. Write actions still require wallet signing.',
+  }
 }
 
 export default function App({ onExit }) {
@@ -447,6 +518,13 @@ export default function App({ onExit }) {
   }
 
   const shownActivity = liveReadsEnabled ? liveActivity : activity
+  const sourceMeta = buildSourceMeta({
+    live: liveReadsEnabled,
+    loading: liveLoading,
+    readOnly: readOnlyLiveMode,
+    meta: liveReadMeta,
+    count: shownActivity.length,
+  })
   const state = { risk, suiPrice, suiSpark, crashState, mode, agentOn, activity: shownActivity }
 
   if (!authed) return (
@@ -482,7 +560,7 @@ export default function App({ onExit }) {
             <div style={{ display: 'flex', flexDirection: 'column', gap: 3, marginTop: 18 }}>
               <div className="eyebrow" style={{ padding: '0 13px 8px' }}>Workspace</div>
               <NavItem icon="dashboard" label="Dashboard" active={view === 'dashboard'} onClick={() => setView('dashboard')} />
-              <NavItem icon="activity" label="Agent activity" active={view === 'activity'} onClick={() => setView('activity')} badge={shownActivity.length} />
+              <NavItem icon="activity" label="Agent activity" active={view === 'activity'} onClick={() => setView('activity')} badge={sourceMeta.navBadge} badgeClass={sourceMeta.badgeClass} />
               <NavItem icon="radar" label="Markets monitor" active={view === 'markets'} onClick={() => setView('markets')} />
               <NavItem icon="grid" label="Strategy catalog" active={view === 'strategies' || view === 'strategy-detail'} onClick={() => setView('strategies')} />
               <NavItem icon="shield" label="Policies" active={view === 'policies'} onClick={() => setView('policies')} />
@@ -501,7 +579,7 @@ export default function App({ onExit }) {
             <div className="card rg-agentcard" style={{ padding: 14, marginBottom: 12 }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
                 <span className="eyebrow">Agent</span>
-                <button onClick={() => setAgentOn(v => !v)} style={{ width: 38, height: 22, borderRadius: 100, border: 'none', cursor: 'pointer', position: 'relative',
+                <button aria-label={agentOn ? 'Disable agent' : 'Enable agent'} onClick={() => setAgentOn(v => !v)} style={{ width: 38, height: 22, borderRadius: 100, border: 'none', cursor: 'pointer', position: 'relative',
                   background: agentOn ? 'var(--accent)' : 'var(--glass-hi)', transition: 'all .18s' }}>
                   <div style={{ position: 'absolute', top: 2, left: agentOn ? 18 : 2, width: 18, height: 18, borderRadius: '50%', background: '#fff', transition: 'all .18s' }} />
                 </button>
@@ -658,16 +736,16 @@ export default function App({ onExit }) {
           <div style={{ flex: 1, overflowY: 'auto', padding: '24px 26px 60px' }}>
             {liveReadsEnabled && (
               <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '12px 16px', borderRadius: 'var(--r-lg)', marginBottom: 18,
-                background: liveReadMeta.source === 'chain_fallback' ? 'var(--warn-dim)' : 'var(--glass)',
-                border: `1px solid ${liveReadMeta.source === 'chain_fallback' ? 'rgba(255,194,75,0.35)' : 'var(--border)'}` }}>
-                <span style={{ color: liveReadMeta.source === 'chain_fallback' ? 'var(--warn)' : 'var(--accent)', flexShrink: 0 }}><Icon name={liveReadMeta.source === 'chain_fallback' ? 'alert' : 'link'} size={16} /></span>
+                background: sourceMeta.tone === 'warn' ? 'var(--warn-dim)' : 'var(--glass)',
+                border: `1px solid ${sourceMeta.tone === 'warn' ? 'rgba(255,194,75,0.35)' : 'var(--border)'}` }}>
+                <span style={{ color: sourceMeta.tone === 'warn' ? 'var(--warn)' : 'var(--accent)', flexShrink: 0 }}><Icon name={sourceMeta.icon} size={16} /></span>
                 <div style={{ flex: 1, fontSize: 12.5, color: 'var(--t1)', lineHeight: 1.45 }}>
-                  <strong style={{ color: 'var(--t0)' }}>{liveReadMeta.source === 'chain_fallback' ? 'Direct-chain read-only fallback' : 'Live Worker reads'}</strong>
-                  {' '}for {ownerShort}. {readOnlyLiveMode ? 'No wallet signing is required; write actions are disabled until a wallet connects.' : 'Reads come from the configured Worker first.'}
-                  {liveReadMeta.error && <span className="mono" style={{ color: 'var(--warn)', marginLeft: 8 }}>worker_error={liveReadMeta.error.slice(0, 90)}</span>}
+                  <strong style={{ color: 'var(--t0)' }}>{sourceMeta.title}</strong>
+                  {' '}for {ownerShort}. {sourceMeta.detail}
+                  {sourceMeta.error && <span className="mono" style={{ color: 'var(--warn)', marginLeft: 8 }}>worker_error={sourceMeta.error.slice(0, 90)}</span>}
                 </div>
-                <span className={`badge ${liveReadMeta.source === 'chain_fallback' ? 'badge-warn' : 'badge-accent'}`} style={{ fontSize: 9.5 }}>
-                  <span className="dot"></span>{liveReadMeta.source === 'chain_fallback' ? 'fallback · read-only' : 'worker · testnet'}</span>
+                <span className={`badge ${sourceMeta.badgeClass}`} style={{ fontSize: 9.5 }}>
+                  <span className="dot"></span>{sourceMeta.label}</span>
               </div>
             )}
             {halted && (
@@ -690,7 +768,7 @@ export default function App({ onExit }) {
             )}
             {view === 'dashboard' && <Dashboard state={state} live={liveReadsEnabled ? { summary: liveSummary, market: liveMarket, activity: liveActivity } : null} />}
             {view === 'new' && <NewStrategy mode={mode} setMode={setMode} onDone={deployPolicy} seed={seed} />}
-            {view === 'activity' && <ActivityView activity={shownActivity} onTx={setTxView} live={liveReadsEnabled} loading={liveReadsEnabled && liveLoading} />}
+            {view === 'activity' && <ActivityView activity={shownActivity} onTx={setTxView} live={liveReadsEnabled} loading={liveReadsEnabled && liveLoading} source={sourceMeta} />}
             {view === 'markets' && <MarketsView onDeploy={(s) => { setSeed(s); setView('new') }} live={liveFeed} onToast={showToast} />}
             {view === 'risk' && <RiskCenter policies={policies} stopped={halted} onEmergencyStop={emergencyStop} onToast={showToast} />}
             {view === 'strategies' && <StrategyMarketplace onDeploy={(s) => { setSeed(s); setView('new') }} onToast={showToast} onOpen={openStrategy} />}
@@ -699,8 +777,8 @@ export default function App({ onExit }) {
             {view === 'active' && (policies.find(x => x.id === liveId)
               ? <ActiveStrategy p={policies.find(x => x.id === liveId)} activity={shownActivity} onBack={() => setView('policies')}
                   onToggle={togglePolicy} onRebalance={rebalanceNow} onRevoke={handleRevoke} onTx={setTxView} onToast={showToast} />
-              : <PoliciesView policies={policies} onRevoke={handleRevoke} onInspect={setInspect} onLive={(p) => openLivePolicy(p.id)} live={liveReadsEnabled} readOnly={readOnlyLiveMode} loading={liveReadsEnabled && liveLoading} />)}
-            {view === 'policies' && <PoliciesView policies={policies} onRevoke={handleRevoke} onInspect={setInspect} onLive={(p) => openLivePolicy(p.id)} live={liveReadsEnabled} readOnly={readOnlyLiveMode} loading={liveReadsEnabled && liveLoading} />}
+              : <PoliciesView policies={policies} onRevoke={handleRevoke} onInspect={setInspect} onLive={(p) => openLivePolicy(p.id)} live={liveReadsEnabled} readOnly={readOnlyLiveMode} loading={liveReadsEnabled && liveLoading} source={sourceMeta} />)}
+            {view === 'policies' && <PoliciesView policies={policies} onRevoke={handleRevoke} onInspect={setInspect} onLive={(p) => openLivePolicy(p.id)} live={liveReadsEnabled} readOnly={readOnlyLiveMode} loading={liveReadsEnabled && liveLoading} source={sourceMeta} />}
             {view === 'profile' && <Profile
               live={liveReadsEnabled}
               readOnly={readOnlyLiveMode}
@@ -723,7 +801,7 @@ export default function App({ onExit }) {
           </div>
         </main>
 
-        {inspect && <PolicyInspect p={inspect} activity={shownActivity} onClose={() => setInspect(null)} onRevoke={handleRevoke} onTx={setTxView} readOnly={readOnlyLiveMode} />}
+        {inspect && <PolicyInspect p={inspect} activity={shownActivity} onClose={() => setInspect(null)} onRevoke={handleRevoke} onTx={setTxView} readOnly={readOnlyLiveMode} source={sourceMeta} />}
         {txView && <TxDrawer tx={txView} onClose={() => setTxView(null)} />}
         {runtimeOpen && <AgentRuntimeDrawer mode={runtimeMode || mode} onClose={() => { setRuntimeOpen(false); setRuntimeMode(null) }} onToast={showToast} />}
 

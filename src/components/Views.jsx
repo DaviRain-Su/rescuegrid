@@ -29,9 +29,32 @@ function EmptyCard({ icon, title, detail }) {
   )
 }
 
-export function ActivityView({ activity, onTx, live = false, loading = false }) {
+function resolveSourceMeta(source, live) {
+  if (source) return source
+  return live
+    ? {
+        kind: 'worker',
+        label: 'worker · testnet',
+        badgeClass: 'badge-accent',
+        icon: 'link',
+        tone: 'live',
+        detail: 'Live Worker or chain data.',
+      }
+    : {
+        kind: 'demo',
+        label: 'demo feed',
+        badgeClass: 'badge-neutral',
+        icon: 'eye',
+        tone: 'neutral',
+        detail: 'Local sample rows for walkthroughs. These are not on-chain executions.',
+      }
+}
+
+export function ActivityView({ activity, onTx, live = false, loading = false, source = null }) {
   const [filter, setFilter] = useState('all')
   const [open, setOpen] = useState(null)
+  const sourceMeta = resolveSourceMeta(source, live)
+  const liveSource = sourceMeta.kind !== 'demo'
   const kinds = [
     { id: 'all', label: 'All events' },
     { id: 'executed', label: 'Executed' },
@@ -63,6 +86,10 @@ export function ActivityView({ activity, onTx, live = false, loading = false }) 
     blocked: { label: 'Blocked', c: 'var(--danger)' },
     planned: { label: 'No action', c: 'var(--t2)' },
   }
+  const sourceTone = sourceMeta.tone === 'warn' ? 'warn' : sourceMeta.kind === 'demo' ? 'demo' : 'live'
+  const sourceBg = sourceTone === 'warn' ? 'var(--warn-dim)' : sourceTone === 'live' ? 'var(--accent-dim)' : 'var(--glass)'
+  const sourceBorder = sourceTone === 'warn' ? 'rgba(255,194,75,0.35)' : sourceTone === 'live' ? 'color-mix(in srgb, var(--accent) 25%, var(--border))' : 'var(--border)'
+  const sourceColor = sourceTone === 'warn' ? 'var(--warn)' : sourceTone === 'live' ? 'var(--accent)' : 'var(--t1)'
   const filtered = activity.filter(a =>
     filter === 'all' ? true
     : ['executed', 'blocked', 'planned'].includes(filter) ? outcomeOf(a) === filter
@@ -82,7 +109,9 @@ export function ActivityView({ activity, onTx, live = false, loading = false }) 
       fail: 'The order was submitted but the book moved past the limit before settlement; no funds were spent.',
       retry: 'A prior attempt failed; the agent re-quoted and resubmitted within the same limits.',
       monitor: 'A scheduled risk evaluation ran. Conditions stayed inside policy, so no action was taken.',
-      policy: 'You authorized a new on-chain Policy Object granting the agent scoped, capped authority.',
+      policy: liveSource
+        ? 'You authorized a new on-chain Policy Object granting the agent scoped, capped authority.'
+        : 'A demo policy-shaped record was created locally to preview scoped, capped agent authority.',
     }[a.kind] || 'Agent evaluated the policy and acted within limits.'
     const plan = {
       exec: ['assert_within_budget(cap, spent)', 'deepbook::place_limit_order(...)', 'log_activity(action="exec")'],
@@ -109,13 +138,19 @@ export function ActivityView({ activity, onTx, live = false, loading = false }) 
             </Fragment>
           ))}
         </div>
-        <div className="badge badge-neutral"><Icon name="link" size={12} /> verified on-chain</div>
+        <div className={`badge ${sourceMeta.badgeClass || 'badge-neutral'}`}><Icon name={sourceMeta.icon || 'eye'} size={12} /> {sourceMeta.label}</div>
       </div>
 
-      {loading && <LoadingCard label="Loading on-chain activity…" />}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 13px', borderRadius: 'var(--r-sm)',
+        background: sourceBg, border: `1px solid ${sourceBorder}`, color: 'var(--t1)', fontSize: 12.5, lineHeight: 1.45 }}>
+        <span style={{ color: sourceColor, flexShrink: 0 }}><Icon name={sourceMeta.icon || 'eye'} size={15} /></span>
+        <div style={{ flex: 1 }}>{sourceMeta.detail}</div>
+      </div>
+
+      {loading && <LoadingCard label="Loading live activity…" />}
       {!loading && activity.length === 0 && (
         <EmptyCard icon="activity" title="No agent activity yet"
-          detail={live ? 'Autonomous executions, policy creations and revocations will appear here once your agent acts on-chain.' : 'Nothing to show.'} />
+          detail={liveSource ? 'Autonomous executions, policy creations and revocations will appear here once your agent acts in the live source.' : 'No demo activity rows are available.'} />
       )}
 
       {!loading && dates.map(date => (
@@ -177,7 +212,7 @@ export function ActivityView({ activity, onTx, live = false, loading = false }) 
                         </div>
                       </div>
                       <div>
-                        <span className="eyebrow" style={{ fontSize: 8.5, display: 'block', marginBottom: 8 }}>Execution plan (PTB)</span>
+                        <span className="eyebrow" style={{ fontSize: 8.5, display: 'block', marginBottom: 8 }}>{liveSource ? 'Execution plan (PTB)' : 'Execution plan preview'}</span>
                         <div style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
                           {ex.plan.map((stepp, j) => (
                             <div key={j} className="mono" style={{ fontSize: 10.5, color: /FAILED|moved|abort|revert/.test(stepp) ? 'var(--danger)' : /no-op|within policy/.test(stepp) ? 'var(--t2)' : 'var(--t1)',
@@ -193,7 +228,7 @@ export function ActivityView({ activity, onTx, live = false, loading = false }) 
                           <span style={{ color: oc.c, flexShrink: 0 }}><Icon name={ex.oc === 'blocked' ? 'shield' : 'check'} size={15} stroke={2.2} /></span>
                           <div>
                             <div style={{ fontSize: 12, fontWeight: 600 }}>Guardian: {ex.oc === 'blocked' ? 'blocked execution' : ex.oc === 'planned' ? 'no action needed' : 'all checks passed'}</div>
-                            <div style={{ fontSize: 10.5, color: 'var(--t2)' }}>{ex.oc === 'blocked' ? 'Order rejected before any funds moved' : 'Budget, slippage and scope verified on-chain'}</div>
+                            <div style={{ fontSize: 10.5, color: 'var(--t2)' }}>{ex.oc === 'blocked' ? 'Order rejected before any funds moved' : liveSource ? 'Budget, slippage and scope verified on-chain' : 'Budget, slippage and scope shown as a simulated policy check'}</div>
                           </div>
                         </div>
                         <div style={{ flex: 1, minWidth: 160, display: 'flex', alignItems: 'center', gap: 14, padding: '11px 13px', borderRadius: 'var(--r-sm)', background: 'var(--glass)', border: '1px solid var(--border)' }}>
@@ -265,7 +300,7 @@ function PolicyCard({ p, onRevoke, onInspect, onLive, readOnly = false }) {
           <span style={{ color: 'var(--t1)' }}>Budget used</span>
           <span className="mono"><span style={{ color: 'var(--t0)', fontWeight: 600 }}>{p.budgetUsed}</span> <span style={{ color: 'var(--t2)' }}>/ {p.budgetCap} USDC</span></span>
         </div>
-        <ProgressBar value={pct} minValue={0} maxValue={100} className="w-full">
+        <ProgressBar aria-label={`${p.name} budget used`} value={pct} minValue={0} maxValue={100} className="w-full">
           <ProgressBar.Track className="h-[7px] overflow-hidden rounded-full bg-[color:var(--bg-0)]">
             <ProgressBar.Fill className={pct > 80 ? 'bg-danger' : 'bg-accent'} />
           </ProgressBar.Track>
@@ -299,12 +334,23 @@ function PolicyCard({ p, onRevoke, onInspect, onLive, readOnly = false }) {
   )
 }
 
-export function PoliciesView({ policies, onRevoke, onInspect, onLive, live = false, readOnly = false, loading = false }) {
+export function PoliciesView({ policies, onRevoke, onInspect, onLive, live = false, readOnly = false, loading = false, source = null }) {
+  const sourceMeta = resolveSourceMeta(source, live)
+  const liveSource = sourceMeta.kind !== 'demo'
+  const policySourceCopy = {
+    demo: 'Demo policies are local policy-shaped records. They are not minted Move objects and do not grant agent authority.',
+    loading: 'Loading live policies from Worker or chain. Demo policy rows are not mixed into this list.',
+    error: 'Live policy reads failed. Demo policy rows are not used as a fallback in this live view.',
+    fallback: 'Worker reads failed, so these values come from direct chain read-only fallback where available.',
+    worker: readOnly
+      ? 'Policies are read from the configured Worker on Sui Testnet. Write actions are disabled until a wallet connects.'
+      : 'Policies are read from the configured Worker on Sui Testnet. Revoking still requires a connected wallet signature.',
+  }[sourceMeta.kind] || sourceMeta.detail
   const totalCap = policies.reduce((s, p) => s + p.budgetCap, 0)
   const totalUsed = policies.reduce((s, p) => s + p.budgetUsed, 0)
   return (
     <div style={{ maxWidth: 980, margin: '0 auto', display: 'flex', flexDirection: 'column', gap: 18 }}>
-      <PortfolioSummary policies={policies} onLive={onLive} />
+      <PortfolioSummary policies={policies} onLive={onLive} source={sourceMeta} />
       <div className="card" style={{ padding: '18px 22px', display: 'flex', alignItems: 'center', gap: 28, flexWrap: 'wrap' }}>
         <div>
           <div className="eyebrow">Active policies</div>
@@ -321,15 +367,18 @@ export function PoliciesView({ policies, onRevoke, onInspect, onLive, live = fal
           <div className="mono display" style={{ fontSize: 24, fontWeight: 600, marginTop: 4, color: 'var(--accent)' }}>${fmtUsd(totalUsed, 0)}</div>
         </div>
         <div style={{ flex: 1 }} />
-        <div style={{ maxWidth: 260, fontSize: 12, color: 'var(--t2)', lineHeight: 1.5 }}>
-          Every policy is a Move object you own. Revoking deletes the agent's authority instantly, on-chain.
+        <div style={{ maxWidth: 280, fontSize: 12, color: 'var(--t2)', lineHeight: 1.5 }}>
+          <span className={`badge ${sourceMeta.badgeClass || 'badge-neutral'}`} style={{ fontSize: 9.5, marginBottom: 7 }}>
+            <Icon name={sourceMeta.icon || 'eye'} size={10} />{sourceMeta.label}
+          </span>
+          <div>{policySourceCopy}</div>
         </div>
       </div>
 
-      {loading && <LoadingCard label="Loading on-chain policies…" />}
+      {loading && <LoadingCard label="Loading live policies…" />}
       {!loading && policies.length === 0 && (
         <EmptyCard icon="shield" title="No policies yet"
-          detail={live ? 'Create a strategy to mint your first Move Policy Object — the agent gets no authority until you do.' : 'Create a strategy to get started.'} />
+          detail={liveSource ? 'Create a strategy to mint your first Move Policy Object. The agent gets no authority until that transaction succeeds.' : 'Create a strategy to preview the policy shape in demo mode.'} />
       )}
       {!loading && policies.length > 0 && (
         <div className="rg-2col">

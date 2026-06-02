@@ -1,6 +1,6 @@
 // RescueGrid API Worker (Cloudflare Workers + Hono).
-// E2 (/api/intents/parse) is live; E3/E4/E7 are wired as typed stubs and filled
-// in next. The Durable Object agent runtime (E5) is exported as a stub binding.
+// E2/E3/E4/E5/E7 are wired for the Sui-first MVP: parse, build policy tx,
+// chain-authoritative reads, Durable Object runtime, and gated agent ticks.
 import { Hono } from 'hono'
 import { cors } from 'hono/cors'
 import { bodyLimit } from 'hono/body-limit'
@@ -12,6 +12,14 @@ import { getClient, DEPLOYMENT } from './sui-tx.js'
 import { runTick, validateExecutionPlan } from './tick.js'
 import { validateForceTrigger, validateTickAuthorization } from './tick-auth.js'
 import { buildFundingReadiness, parseIntentWithStability } from './read-surfaces.js'
+import {
+  appendRuntimeActivity,
+  runtimeErrorEvent,
+  runtimeEventFromTickResult,
+  runtimeEventToFeedItem,
+  shortWrapperId,
+  sortActivityItems,
+} from './runtime-activity.js'
 import { AGENT_ADDRESS } from './config.js'
 import { DEFAULT_TICK_INTERVAL_SECONDS } from './config.js'
 import type { ParseDefaults, Strategy } from './types.js'
@@ -40,6 +48,36 @@ function setParseCache(key: string, value: Record<string, unknown>) {
 function positiveIntegerQuery(value: string | undefined, fallback: string): string {
   if (!value) return fallback
   return /^\d+$/.test(value) ? value : fallback
+}
+
+async function fetchRuntimeJson(env: Env, wrapperId: string, path: string): Promise<Record<string, any> | null> {
+  try {
+    const stub = env.AGENT_RUNTIME.get(env.AGENT_RUNTIME.idFromName(wrapperId))
+    const res = await stub.fetch(`https://do${path}`)
+    if (!res.ok) return null
+    return await res.json<Record<string, any>>()
+  } catch {
+    return null
+  }
+}
+
+async function readRuntimeState(env: Env, wrapperId: string): Promise<Record<string, any> | null> {
+  return fetchRuntimeJson(env, wrapperId, '/state')
+}
+
+async function readRuntimeActivity(env: Env, wrapperId: string): Promise<Record<string, any>[]> {
+  const body = await fetchRuntimeJson(env, wrapperId, '/activity')
+  const activity = body?.runtime_activity
+  return Array.isArray(activity) ? activity : []
+}
+
+async function runtimeFeedForWrappers(env: Env, wrapperIds: string[]): Promise<Record<string, any>[]> {
+  const perPolicy = await Promise.all(wrapperIds.map(async (wrapperId) => {
+    const activity = await readRuntimeActivity(env, wrapperId)
+    const label = shortWrapperId(wrapperId)
+    return activity.map((event) => runtimeEventToFeedItem(event, label))
+  }))
+  return perPolicy.flat()
 }
 
 app.use('/api/*', cors())
@@ -112,12 +150,9 @@ app.get('/api/policies/:wrapper_id/activity', async (c) => {
     if (result.status !== 'ok') return c.json(result, 404)
 
     // E8: reconcile Durable Object runtime state with chain. Chain wins.
-    let doState: string | null = null
-    try {
-      const stub = c.env.AGENT_RUNTIME.get(c.env.AGENT_RUNTIME.idFromName(wrapperId))
-      const sres = await stub.fetch('https://do/state')
-      doState = ((await sres.json()) as { runtime_state?: string }).runtime_state ?? null
-    } catch { /* DO may not be activated yet */ }
+    const runtimeState = await readRuntimeState(c.env, wrapperId)
+    const runtimeActivity = await readRuntimeActivity(c.env, wrapperId)
+    const doState = runtimeState?.runtime_state ?? null
 
     const p = result.policy as Record<string, any>
     const chainTerminal = p.revoked ? 'Revoked' : p.runtime_state === 'Expired' ? 'Expired' : null
@@ -130,7 +165,12 @@ app.get('/api/policies/:wrapper_id/activity', async (c) => {
         p.runtime_state_stale = false
       }
     }
-    return c.json(result, 200)
+    return c.json({
+      ...result,
+      runtime: runtimeState,
+      runtime_activity: runtimeActivity,
+      activity: sortActivityItems(runtimeActivity.map((event) => runtimeEventToFeedItem(event, shortWrapperId(wrapperId)))),
+    }, 200)
   } catch (e) {
     return c.json({ status: 'error', code: 'CHAIN_READ_FAILED', message: String((e as Error).message) }, 502)
   }
@@ -224,7 +264,17 @@ app.get('/api/activity', async (c) => {
     return c.json({ status: 'error', code: 'BAD_REQUEST', message: 'owner query param required.' }, 400)
   }
   try {
-    return c.json({ status: 'ok', activity: await listActivityByOwner(owner) })
+    const chainActivity = await listActivityByOwner(owner)
+    const policies = await listPoliciesByOwner(owner)
+    const runtimeActivity = await runtimeFeedForWrappers(c.env, policies.map((p: any) => p.wrapper_id).filter(Boolean))
+    return c.json({
+      status: 'ok',
+      activity: sortActivityItems([...runtimeActivity, ...chainActivity]).slice(0, 100),
+      sources: {
+        chain_events: chainActivity.length,
+        runtime_events: runtimeActivity.length,
+      },
+    })
   } catch (e) {
     return c.json({ status: 'error', code: 'CHAIN_READ_FAILED', message: String((e as Error).message) }, 502)
   }
@@ -388,6 +438,12 @@ export class AgentRuntime {
           asset: strategy.trigger.asset || 'SUI',
         })
       }
+      const activity = (await this.state.storage.get<Record<string, any>[]>('runtimeActivity')) ?? []
+      await this.state.storage.put('runtimeActivity', appendRuntimeActivity(activity, runtimeEventFromTickResult({
+        action: 'activated',
+        detail: 'Durable Object runtime activated and alarm tick scheduled.',
+        execution_claimed: false,
+      }, { wrapperId })))
       await this.state.storage.setAlarm(Date.now() + DEFAULT_TICK_INTERVAL_SECONDS * 1000)
       return this.json({ status: 'ok', wrapper_id: wrapperId, runtime_state: 'Monitoring' })
     }
@@ -404,6 +460,15 @@ export class AgentRuntime {
         peak_price: (await this.state.storage.get('peakPrice')) ?? null,
         drawdown_pct: (await this.state.storage.get('drawdownPct')) ?? null,
         trigger_met: (await this.state.storage.get('triggerMet')) ?? false,
+        activity_count: ((await this.state.storage.get<Record<string, any>[]>('runtimeActivity')) ?? []).length,
+        last_error: (await this.state.storage.get('lastError')) ?? null,
+      })
+    }
+    if (url.pathname === '/activity') {
+      return this.json({
+        status: 'ok',
+        wrapper_id: (await this.state.storage.get('wrapperId')) ?? null,
+        runtime_activity: (await this.state.storage.get<Record<string, any>[]>('runtimeActivity')) ?? [],
       })
     }
     if (url.pathname === '/tick' && req.method === 'POST') {
@@ -422,6 +487,10 @@ export class AgentRuntime {
       await this.state.storage.put('errorCount', n)
       await this.state.storage.put('lastAction', 'error')
       await this.state.storage.put('lastError', String((e as Error).message || e))
+      await this.state.storage.put('lastTickMs', Date.now())
+      const wrapperId = (await this.state.storage.get<string>('wrapperId')) ?? null
+      const activity = (await this.state.storage.get<Record<string, any>[]>('runtimeActivity')) ?? []
+      await this.state.storage.put('runtimeActivity', appendRuntimeActivity(activity, runtimeErrorEvent(e, { wrapperId })))
       // Non-terminal error: keep monitoring. Consider exponential backoff after consecutive errors.
     }
     if (!terminal) {
@@ -477,6 +546,8 @@ export class AgentRuntime {
     await this.state.storage.put('runtime_state', rsMap[result.action] ?? 'Monitoring')
     await this.state.storage.put('lastTickMs', Date.now())
     await this.state.storage.put('lastAction', result.action)
+    const activity = (await this.state.storage.get<Record<string, any>[]>('runtimeActivity')) ?? []
+    await this.state.storage.put('runtimeActivity', appendRuntimeActivity(activity, runtimeEventFromTickResult(result, { wrapperId })))
     if (result.action === 'error') {
       const n = ((await this.state.storage.get<number>('errorCount')) ?? 0) + 1
       await this.state.storage.put('errorCount', n)

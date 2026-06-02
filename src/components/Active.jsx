@@ -549,9 +549,19 @@ export function ActiveStrategy({ p, activity, onBack, onToggle, onRebalance, onR
   );
 }
 
-/* ---------- Portfolio · live summary (top of Policies page) ---------- */
-export function PortfolioSummary({ policies, onLive }) {
+/* ---------- Portfolio summary (top of Policies page) ---------- */
+export function PortfolioSummary({ policies, onLive, source = null }) {
   const active = policies.filter(p => p.status === 'active');
+  const sourceKind = source?.kind || 'worker';
+  const sourceTitle = sourceKind === 'demo'
+    ? 'Portfolio · demo'
+    : sourceKind === 'fallback'
+      ? 'Portfolio · fallback'
+      : sourceKind === 'error'
+        ? 'Portfolio · live read error'
+        : 'Portfolio · live';
+  const sourceBadgeClass = source?.badgeClass || 'badge-accent';
+  const sourceBadgeLabel = sourceKind === 'demo' ? `${active.length} demo` : `${active.length} running`;
   const [clock, setClock] = useState(0);
   useEffect(() => {
     if (!active.length) return;
@@ -579,8 +589,8 @@ export function PortfolioSummary({ policies, onLive }) {
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
           <span style={{ color: 'var(--accent)' }}><Icon name="activity" size={16} /></span>
-          <div className="card-title">Portfolio · live</div>
-          <span className="badge badge-accent" style={{ fontSize: 9 }}><span className="dot pulse"></span>{active.length} running</span>
+          <div className="card-title">{sourceTitle}</div>
+          <span className={`badge ${sourceBadgeClass}`} style={{ fontSize: 9 }}><span className={`dot ${sourceKind === 'demo' ? '' : 'pulse'}`}></span>{sourceBadgeLabel}</span>
         </div>
         <span className="mono display" style={{ fontSize: 20, fontWeight: 600, color: totalPnl >= 0 ? 'var(--safe)' : 'var(--danger)' }}>{totalPnl >= 0 ? '+' : '−'}${fmtUsd(Math.abs(totalPnl))}</span>
       </div>

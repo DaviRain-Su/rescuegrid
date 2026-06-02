@@ -26,9 +26,31 @@ function CapRow({ granted, label, fn }) {
   )
 }
 
-export function PolicyInspect({ p, activity, onClose, onRevoke, onTx, readOnly = false }) {
+function resolveInspectSource(source) {
+  return source || {
+    kind: 'demo',
+    label: 'demo feed',
+    badgeClass: 'badge-neutral',
+    icon: 'eye',
+    detail: 'Local sample policy shape.',
+  }
+}
+
+export function PolicyInspect({ p, activity, onClose, onRevoke, onTx, readOnly = false, source = null }) {
   const pct = Math.round((p.budgetUsed / p.budgetCap) * 100)
   const log = activity.filter(a => a.policy === p.name || a.policy === p.id)
+  const sourceMeta = resolveInspectSource(source)
+  const liveSource = sourceMeta.kind !== 'demo'
+  const objectLabel = liveSource ? 'Move Policy Object' : 'Demo policy-shaped object'
+  const budgetLabel = liveSource ? 'On-chain budget ceiling' : 'Demo budget ceiling'
+  const structLabel = liveSource ? 'On-chain object · move' : 'Demo object shape · move-like'
+  const auditLabel = liveSource ? `Audit trail · ${log.length} on-chain events` : `Demo audit trail · ${log.length} simulated events`
+  const budgetCopy = liveSource
+    ? 'The agent calls assert_within_budget() before every order. Exceeding the cap aborts the transaction on-chain — it is impossible to overspend.'
+    : 'This budget is local demo state. It previews the cap a real Move policy would enforce after minting.'
+  const capabilityCopy = liveSource
+    ? 'The agent literally has no capability to move funds out of your wallet. It can only trade within scope.'
+    : 'The demo shape denies withdraw and transfer capabilities. Real enforcement comes from the Move policy once minted.'
   const expiryMs = new Date(p.expires).getTime()
   const statusMeta = {
     active: { cls: 'badge-safe', label: 'active', pulse: true },
@@ -68,11 +90,12 @@ export function PolicyInspect({ p, activity, onClose, onRevoke, onTx, readOnly =
         <div style={{ position: 'sticky', top: 0, zIndex: 2, background: 'var(--bg-2)', borderBottom: '1px solid var(--border)', padding: '20px 24px' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
             <div>
-              <div className="eyebrow" style={{ marginBottom: 6 }}>Move Policy Object</div>
+              <div className="eyebrow" style={{ marginBottom: 6 }}>{objectLabel}</div>
               <h2 className="display" style={{ fontSize: 19, fontWeight: 600 }}>{p.name}</h2>
               <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 8 }}>
                 <span className="mono" style={{ fontSize: 11.5, color: 'var(--sui)' }}>{p.id}</span>
                 <span className="badge badge-neutral" style={{ fontSize: 9.5 }}><Icon name={p.mode === 'cloud' ? 'cloud' : 'cpu'} size={10} />{p.mode}</span>
+                <span className={`badge ${sourceMeta.badgeClass || 'badge-neutral'}`} style={{ fontSize: 9.5 }}><Icon name={sourceMeta.icon || 'eye'} size={10} />{sourceMeta.label}</span>
                 <span className={`badge ${statusMeta.cls}`} style={{ fontSize: 9.5 }}>
                   <span className={`dot ${statusMeta.pulse ? 'pulse' : ''}`}></span>{statusMeta.label}</span>
               </div>
@@ -85,18 +108,22 @@ export function PolicyInspect({ p, activity, onClose, onRevoke, onTx, readOnly =
           {/* budget */}
           <div>
             <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12.5, marginBottom: 7 }}>
-              <span style={{ color: 'var(--t1)', fontWeight: 600 }}>On-chain budget ceiling</span>
+              <span style={{ color: 'var(--t1)', fontWeight: 600 }}>{budgetLabel}</span>
               <span className="mono"><span style={{ color: 'var(--accent)', fontWeight: 700 }}>{p.budgetUsed}</span><span style={{ color: 'var(--t2)' }}> / {p.budgetCap} USDC · {pct}%</span></span>
             </div>
             <div style={{ height: 8, background: 'var(--bg-0)', borderRadius: 100, overflow: 'hidden' }}>
               <div style={{ width: `${pct}%`, height: '100%', borderRadius: 100, background: pct > 80 ? 'var(--danger)' : 'linear-gradient(90deg,var(--accent),#1fc7b1)', boxShadow: pct > 80 ? 'none' : '0 0 12px var(--accent-glow)' }} />
             </div>
-            <div style={{ fontSize: 11.5, color: 'var(--t2)', marginTop: 7 }}>The agent calls <span className="mono" style={{ color: 'var(--t1)' }}>assert_within_budget()</span> before every order. Exceeding the cap aborts the transaction on-chain — it is impossible to overspend.</div>
+            <div style={{ fontSize: 11.5, color: 'var(--t2)', marginTop: 7 }}>
+              {liveSource
+                ? <>The agent calls <span className="mono" style={{ color: 'var(--t1)' }}>assert_within_budget()</span> before every order. Exceeding the cap aborts the transaction on-chain — it is impossible to overspend.</>
+                : budgetCopy}
+            </div>
           </div>
 
           {/* move struct */}
           <div>
-            <div className="eyebrow" style={{ marginBottom: 9 }}>On-chain object · move</div>
+            <div className="eyebrow" style={{ marginBottom: 9 }}>{structLabel}</div>
             <div style={{ background: 'var(--bg-0)', border: '1px solid var(--border)', borderRadius: 'var(--r-md)', padding: '14px 16px', fontFamily: 'var(--f-mono)', fontSize: 11.5, lineHeight: 1.7, overflowX: 'auto' }}>
               {structLines.map((l, i) => (
                 <div key={i} style={{ paddingLeft: (l.indent || 0) * 18, whiteSpace: 'pre' }}>
@@ -123,7 +150,7 @@ export function PolicyInspect({ p, activity, onClose, onRevoke, onTx, readOnly =
               <div className="divider" />
               <CapRow granted={false} label="Modify this policy" fn="policy::set_budget" />
             </div>
-            <div style={{ fontSize: 11.5, color: 'var(--t2)', marginTop: 8 }}>The agent literally has no capability to move funds out of your wallet. It can only trade within scope.</div>
+            <div style={{ fontSize: 11.5, color: 'var(--t2)', marginTop: 8 }}>{capabilityCopy}</div>
           </div>
 
           {/* protocol allow-list */}
@@ -154,22 +181,30 @@ export function PolicyInspect({ p, activity, onClose, onRevoke, onTx, readOnly =
               <div style={{ display: 'flex', gap: 11, padding: '11px 13px', borderRadius: 'var(--r-sm)', background: 'var(--glass)', border: '1px solid var(--border)' }}>
                 <span style={{ color: 'var(--sui)', flexShrink: 0 }}><Icon name="wallet" size={16} /></span>
                 <div>
-                  <div style={{ fontSize: 12.5, fontWeight: 600 }}>Signs with a session key</div>
-                  <div style={{ fontSize: 11.5, color: 'var(--t2)', marginTop: 2 }}>The agent uses the delegated <span className="mono" style={{ color: 'var(--t1)' }}>AgentCap</span> — never your zkLogin key. Revoke it and signing power vanishes.</div>
+                  <div style={{ fontSize: 12.5, fontWeight: 600 }}>{liveSource ? 'Signs with a session key' : 'Session key model'}</div>
+                  <div style={{ fontSize: 11.5, color: 'var(--t2)', marginTop: 2 }}>
+                    {liveSource
+                      ? <>The agent uses the delegated <span className="mono" style={{ color: 'var(--t1)' }}>AgentCap</span> — never your zkLogin key. Revoke it and signing power vanishes.</>
+                      : <>Demo mode previews the delegated <span className="mono" style={{ color: 'var(--t1)' }}>AgentCap</span> model. No session key is active until a real policy is minted.</>}
+                  </div>
                 </div>
               </div>
               <div style={{ display: 'flex', gap: 11, padding: '11px 13px', borderRadius: 'var(--r-sm)', background: 'var(--glass)', border: '1px solid var(--border)' }}>
                 <span style={{ color: 'var(--warn)', flexShrink: 0 }}><Icon name="bolt" size={16} /></span>
                 <div>
-                  <div style={{ fontSize: 12.5, fontWeight: 600 }}>Gas is sponsored</div>
-                  <div style={{ fontSize: 11.5, color: 'var(--t2)', marginTop: 2 }}>Fees are paid by a gas station via sponsored transactions, so the agent needs no SUI of its own to act autonomously.</div>
+                  <div style={{ fontSize: 12.5, fontWeight: 600 }}>{liveSource ? 'Gas is sponsored' : 'Sponsored gas model'}</div>
+                  <div style={{ fontSize: 11.5, color: 'var(--t2)', marginTop: 2 }}>{liveSource ? 'Fees are paid by a gas station via sponsored transactions, so the agent needs no SUI of its own to act autonomously.' : 'Demo mode shows the intended sponsored transaction path. No gas is spent by these sample rows.'}</div>
                 </div>
               </div>
               <div style={{ display: 'flex', gap: 11, padding: '11px 13px', borderRadius: 'var(--r-sm)', background: 'var(--glass)', border: '1px solid var(--border)' }}>
                 <span style={{ color: 'var(--accent)', flexShrink: 0 }}><Icon name="target" size={16} /></span>
                 <div>
-                  <div style={{ fontSize: 12.5, fontWeight: 600 }}>Triggers read a Pyth feed</div>
-                  <div style={{ fontSize: 11.5, color: 'var(--t2)', marginTop: 2 }}>Price conditions are asserted on-chain against the <span className="mono" style={{ color: 'var(--t1)' }}>Pyth</span> oracle — the agent can't fake a trigger.</div>
+                  <div style={{ fontSize: 12.5, fontWeight: 600 }}>{liveSource ? 'Triggers read a Pyth feed' : 'Trigger model'}</div>
+                  <div style={{ fontSize: 11.5, color: 'var(--t2)', marginTop: 2 }}>
+                    {liveSource
+                      ? <>Price conditions are asserted on-chain against the <span className="mono" style={{ color: 'var(--t1)' }}>Pyth</span> oracle — the agent can't fake a trigger.</>
+                      : <>Demo mode previews Pyth-backed trigger checks. Real assertions happen on-chain only after minting a policy.</>}
+                  </div>
                 </div>
               </div>
             </div>
@@ -177,9 +212,9 @@ export function PolicyInspect({ p, activity, onClose, onRevoke, onTx, readOnly =
 
           {/* audit trail */}
           <div>
-            <div className="eyebrow" style={{ marginBottom: 9 }}>Audit trail · {log.length} on-chain events</div>
+            <div className="eyebrow" style={{ marginBottom: 9 }}>{auditLabel}</div>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 0, borderLeft: '2px solid var(--border)', paddingLeft: 16, marginLeft: 4 }}>
-              {log.length === 0 && <div style={{ fontSize: 12.5, color: 'var(--t2)' }}>No executions yet — the agent is monitoring.</div>}
+              {log.length === 0 && <div style={{ fontSize: 12.5, color: 'var(--t2)' }}>{liveSource ? 'No on-chain events yet — the agent is monitoring.' : 'No simulated events yet in this demo policy.'}</div>}
               {log.map((a, i) => (
                 <div key={i} style={{ position: 'relative', paddingBottom: i < log.length - 1 ? 16 : 0 }}>
                   <div style={{ position: 'absolute', left: -23, top: 3, width: 10, height: 10, borderRadius: '50%',

@@ -8,9 +8,9 @@ A running snapshot of what is built and how it was verified. Demo-facing summary
 
 | Layer | Status | Verified by |
 | --- | --- | --- |
-| **Web dashboard** (Vite + React) | ✅ | `npm run build` (562 modules); landing → zkLogin → dashboard, flash-crash demo |
+| **Web dashboard** (Vite + React) | ✅ | `npm run build` (2,419 modules); landing → zkLogin → dashboard, flash-crash demo |
 | **Move package** `rescuegrid::policy` | ✅ deployed | `sui move test` 8/8; published `0x92f6e3…bb78` |
-| **Worker API** (Cloudflare + Hono) | ✅ all endpoints | 23 unit checks + `wrangler dev` smoke + on-chain dry-run |
+| **Worker API** (Cloudflare + Hono) | ✅ all endpoints | `npm test` + `npm run typecheck`; runtime activity log covered |
 | **Sign-in** | ✅ | Sui wallet (Slush/std, no creds) primary; Enoki zkLogin optional |
 | **Frontend ↔ Worker contract** | ✅ wired | live reads are Worker-first with direct-chain fallback; create/revoke use Worker-built unsigned txs |
 | **Live write loop** (create / list / revoke) | ✅ **verified on-chain** | real policy created (`9SQWkBne…`) + revoked (`Gzniih…`); endpoints return live data; post-revoke reads `Revoked` |
@@ -27,7 +27,7 @@ A running snapshot of what is built and how it was verified. Demo-facing summary
 
 - **B** feasibility — ✅ GO (`docs/B-feasibility-findings.md`): MoveGate Mandate shareable w/o owner co-sign, AuthToken hot-potato, Deepbook pools live.
 - **C** Move — ✅ C1–C7. RescuePolicyWrapper + create/revoke/assert/record; thin helper builds `vector<TypeName>`; AuthToken consumed via MoveGate receipt; published.
-- **E** Worker — ✅ E1–E8. parse (strategy_hash matches all 4 spec vectors) · create_policy PTB (zkLogin-signed, dry-run success) · activity (chain-authoritative) · Guardian (11 tests) · tick state machine (7 tests) · Durable Object (alarm) · state sync.
+- **E** Worker — ✅ E1–E8. parse (strategy_hash matches all 4 spec vectors) · create_policy PTB (zkLogin-signed, dry-run success) · activity (chain-authoritative + Durable Object runtime feed) · Guardian · tick state machine · Durable Object alarm · state sync.
 - **F** Deepbook — 🟡 F1/F3 builders structurally verified (serialize + dry-run of create). Agent + BalanceManager provisioned on-chain. **Blocked:** DBUSDC mint is permissioned and the SUI_DBUSDC pool is illiquid, so the BM can't be self-funded → live execution dry-run pending an external DBUSDC source. `EXECUTION_ENABLED=false` until then.
 - **D** dashboard wiring — ✅ sign-in (Sui wallet primary, zkLogin optional); live create-policy (parse → build → wallet-sign → activate); live D4 activity + D5 revoke; responsive + lazy-loaded landing; D3 live PTB preview. **Live write loop proven on-chain** (see below).
 - **G** packaging — ✅ G1 `npm run config`; G3 README quickstart; this status doc. G2 execute-leg of the demo script is gated with F.

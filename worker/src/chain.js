@@ -220,14 +220,14 @@ export async function listActivityByOwner(owner) {
     if (type === 'PolicyCreated') {
       items.push({ t, date, kind: 'policy', policy: short, title: 'Policy Object created',
         detail: `Budget ${Number(pj.budget_ceiling) / 1e6} USDC · max slip ${Number(pj.max_slippage_bps) / 100}%`,
-        amount: 0, tx: e.id?.txDigest, risk: null, mode: 'cloud' })
+        amount: 0, tx: e.id?.txDigest, risk: null, mode: 'cloud', source: 'chain', timestamp_ms: ts ?? 0 })
     } else if (type === 'AgentTradeExecuted') {
       items.push({ t, date, kind: 'exec', policy: short, title: `Agent trade · ${pj.base_amount_received} base`,
         detail: `Spent ${Number(pj.quote_amount_spent) / 1e6} USDC · slippage ${pj.slippage_bps}bps · spent ${Number(pj.spent_amount_after) / 1e6}/${Number(pj.budget_ceiling) / 1e6}`,
-        amount: -(Number(pj.quote_amount_spent) / 1e6), tx: e.id?.txDigest, risk: null, mode: 'cloud' })
+        amount: -(Number(pj.quote_amount_spent) / 1e6), tx: e.id?.txDigest, risk: null, mode: 'cloud', source: 'chain', timestamp_ms: ts ?? 0 })
     } else if (type === 'PolicyRevoked') {
       items.push({ t, date, kind: 'guardian', policy: short, title: 'Policy revoked by owner',
-        detail: 'Agent authority deleted on-chain', amount: 0, tx: e.id?.txDigest, risk: null, mode: 'cloud' })
+        detail: 'Agent authority deleted on-chain', amount: 0, tx: e.id?.txDigest, risk: null, mode: 'cloud', source: 'chain', timestamp_ms: ts ?? 0 })
     }
   }
   return items
