@@ -22,7 +22,7 @@ import {
 } from './runtime-activity.js'
 import { AGENT_ADDRESS, DEFAULT_TICK_INTERVAL_SECONDS, MAX_ACTIVE_POLICIES_PER_DEPLOYMENT } from './config.js'
 import { getExecutorAdapter, unsupportedExecutor, unsupportedExecutorTarget } from './executor-adapters.js'
-import { activationPolicyPreflight, revokePolicyPreflight } from './policy-api.js'
+import { activationPolicyPreflight, reconcilePolicyRuntimeState, revokePolicyPreflight } from './policy-api.js'
 import type { ParseDefaults, Strategy } from './types.js'
 
 export interface Env {
@@ -180,25 +180,14 @@ app.get('/api/policies/:wrapper_id/activity', async (c) => {
     // E8: reconcile Durable Object runtime state with chain. Chain wins.
     const runtimeState = await readRuntimeState(c.env, wrapperId)
     const runtimeActivity = await readRuntimeActivity(c.env, wrapperId)
-    const doState = runtimeState?.runtime_state ?? null
-
-    const p = result.policy as Record<string, any>
-    const chainTerminal = p.revoked ? 'Revoked' : p.runtime_state === 'Expired' ? 'Expired' : null
-    if (doState && doState !== 'Inactive') {
-      if (chainTerminal && doState !== chainTerminal) {
-        p.runtime_state = chainTerminal // chain wins
-        p.runtime_state_stale = true
-      } else {
-        p.runtime_state = doState
-        p.runtime_state_stale = false
-      }
-    }
+    const p = reconcilePolicyRuntimeState(result.policy as Record<string, any>, runtimeState)
     const policyLabel = shortWrapperId(wrapperId)
     const chainActivity = policyEventsToFeedItems(result.events, policyLabel)
     const runtimeFeed = runtimeActivity.map((event) => runtimeEventToFeedItem(event, policyLabel))
 
     return c.json({
       ...result,
+      policy: p,
       runtime: runtimeState,
       runtime_activity: runtimeActivity,
       chain_activity: chainActivity,

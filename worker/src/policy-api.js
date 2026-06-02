@@ -1,5 +1,22 @@
 import { strategyHash } from './strategy-core.js'
 
+const TERMINAL_RUNTIME_STATES = new Set(['Revoked', 'Expired'])
+
+export function reconcilePolicyRuntimeState(policy, runtimeState) {
+  const chainState = policy.runtime_state
+  const runtimeValue = runtimeState?.runtime_state ?? null
+  if (!runtimeValue || runtimeValue === 'Inactive') {
+    return { ...policy, runtime_state: chainState, runtime_state_stale: false }
+  }
+  const terminalConflict =
+    (TERMINAL_RUNTIME_STATES.has(chainState) && runtimeValue !== chainState) ||
+    (TERMINAL_RUNTIME_STATES.has(runtimeValue) && runtimeValue !== chainState)
+  if (terminalConflict) {
+    return { ...policy, runtime_state: chainState, runtime_state_stale: true }
+  }
+  return { ...policy, runtime_state: runtimeValue, runtime_state_stale: false }
+}
+
 export function activationPolicyPreflight({ wrapper, mandate, strategy, nowMs = Date.now() }) {
   if (!wrapper) {
     return {

@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import { strategyHash } from '../src/strategy-core.js'
-import { activationPolicyPreflight, revokePolicyPreflight } from '../src/policy-api.js'
+import { activationPolicyPreflight, reconcilePolicyRuntimeState, revokePolicyPreflight } from '../src/policy-api.js'
 
 const NOW = Date.UTC(2026, 5, 2, 12, 0, 0)
 const STRATEGY = {
@@ -121,6 +121,41 @@ const EXPIRED_MANDATE = { ...ACTIVE_MANDATE, expires_at_ms: String(NOW) }
 {
   const result = activationPolicyPreflight({ wrapper: WRAPPER, mandate: ACTIVE_MANDATE, strategy: null, nowMs: NOW })
   assert.equal(result.ok, true, 'strategy-less activation is allowed but only after wrapper/mandate liveness checks')
+}
+
+{
+  const policy = { wrapper_id: WRAPPER.wrapper_id, runtime_state: 'Monitoring', runtime_state_stale: false }
+  const reconciled = reconcilePolicyRuntimeState(policy, { runtime_state: 'Revoked' })
+  assert.equal(reconciled.runtime_state, 'Monitoring', 'chain-active state wins over stale terminal runtime state')
+  assert.equal(reconciled.runtime_state_stale, true)
+}
+
+{
+  const policy = { wrapper_id: WRAPPER.wrapper_id, runtime_state: 'Revoked', runtime_state_stale: false }
+  const reconciled = reconcilePolicyRuntimeState(policy, { runtime_state: 'Monitoring' })
+  assert.equal(reconciled.runtime_state, 'Revoked', 'chain-revoked state wins over stale runtime monitoring state')
+  assert.equal(reconciled.runtime_state_stale, true)
+}
+
+{
+  const policy = { wrapper_id: WRAPPER.wrapper_id, runtime_state: 'Expired', runtime_state_stale: false }
+  const reconciled = reconcilePolicyRuntimeState(policy, { runtime_state: 'Revoked' })
+  assert.equal(reconciled.runtime_state, 'Expired', 'chain-expired state wins over wrong terminal runtime state')
+  assert.equal(reconciled.runtime_state_stale, true)
+}
+
+{
+  const policy = { wrapper_id: WRAPPER.wrapper_id, runtime_state: 'Monitoring', runtime_state_stale: false }
+  const reconciled = reconcilePolicyRuntimeState(policy, { runtime_state: 'Monitoring' })
+  assert.equal(reconciled.runtime_state, 'Monitoring')
+  assert.equal(reconciled.runtime_state_stale, false)
+}
+
+{
+  const policy = { wrapper_id: WRAPPER.wrapper_id, runtime_state: 'Monitoring', runtime_state_stale: true }
+  const reconciled = reconcilePolicyRuntimeState(policy, { runtime_state: 'Inactive' })
+  assert.equal(reconciled.runtime_state, 'Monitoring')
+  assert.equal(reconciled.runtime_state_stale, false)
 }
 
 console.log('\nALL POLICY API TESTS PASS')
