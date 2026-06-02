@@ -165,6 +165,18 @@ export function getBalances(owner) {
   return read(`/api/balances?owner=${owner}`, () => chainRead.getBalances(owner))
 }
 
+/** GET /api/runtime/status — Worker agent/signer/provider status, no secrets. */
+export function getRuntimeStatus() {
+  return workerGet('/api/runtime/status').catch((e) => ({
+    status: 'error',
+    code: WORKER_CONFIGURED ? 'WORKER_READ_FAILED' : 'WORKER_NOT_CONFIGURED',
+    message: String(e?.message || e),
+    signer: null,
+    agent: null,
+    chain_data_provider: null,
+  }))
+}
+
 function ownerControlNonce() {
   const cryptoApi = globalThis.crypto
   if (cryptoApi?.randomUUID) return cryptoApi.randomUUID()

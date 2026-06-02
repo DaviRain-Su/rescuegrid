@@ -8,7 +8,7 @@
 ## 1. Test Layers
 
 - Move unit tests：Mandate + Wrapper 创建、撤销、授权、预算、滑点、过期、事件。
-- Worker API tests：intent parse、preview、policy API、activity API、agent tick。
+- Worker API tests：intent parse、preview、policy API、activity API、runtime status、agent tick。
 - Guardian tests：各类 block reason 和允许路径。
 - ExecutorAdapter tests：adapter registry、ExecutionPlan、preview、PTB build conformance。
 - Integration tests：Worker + Sui Testnet package + Deepbook execution。
@@ -207,6 +207,22 @@ Error:
 - 不存在的 policy 返回 `NOT_FOUND`。
 - 链读取失败返回 `CHAIN_READ_FAILED`。
 
+### `GET /api/runtime/status`
+
+Happy path:
+
+- 返回 `chain=sui:testnet`、部署 agent address、BalanceManager id 和 AgentPassport id。
+- 默认 signer 为 `worker-secret`；未配置 `AGENT_KEY` 时 `available=false`、`execution_enabled=false`、`blocker_code=EXECUTION_DISABLED`。
+- `CHAIN_DATA_PROVIDER=graphql` 且配置 `SUI_GRAPHQL_URL` / `SUI_GRAPHQL_ENDPOINT` 时，返回 `chain_data_provider.kind=graphql` 和 `graphql_configured=true`。
+- `known_signer_kinds` 包含 `worker-secret`、`local-daemon`、`waap`、`hardware` 和 `remote-signer`。
+
+Security / boundary:
+
+- 响应不得包含 `AGENT_KEY`、owner key、WaaP session file、permission token 或任何 secret value。
+- `SIGNER_KIND=waap` 在 adapter spike 通过前必须返回 `UNSUPPORTED_SIGNER`，不能因为文档支持 Sui 就自动打开执行。
+- `execution.enabled` 只有在 signer available 且 `EXECUTION_ENABLED=true` 时才为 true。
+- Profile / Accounts UI 必须把 status 作为可见状态展示，不能把 `execution_configured=true` 当成可执行。
+
 ### `POST /api/agent/tick`
 
 Happy path:
@@ -365,6 +381,7 @@ MVP desktop viewport:
 - Activity view shows events and budget within one 5 second polling interval after chain state changes.
 - Revoke button changes state to revoked within one 5 second polling interval.
 - Policy Inspect names the real MoveGate Mandate + RescuePolicyWrapper model and does not show stale AgentPolicy, AgentCap, or sponsored-gas claims.
+- Profile / Accounts shows the live runtime signer kind, deployment agent, execution blocker and Worker data-provider status when `VITE_WORKER_URL` is configured.
 - Primary buttons have text labels and disabled/loading states.
 
 Post-MVP mobile viewport:

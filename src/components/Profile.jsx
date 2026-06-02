@@ -101,7 +101,49 @@ function FundingReadiness({ funding, live }) {
   )
 }
 
-export function Profile({ account, holdings, policies, funding = null, live = false, readOnly = false, loading = false, onNav, onToast, onLogout }) {
+function RuntimeAuthorityStatus({ runtimeStatus }) {
+  if (!runtimeStatus?.signer) return null
+  const signer = runtimeStatus.signer
+  const execution = runtimeStatus.execution || {}
+  const provider = runtimeStatus.chain_data_provider || {}
+  const agent = runtimeStatus.agent || {}
+  const signerReady = Boolean(signer.available && signer.execution_enabled)
+  const modeClass = signerReady ? 'badge-safe' : signer.available ? 'badge-warn' : 'badge-neutral'
+  return (
+    <div style={{ marginTop: 14, paddingTop: 14, borderTop: '1px solid var(--border)' }}>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, marginBottom: 10 }}>
+        <div className="card-title">Runtime signer</div>
+        <span className={`badge ${modeClass}`} style={{ fontSize: 9.5 }}>
+          <span className="dot"></span>{signerReady ? 'execution ready' : signer.unavailable_code || 'gated'}
+        </span>
+      </div>
+      <MetaRow icon="key" iconColor="var(--accent)" label="Signer">
+        <span className="mono" style={{ fontSize: 12.5, fontWeight: 600 }}>{signer.kind}</span>
+      </MetaRow>
+      <MetaRow icon="shield" iconColor="var(--sui)" label="Agent">
+        <CopyChip text={shortId(agent.address) || 'agent'} full={agent.address || ''} />
+      </MetaRow>
+      <MetaRow icon="activity" iconColor={execution.enabled ? 'var(--safe)' : 'var(--warn)'} label="Execution">
+        <span className={`badge ${execution.enabled ? 'badge-safe' : 'badge-warn'}`} style={{ fontSize: 9 }}>
+          {execution.enabled ? 'enabled' : execution.blocker_code || 'blocked'}
+        </span>
+      </MetaRow>
+      <MetaRow icon="layers" iconColor="var(--t2)" label="Data provider" last>
+        <span className="mono" style={{ fontSize: 11.5, color: 'var(--t1)' }}>
+          {provider.kind || 'json-rpc'}{provider.graphql_configured ? ' · graphql configured' : ''}
+        </span>
+      </MetaRow>
+      {!signerReady && signer.unavailable_detail && (
+        <div style={{ display: 'flex', gap: 8, marginTop: 10, padding: '9px 11px', borderRadius: 'var(--r-sm)', background: 'var(--glass)', color: 'var(--t2)', fontSize: 10.5, lineHeight: 1.45 }}>
+          <span style={{ color: 'var(--warn)', flexShrink: 0 }}><Icon name="alert" size={13} /></span>
+          <span>{signer.unavailable_detail}</span>
+        </div>
+      )}
+    </div>
+  )
+}
+
+export function Profile({ account, holdings, policies, funding = null, runtimeStatus = null, live = false, readOnly = false, loading = false, onNav, onToast, onLogout }) {
   const a = account
   const total = holdings.reduce((s, h) => s + h.value, 0)
   const free = holdings.filter(h => h.state === 'free').reduce((s, h) => s + h.value, 0)
@@ -375,6 +417,7 @@ export function Profile({ account, holdings, policies, funding = null, live = fa
             <Button size="sm" className="rg-btn-2 justify-center" fullWidth onPress={() => onNav && onNav('policies')}>
               <Icon name="settings" size={14} /> Manage policies
             </Button>
+            <RuntimeAuthorityStatus runtimeStatus={runtimeStatus} />
           </div>
 
           {/* gas: live and demo both use explicit wallet + agent gas posture */}

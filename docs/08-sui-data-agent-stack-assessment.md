@@ -103,6 +103,8 @@ WaaP's documented agent model:
 - two-party signing avoids a single full private key held by the agent process,
 - Sui is listed as live on mainnet/testnet/devnet, and the CLI can send Sui `tx-json` or unsigned transaction bytes.
 
+External documentation re-check on 2026-06-03 confirms the same direction: WaaP for Agents documents 2PC/MPC-style split signing, policy/risk checks, approvals, privileges for routine operations, Sui live support, and CLI signing/submission for Sui transaction JSON or BCS tx bytes. That is a good fit for a RescueGrid external signer, but it is still a signer layer, not a policy layer.
+
 RescueGrid position:
 
 - WaaP can complement MoveGate + RescuePolicyWrapper, not replace them.
@@ -113,6 +115,8 @@ RescueGrid position:
 - It is not automatically safer than RescueGrid's on-chain policy layer. WaaP signs transactions; RescueGrid must still validate the plan through Guardian and enforce budget/pool/slippage through MoveGate + RescuePolicyWrapper.
 
 Do not put WaaP into the MVP hot path now. The current Testnet Worker is deterministic and small; introducing external signer orchestration would add moving parts before live DeepBook funding is solved. The immediate use is a design target, not a replacement for the current Testnet `worker-secret` path.
+
+Current implementation status: the repo now models `waap` as an explicit `SignerAdapter` kind and surfaces it through `/api/runtime/status`, but it intentionally returns `UNSUPPORTED_SIGNER`. This lets the UI and docs represent WaaP readiness without falsely claiming that WaaP is wired into live RescueGrid execution.
 
 Cloud vs local placement:
 

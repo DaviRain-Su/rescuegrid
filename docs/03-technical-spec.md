@@ -680,6 +680,59 @@ Data source rules:
 - `runtime_state` comes from Durable Object state.
 - If chain state conflicts with runtime state, chain state wins and `runtime_state_stale` is true.
 
+### `GET /api/runtime/status`
+
+Returns non-secret Worker runtime posture for the frontend Profile / Accounts surface. This endpoint is read-only and must not reveal private keys, WaaP session files, permission tokens or Worker secrets.
+
+Response:
+
+```json
+{
+  "status": "ok",
+  "chain": "sui:testnet",
+  "agent": {
+    "address": "0x...",
+    "balance_manager_id": "0x...",
+    "passport_id": "0x..."
+  },
+  "signer": {
+    "kind": "worker-secret",
+    "address": "0x...",
+    "available": false,
+    "execution_configured": false,
+    "execution_enabled": false,
+    "unavailable_code": "EXECUTION_DISABLED",
+    "unavailable_detail": "worker AGENT_KEY is unavailable",
+    "known_signer_kinds": ["worker-secret", "local-daemon", "waap", "hardware", "remote-signer"]
+  },
+  "execution": {
+    "configured": false,
+    "enabled": false,
+    "mode": "worker-secret",
+    "blocker_code": "EXECUTION_DISABLED"
+  },
+  "chain_data_provider": {
+    "kind": "json-rpc",
+    "graphql_configured": false,
+    "worker_first": true
+  },
+  "runtime": {
+    "cloud_worker": true,
+    "local_daemon_supported": true,
+    "mainnet_requires_external_signer": true
+  }
+}
+```
+
+Rules:
+
+- `signer.kind` is selected from `SIGNER_KIND` / `RESCUEGRID_SIGNER_KIND`, defaulting to `worker-secret`.
+- `worker-secret` is allowed only for Testnet Worker validation and is execution-ready only when `EXECUTION_ENABLED=true` and `AGENT_KEY` is present.
+- `local-daemon` is available only when `RESCUEGRID_DAEMON_MODE=true` and a local `AGENT_KEY` is present.
+- `waap`, `hardware` and `remote-signer` are explicit external signer modes but must return `UNSUPPORTED_SIGNER` until their adapter spike is validated.
+- Production Mainnet must not use `worker-secret`; it must use an external/user-controlled signer mode.
+- The frontend must treat this endpoint as status evidence only. It cannot infer that execution is allowed unless `execution.enabled=true`.
+
 ### `GET /api/risk/controls`
 
 Returns Worker-persisted owner runtime risk controls. When `owner` is provided, the Durable Object response is filtered to that owner; unfiltered reads are used only by the internal tick path and runtime core still matches controls against the wrapper owner before blocking.

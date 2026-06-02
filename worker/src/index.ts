@@ -29,6 +29,7 @@ import {
 import { AGENT_ADDRESS, DEFAULT_TICK_INTERVAL_SECONDS, MAX_ACTIVE_POLICIES_PER_DEPLOYMENT } from './config.js'
 import { getExecutorAdapter, unsupportedExecutor, unsupportedExecutorTarget } from './executor-adapters.js'
 import { activationPolicyPreflight, reconcilePolicyListRuntimeState, reconcilePolicyRuntimeState, revokePolicyPreflight } from './policy-api.js'
+import { getRuntimeStatus } from './runtime-status.js'
 import {
   OWNER_CONTROL_ACTION_SET_GLOBAL_STOP,
   OWNER_CONTROL_ACTION_SET_STRATEGY_STOP,
@@ -47,12 +48,18 @@ export interface Env {
   AGENT_KEY?: string
   INTERNAL_AGENT_TICK_TOKEN?: string
   RESCUEGRID_DEMO_MODE?: string
+  RESCUEGRID_DAEMON_MODE?: string
   EXECUTION_ENABLED?: string
+  SIGNER_KIND?: string
+  RESCUEGRID_SIGNER_KIND?: string
   REQUIRED_DBUSDC_BALANCE?: string
   REQUIRED_DEEP_BALANCE?: string
   REQUIRED_AGENT_SUI_GAS_MIST?: string
   CHAIN_DATA_PROVIDER?: string
   RESCUEGRID_CHAIN_DATA_PROVIDER?: string
+  SUI_GRAPHQL_URL?: string
+  SUI_GRAPHQL_ENDPOINT?: string
+  GRAPHQL_URL?: string
 }
 
 const app = new Hono<{ Bindings: Env }>()
@@ -121,6 +128,10 @@ app.use('/api/*', cors())
 app.use('/api/*', bodyLimit({ maxSize: 50 * 1024 }))
 
 app.get('/', (c) => c.json({ service: 'rescuegrid-worker', agent: AGENT_ADDRESS, status: 'ok' }))
+
+app.get('/api/runtime/status', (c) => {
+  return c.json(getRuntimeStatus(c.env))
+})
 
 // ── E2: parse natural-language intent into a structured strategy ──────────
 app.post('/api/intents/parse', async (c) => {

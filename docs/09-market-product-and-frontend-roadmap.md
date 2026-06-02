@@ -281,6 +281,8 @@ Required modules:
 - capability list per Sui venue/protocol;
 - reauth/revoke buttons.
 
+Implementation status: Profile now consumes `/api/runtime/status` when live Worker reads are enabled. The surface shows the deployment agent address, signer kind, execution blocker and chain data-provider mode next to policy/funding readiness. This covers the minimum cloud-agent transparency needed for the hackathon branch. The same UI slot should later expand into local daemon liveness, WaaP approval status and external signer health after the J7 signer spike.
+
 ## 4. Design brief
 
 Ask design to produce these screens first:
@@ -357,6 +359,7 @@ Reasoning:
 - ChainDataProvider and GraphQL migration.
 - Seal/Walrus private strategy records.
 - SignerAdapter / local daemon / WaaP-style external signer.
+- Current signer status transparency is implemented in Profile via `/api/runtime/status`; real WaaP execution remains a J7 spike, not a production path.
 - Cross-venue inventory rebalancing.
 - Strategy marketplace with copy/follow and vault-like UX.
 

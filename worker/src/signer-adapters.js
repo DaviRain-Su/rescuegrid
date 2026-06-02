@@ -74,3 +74,19 @@ export function resolveSignerAdapter(env, { client } = {}) {
 export function signerExecutionEnabled(env, signerAdapter) {
   return env?.EXECUTION_ENABLED === 'true' && Boolean(signerAdapter?.available)
 }
+
+export function signerAdapterStatus(env, options = {}) {
+  const adapter = resolveSignerAdapter(env, options)
+  const executionConfigured = env?.EXECUTION_ENABLED === 'true'
+  const executionEnabled = signerExecutionEnabled(env, adapter)
+  return {
+    kind: adapter.kind,
+    address: adapter.address,
+    available: Boolean(adapter.available),
+    execution_configured: executionConfigured,
+    execution_enabled: executionEnabled,
+    unavailable_code: adapter.available ? null : adapter.unavailable_code,
+    unavailable_detail: adapter.available ? null : adapter.unavailable_detail,
+    known_signer_kinds: KNOWN_SIGNER_KINDS,
+  }
+}

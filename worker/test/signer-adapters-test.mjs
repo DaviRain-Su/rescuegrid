@@ -5,6 +5,7 @@ import {
   SIGNER_KIND_WAAP,
   SIGNER_KIND_WORKER_SECRET,
   resolveSignerAdapter,
+  signerAdapterStatus,
   signerExecutionEnabled,
   signerKindFromEnv,
 } from '../src/signer-adapters.js'
@@ -29,6 +30,15 @@ const missingSecret = resolveSignerAdapter({ EXECUTION_ENABLED: 'true' }, { clie
 assert.equal(missingSecret.kind, SIGNER_KIND_WORKER_SECRET)
 assert.equal(missingSecret.available, false)
 assert.equal(signerExecutionEnabled({ EXECUTION_ENABLED: 'true' }, missingSecret), false)
+{
+  const status = signerAdapterStatus({ EXECUTION_ENABLED: 'true' }, { client })
+  assert.equal(status.kind, SIGNER_KIND_WORKER_SECRET)
+  assert.equal(status.available, false)
+  assert.equal(status.execution_configured, true)
+  assert.equal(status.execution_enabled, false)
+  assert.equal(status.unavailable_code, 'EXECUTION_DISABLED')
+  assert.equal(status.known_signer_kinds.includes(SIGNER_KIND_WAAP), true)
+}
 
 const workerSecret = resolveSignerAdapter({ EXECUTION_ENABLED: 'true', AGENT_KEY: secret }, { client })
 assert.equal(workerSecret.kind, SIGNER_KIND_WORKER_SECRET)
@@ -90,6 +100,13 @@ assert.equal(waap.kind, SIGNER_KIND_WAAP)
 assert.equal(waap.available, false)
 assert.equal(waap.unavailable_code, 'UNSUPPORTED_SIGNER')
 assert.equal(signerExecutionEnabled({ EXECUTION_ENABLED: 'true' }, waap), false)
+{
+  const status = signerAdapterStatus({ SIGNER_KIND: SIGNER_KIND_WAAP, EXECUTION_ENABLED: 'true' }, { client })
+  assert.equal(status.kind, SIGNER_KIND_WAAP)
+  assert.equal(status.available, false)
+  assert.equal(status.execution_enabled, false)
+  assert.equal(status.unavailable_code, 'UNSUPPORTED_SIGNER')
+}
 await assert.rejects(() => waap.signAndSubmit(transaction), /not implemented/)
 
 console.log('\nALL SIGNER ADAPTER TESTS PASS')

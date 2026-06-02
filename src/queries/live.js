@@ -1,6 +1,6 @@
 import { useMemo } from 'react'
 import { useQuery } from '@tanstack/react-query'
-import { getBalances, getMarket, getSummary, listActivity, listPolicies } from '../api.js'
+import { getBalances, getMarket, getRuntimeStatus, getSummary, listActivity, listPolicies } from '../api.js'
 import {
   liveDashboardOwnerKey,
   liveDashboardQueryKey,
@@ -34,6 +34,7 @@ export const EMPTY_LIVE_DASHBOARD = {
   market: null,
   holdings: [],
   funding: null,
+  runtimeStatus: null,
   meta: { source: null, error: null },
 }
 
@@ -66,12 +67,13 @@ export function mapLivePolicy(p, spentUnits = 0, status = 'active', mode = 'clou
 }
 
 export async function fetchLiveDashboard({ owner, mode }) {
-  const [pr, ar, sr, mr, br] = await Promise.all([
+  const [pr, ar, sr, mr, br, rr] = await Promise.all([
     listPolicies(owner),
     listActivity(owner),
     getSummary(owner),
     getMarket(),
     getBalances(owner),
+    getRuntimeStatus(),
   ])
 
   const results = [pr, ar, sr, mr, br]
@@ -102,8 +104,9 @@ export async function fetchLiveDashboard({ owner, mode }) {
     market: mr.status === 'ok' ? mr.market : null,
     holdings: br.status === 'ok' ? br.holdings : [],
     funding: br.status === 'ok' ? br.funding || null : null,
+    runtimeStatus: rr.status === 'ok' ? rr : null,
     meta,
-    raw: { policies: pr, activity: ar, summary: sr, market: mr, balances: br },
+    raw: { policies: pr, activity: ar, summary: sr, market: mr, balances: br, runtimeStatus: rr },
   }
 }
 
@@ -116,14 +119,16 @@ export function useLiveDashboard({ owner, mode, enabled }) {
   const summaryQuery = useQuery(queryOptions('summary', () => getSummary(owner)))
   const marketQuery = useQuery(queryOptions('market', () => getMarket()))
   const balancesQuery = useQuery(queryOptions('balances', () => getBalances(owner)))
+  const runtimeStatusQuery = useQuery(queryOptions('runtime-status', () => getRuntimeStatus()))
 
-  const queries = [policiesQuery, activityQuery, summaryQuery, marketQuery, balancesQuery]
+  const queries = [policiesQuery, activityQuery, summaryQuery, marketQuery, balancesQuery, runtimeStatusQuery]
   const loading = {
     policies: active && policiesQuery.isPending,
     activity: active && activityQuery.isPending,
     summary: active && summaryQuery.isPending,
     market: active && marketQuery.isPending,
     balances: active && balancesQuery.isPending,
+    runtimeStatus: active && runtimeStatusQuery.isPending,
   }
   loading.any = Object.values(loading).some(Boolean)
   loading.initial = active && queries.every((q) => q.isPending)
@@ -134,6 +139,7 @@ export function useLiveDashboard({ owner, mode, enabled }) {
     const sr = summaryQuery.data
     const mr = marketQuery.data
     const br = balancesQuery.data
+    const rr = runtimeStatusQuery.data
     const results = [pr, ar, sr, mr, br].filter(Boolean)
     const fallback = results.find((r) => r?.source === 'chain_fallback')
     const worker = results.find((r) => r?.source === 'worker')
@@ -162,10 +168,11 @@ export function useLiveDashboard({ owner, mode, enabled }) {
       market: mr?.status === 'ok' ? mr.market : null,
       holdings: br?.status === 'ok' ? br.holdings : [],
       funding: br?.status === 'ok' ? br.funding || null : null,
+      runtimeStatus: rr?.status === 'ok' ? rr : null,
       meta,
-      raw: { policies: pr, activity: ar, summary: sr, market: mr, balances: br },
+      raw: { policies: pr, activity: ar, summary: sr, market: mr, balances: br, runtimeStatus: rr },
     }
-  }, [policiesQuery.data, activityQuery.data, summaryQuery.data, marketQuery.data, balancesQuery.data, mode])
+  }, [policiesQuery.data, activityQuery.data, summaryQuery.data, marketQuery.data, balancesQuery.data, runtimeStatusQuery.data, mode])
 
   const errorQuery = queries.find((q) => q.isError)
   const hasResult = [policiesQuery.data, activityQuery.data, summaryQuery.data, marketQuery.data, balancesQuery.data].some(Boolean)
@@ -185,6 +192,7 @@ export function useLiveDashboard({ owner, mode, enabled }) {
       summary: summaryQuery,
       market: marketQuery,
       balances: balancesQuery,
+      runtimeStatus: runtimeStatusQuery,
     },
   }
 }
