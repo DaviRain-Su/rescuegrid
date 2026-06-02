@@ -27,9 +27,33 @@ const NOW = Date.UTC(2026, 5, 2, 15, 30, 0)
 }
 
 {
+  const parsed = parseIntent(TEXT, OWNER, { strategy_type: 'funding_rate_harvest' }, NOW)
+  assert.equal(parsed.status, 'error')
+  assert.equal(parsed.code, 'UNSUPPORTED_STRATEGY')
+}
+
+{
   const parsed = parseIntent(TEXT, OWNER, { chain: 'evm:1' }, NOW)
   assert.equal(parsed.status, 'error')
   assert.equal(parsed.code, 'UNSUPPORTED_CHAIN')
+}
+
+{
+  const parsed = parseIntent(TEXT, OWNER, { max_slippage_bps: 500 }, NOW)
+  assert.equal(parsed.status, 'ok')
+  assert.equal(parsed.strategy.execution.max_slippage_bps, 500)
+}
+
+{
+  const parsed = parseIntent(TEXT, OWNER, { max_slippage_bps: 501 }, NOW)
+  assert.equal(parsed.status, 'error')
+  assert.equal(parsed.code, 'GUARDIAN_STATIC_BLOCK')
+}
+
+{
+  const parsed = parseIntent(TEXT, OWNER, { max_slippage_bps: 12.5 }, NOW)
+  assert.equal(parsed.status, 'error')
+  assert.equal(parsed.code, 'GUARDIAN_STATIC_BLOCK')
 }
 
 console.log('\nALL PARSE INTENT TESTS PASS')

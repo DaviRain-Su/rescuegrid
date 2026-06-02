@@ -44,6 +44,8 @@ export function toUnits(human, decimals) {
 export function parseIntent(text, owner, defaults = {}, nowMs = Date.now()) {
   const t = (text || '').trim()
   if (!t) return { status: 'error', code: 'INTENT_AMBIGUOUS', message: 'Empty intent.' }
+  const strategy_type = defaults.strategy_type ?? 'risk_response'
+  if (strategy_type !== 'risk_response') return { status: 'error', code: 'UNSUPPORTED_STRATEGY', message: `Strategy ${strategy_type} is not supported by the Sui Testnet MVP.` }
   const executor_kind = defaults.executor_kind ?? 'deepbook'
   if (executor_kind !== 'deepbook') return { status: 'error', code: 'UNSUPPORTED_EXECUTOR', message: 'Executor adapter is not registered.' }
   const chain = defaults.chain ?? CHAIN
@@ -76,12 +78,19 @@ export function parseIntent(text, owner, defaults = {}, nowMs = Date.now()) {
 
   const budget_ceiling = toUnits(budgetNum, BUDGET_COIN_DECIMALS)
   const max_single_trade_amount = ((BigInt(budget_ceiling) / 5n) || 1n).toString()
-  const max_slippage_bps = Math.min(defaults.max_slippage_bps ?? DEFAULT_MAX_SLIPPAGE_BPS, MAX_ALLOWED_SLIPPAGE_BPS)
+  const requested_slippage_bps = defaults.max_slippage_bps ?? DEFAULT_MAX_SLIPPAGE_BPS
+  if (!Number.isSafeInteger(requested_slippage_bps) || requested_slippage_bps < 0) {
+    return { status: 'error', code: 'GUARDIAN_STATIC_BLOCK', message: 'Max slippage must be a non-negative integer bps value.' }
+  }
+  if (requested_slippage_bps > MAX_ALLOWED_SLIPPAGE_BPS) {
+    return { status: 'error', code: 'GUARDIAN_STATIC_BLOCK', message: `Max slippage ${requested_slippage_bps}bps exceeds hard cap ${MAX_ALLOWED_SLIPPAGE_BPS}bps.` }
+  }
+  const max_slippage_bps = requested_slippage_bps
   const lifetimeS = Math.min(defaults.expires_in_seconds ?? 86400, MAX_POLICY_LIFETIME_SECONDS)
   const expires_at_ms = nowMs + lifetimeS * 1000
 
   const strategy = {
-    version: '1', strategy_type: 'risk_response', owner, agent: AGENT_ADDRESS, chain: CHAIN,
+    version: '1', strategy_type, owner, agent: AGENT_ADDRESS, chain: CHAIN,
     executor_kind,
     pool_id: defaults.pool_id ?? poolCfg.pool_id,
     budget_coin_type: BUDGET_COIN_TYPE, budget_ceiling,

@@ -29,6 +29,7 @@ export interface Strategy {
 
 export interface ParseDefaults {
   chain?: string
+  strategy_type?: string
   executor_kind?: string
   pool_id?: string
   max_slippage_bps?: number
