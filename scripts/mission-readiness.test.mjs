@@ -22,6 +22,7 @@ const requiredScripts = {
   'mission:readiness:report': 'node scripts/mission-readiness.mjs --out .rescuegrid/mission-readiness-report.json',
   'funding:request': 'node worker/scripts/funding-handoff.mjs',
   'funding:watch': 'node worker/scripts/funding-watch.mjs',
+  'funding:watch:report': 'node worker/scripts/funding-watch.mjs --json --out .rescuegrid/funding-watch-report.json',
   'demo:loop': 'node worker/scripts/validate-demo-loop.mjs',
   'demo:execute': 'node worker/scripts/validate-demo-loop.mjs --require-execution',
   'demo:execute:report': 'node worker/scripts/validate-demo-loop.mjs --require-execution --out .rescuegrid/demo-execute-report.json',

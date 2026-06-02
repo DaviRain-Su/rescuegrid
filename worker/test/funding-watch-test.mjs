@@ -1,10 +1,14 @@
 import assert from 'node:assert/strict'
 import { spawnSync } from 'node:child_process'
+import { mkdtempSync, readFileSync, rmSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
 import {
   buildFundingWatchReport,
   fundingWatchOptions,
   parseFundingWatchArgs,
   runFundingWatch,
+  writeFundingWatchArtifact,
 } from '../scripts/funding-watch.mjs'
 import { DEPLOYMENT } from '../src/sui-tx.js'
 
@@ -82,6 +86,12 @@ function readiness({ executionReady = false } = {}) {
 }
 
 {
+  const flags = parseFundingWatchArgs(['--json', '--out', '.rescuegrid/funding-watch-report.json'])
+  const opts = fundingWatchOptions(flags)
+  assert.equal(opts.reportOutPath, '.rescuegrid/funding-watch-report.json')
+}
+
+{
   const report = buildFundingWatchReport(readiness({ executionReady: false }), {
     attempt: 2,
     maxAttempts: 3,
@@ -99,9 +109,33 @@ function readiness({ executionReady = false } = {}) {
 }
 
 {
+  const tempDir = mkdtempSync(join(tmpdir(), 'rescuegrid-funding-watch-'))
+  try {
+    const reportPath = join(tempDir, 'nested', 'funding-watch-report.json')
+    const report = buildFundingWatchReport(readiness({ executionReady: false }), {
+      attempt: 1,
+      maxAttempts: 1,
+      generatedAt: '2026-06-03T00:00:00.000Z',
+      runDemo: false,
+    })
+    const artifact = writeFundingWatchArtifact(report, { outPath: reportPath })
+    assert.equal(artifact.path, reportPath)
+    assert.equal(artifact.format, 'json')
+    const written = JSON.parse(readFileSync(reportPath, 'utf8'))
+    assert.equal(written.purpose, 'deepbook_execution_funding_watch')
+    assert.equal(written.execution_ready, false)
+    assert.equal(written.policy_creation_allowed, false)
+  } finally {
+    rmSync(tempDir, { recursive: true, force: true })
+  }
+}
+
+{
   let demoCalls = 0
+  const tempDir = mkdtempSync(join(tmpdir(), 'rescuegrid-funding-watch-run-'))
+  const reportPath = join(tempDir, 'funding-watch-report.json')
   const code = await runFundingWatch({
-    options: fundingWatchOptions(parseFundingWatchArgs(['--json', '--run-demo'])),
+    options: fundingWatchOptions(parseFundingWatchArgs(['--json', '--run-demo', '--out', reportPath])),
     loadReadiness: async () => readiness({ executionReady: false }),
     runDemo: async () => {
       demoCalls += 1
@@ -112,6 +146,10 @@ function readiness({ executionReady = false } = {}) {
   })
   assert.equal(code, 1)
   assert.equal(demoCalls, 0, 'blocked funding must not launch strict demo')
+  const written = JSON.parse(readFileSync(reportPath, 'utf8'))
+  assert.equal(written.execution_ready, false)
+  assert.equal(written.policy_creation_blocked, true)
+  rmSync(tempDir, { recursive: true, force: true })
 }
 
 {
@@ -154,6 +192,7 @@ const help = spawnSync(process.execPath, ['scripts/funding-watch.mjs', '--help']
 assert.equal(help.status, 0, help.stderr)
 assert.match(help.stdout, /funding gate/i)
 assert.match(help.stdout, /--run-demo/i)
+assert.match(help.stdout, /--out/)
 assert.equal(help.stdout.includes('AGENT_KEY='), false, 'help must not print secret assignment examples')
 
 console.log('\nALL FUNDING WATCH TESTS PASS')

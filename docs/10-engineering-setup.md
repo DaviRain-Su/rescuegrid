@@ -34,7 +34,7 @@ must be reconciled with RescueGrid's MoveGate + `RescuePolicyWrapper` contract.
 | --- | --- | --- | --- |
 | Chain reads, GraphQL, gRPC, indexing, Walrus data | `accessing-data` | `ChainDataProvider`, policy list/activity reads, future Archival Store replay, Walrus blobs | `npm run chain-data:status -- --json`, `npm run chain-data:status -- --probe --json`, `npm --prefix worker run test:chain-data` |
 | Programmable Transaction Blocks | `ptbs`, `object-model` | create/revoke policy PTBs, DeepBook execution PTB, MoveGate AuthToken + ActionReceipt composition | `npm --prefix worker test`, `cd move/rescuegrid && sui move test` |
-| Agent runtime and Guardian | `agent-dev`, `wallets`, `ptbs` | Durable Object ticks, Runtime Core, signer adapters, risk controls, non-mutating validate-plan safety blockers, final PRD readiness gate | `npm --prefix worker test`, `npm run demo:loop`, `npm run demo:execute`, `npm run demo:execute:report`, `npm run safety:negative`, `npm run safety:negative:report`, `npm run funding:request`, `npm run mission:readiness`, `npm run mission:readiness:report` |
+| Agent runtime and Guardian | `agent-dev`, `wallets`, `ptbs` | Durable Object ticks, Runtime Core, signer adapters, risk controls, non-mutating validate-plan safety blockers, final PRD readiness gate | `npm --prefix worker test`, `npm run demo:loop`, `npm run demo:execute`, `npm run demo:execute:report`, `npm run safety:negative`, `npm run safety:negative:report`, `npm run funding:request`, `npm run funding:watch:report`, `npm run mission:readiness`, `npm run mission:readiness:report` |
 | Sui object and shared-object modeling | `object-model` | `RescuePolicyWrapper`, MoveGate Mandate references, future `PolicyPrivateRecord` access object | `cd move/rescuegrid && sui move build`, `cd move/rescuegrid && sui move test` |
 | Move build and unit tests | `sui-build-test`, `move-unit-testing` | wrapper invariants, event schema, abort-code behavior, publish readiness | `cd move/rescuegrid && sui move test` |
 | Publish and upgrade workflow | `sui-publish` | Testnet publish, package id updates, deployment config refresh | `npm run config`, follow publish checklist in status docs |
@@ -76,6 +76,7 @@ npm --prefix worker test
 npm --prefix worker run typecheck
 npm run build
 npm run chain-data:status -- --json
+npm run funding:watch:report
 npm run wallet:evidence -- --format markdown --out .rescuegrid/wallet-clickthrough-evidence.md
 npm run wallet:evidence:preflight
 npm run wallet:evidence:verify -- --input .rescuegrid/wallet-clickthrough-evidence.md

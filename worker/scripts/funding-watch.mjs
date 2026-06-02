@@ -3,7 +3,8 @@
 // still blocked. When --run-demo is set, strict demo execution is launched only
 // after the shared execution-readiness contract reports ready.
 import { spawnSync } from 'node:child_process'
-import { resolve } from 'node:path'
+import { mkdirSync, writeFileSync } from 'node:fs'
+import { dirname, resolve } from 'node:path'
 import { pathToFileURL } from 'node:url'
 import { setTimeout as delay } from 'node:timers/promises'
 import { requireChainDataProvider } from '../src/chain-data-provider.js'
@@ -59,6 +60,7 @@ export function fundingWatchOptions(flags = new Map()) {
     maxAttempts: positiveInt(flags.get('--max-attempts'), flags.has('--wait') ? 120 : 1),
     workerUrl: firstValue(flags.get('--worker-url'), process.env.WORKER_URL),
     requested: requestedThresholds(flags),
+    reportOutPath: firstValue(flags.get('--out'), flags.get('--output'), flags.get('--report-out')),
   }
 }
 
@@ -80,8 +82,8 @@ export function buildFundingWatchReport(readiness, {
     funding_ready: handoff.funding_ready,
     execution_ready: handoff.execution_ready,
     would_run_demo: Boolean(runDemo && handoff.execution_ready),
-    policy_creation_allowed: Boolean(runDemo && handoff.execution_ready),
-    policy_creation_blocked: Boolean(runDemo && !handoff.execution_ready),
+    policy_creation_allowed: Boolean(handoff.execution_ready),
+    policy_creation_blocked: Boolean(!handoff.execution_ready),
     execution_claimed: false,
     blocker_codes: handoff.blocker_codes,
     blocker_labels: handoff.blocker_labels,
@@ -108,6 +110,19 @@ function textReport(report) {
 function printReport(report, format) {
   if (format === 'json') console.log(JSON.stringify(report, null, 2))
   else console.log(textReport(report))
+}
+
+export function writeFundingWatchArtifact(report, { outPath } = {}) {
+  if (!outPath) throw new Error('outPath is required')
+  const resolvedPath = resolve(String(outPath))
+  const payload = `${JSON.stringify(report, null, 2)}\n`
+  mkdirSync(dirname(resolvedPath), { recursive: true })
+  writeFileSync(resolvedPath, payload, 'utf8')
+  return {
+    path: resolvedPath,
+    format: 'json',
+    bytes: Buffer.byteLength(payload),
+  }
 }
 
 function runStrictDemo({ workerUrl } = {}) {
@@ -147,6 +162,9 @@ export async function runFundingWatch({
       runDemo: opts.runDemo,
     })
     print(latestReport, opts.format)
+    if (opts.reportOutPath) {
+      writeFundingWatchArtifact(latestReport, { outPath: opts.reportOutPath })
+    }
     if (latestReport.execution_ready) {
       if (opts.runDemo) return runDemo({ workerUrl: opts.workerUrl })
       return 0
@@ -164,13 +182,15 @@ function help() {
 
 Usage:
   node worker/scripts/funding-watch.mjs --json
+  node worker/scripts/funding-watch.mjs --json --out .rescuegrid/funding-watch-report.json
   node worker/scripts/funding-watch.mjs --wait --interval-ms 30000 --max-attempts 120
   node worker/scripts/funding-watch.mjs --wait --run-demo --worker-url http://localhost:8787
 
 This is secret-safe. It reuses /api/execution/readiness semantics through the
 shared Worker readiness helper. It never creates a policy while DBUSDC/DEEP/SUI
 gas or signer checks are blocked. With --run-demo, it launches strict
-demo:execute only after readiness is true.`)
+demo:execute only after readiness is true. --out writes the latest watch report
+as JSON, including blocked reports.`)
 }
 
 export async function main(argv = process.argv.slice(2), env = process.env) {

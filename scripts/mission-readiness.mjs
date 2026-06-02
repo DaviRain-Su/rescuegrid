@@ -34,6 +34,7 @@ const REQUIRED_SCRIPTS = [
   'mission:readiness:report',
   'funding:request',
   'funding:watch',
+  'funding:watch:report',
   'demo:loop',
   'demo:execute',
   'demo:execute:report',
@@ -340,7 +341,7 @@ function nextActions({ safetyCheck, walletCheck, fundingCheck, strictExecutionCh
     actions.push('Run the real Slush / standard Sui wallet create+revoke flow, fill .rescuegrid/wallet-clickthrough-evidence.md, then run npm run wallet:evidence:verify -- --input .rescuegrid/wallet-clickthrough-evidence.md.')
   }
   if (fundingCheck?.status !== 'passed') {
-    actions.push('Send the DBUSDC/DEEP funding handoff to an external funding provider, then rerun npm run funding:watch -- --json.')
+    actions.push('Send the DBUSDC/DEEP funding handoff to an external funding provider, then rerun npm run funding:watch -- --json and npm run funding:watch:report.')
   }
   if (fundingCheck?.status === 'passed' && strictExecutionCheck?.status !== 'passed') {
     actions.push('Run npm run demo:execute:report to write .rescuegrid/demo-execute-report.json proving G2-EXECUTE, AgentTradeExecuted, execution_claimed=true and spend increase.')
