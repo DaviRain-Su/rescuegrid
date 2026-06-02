@@ -7,6 +7,7 @@ import { useState, useEffect } from 'react'
 import { useWallets, useConnectWallet, useCurrentAccount } from '@mysten/dapp-kit'
 import { isEnokiWallet } from '@mysten/enoki'
 import { Icon, Logo } from './primitives.jsx'
+import { Button } from '@heroui/react'
 
 export function ZkLogin({ onAuth, onBackToLanding }) {
   const [loading, setLoading] = useState(null)
@@ -91,9 +92,9 @@ export function ZkLogin({ onAuth, onBackToLanding }) {
             <div style={{ flex: 1, height: 1, background: 'var(--border)' }} />
           </div>
 
-          <button onClick={() => onAuth()} className="btn btn-ghost" style={{ width: '100%', justifyContent: 'center' }}>
+          <Button onPress={() => onAuth()} variant="bordered" fullWidth>
             <Icon name="eye" size={15} /> Explore the demo (no wallet)
-          </button>
+          </Button>
 
           <div style={{ marginTop: 14, fontSize: 11, color: standardWallets.length > 0 ? 'var(--safe)' : 'var(--t2)', fontFamily: 'var(--f-mono)' }}>
             {standardWallets.length > 0

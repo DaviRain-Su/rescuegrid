@@ -1,0 +1,10 @@
+/* Tailwind 4 + HeroUI v3 entry.
+   During the HeroUI migration we deliberately omit Tailwind's preflight (base)
+   layer so the existing hand-rolled neon pages keep their styling until each is
+   rewritten. Once every page is on HeroUI we can switch to the full
+   `@import "tailwindcss";` and drop styles.css. */
+@layer theme, base, components, utilities;
+@import 'tailwindcss/theme.css' layer(theme);
+@import 'tailwindcss/utilities.css' layer(utilities);
+@import '@heroui/react/styles';
+@source '../node_modules/@heroui/react/dist';

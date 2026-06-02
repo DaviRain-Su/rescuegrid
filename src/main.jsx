@@ -1,6 +1,7 @@
 import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
 import Root from './Root.jsx'
+import './tailwind.css'
 import './styles.css'
 import './landing.css'
 
