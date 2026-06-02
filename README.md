@@ -43,7 +43,7 @@ npm --prefix worker run typecheck   # Worker TypeScript
 cd move/rescuegrid && sui move test # Move tests
 npm run config                      # sanitized Testnet deployment IDs
 npm run demo:loop                   # create -> activate/tick -> revoke live demo evidence
-npm run demo:execute                # strict mode: requires AgentTradeExecuted evidence
+npm run demo:execute                # strict mode: preflight funding/signer, then require AgentTradeExecuted
 RESCUEGRID_FRONTEND_URL=http://localhost:5175 RESCUEGRID_WORKER_URL=http://localhost:8787 npm run baseline:smoke
 ```
 
@@ -87,7 +87,7 @@ The Worker also exposes `/api/runtime/status` for non-secret cloud agent, signer
 
 > Demo-loop validation path: with the local Worker running and `INTERNAL_AGENT_TICK_TOKEN` + `RESCUEGRID_DEMO_MODE=true` configured, `npm run demo:loop` creates a Testnet policy, activates the Durable Object runtime, forces one internal tick, records either a real execution or the documented funding gate, revokes, then proves the post-revoke tick stops without execution.
 
-> Strict execution validation path: after the BalanceManager is funded with usable DBUSDC/DEEP and `EXECUTION_ENABLED=true`, run `npm run demo:execute`. It uses the same live loop but fails unless the forced tick produces `AgentTradeExecuted`, `execution_claimed=true` and an on-chain spend increase.
+> Strict execution validation path: after the BalanceManager is funded with usable DBUSDC/DEEP and `EXECUTION_ENABLED=true`, run `npm run demo:execute`. It first preflights `/api/runtime/status`, BalanceManager DBUSDC/DEEP, and agent SUI gas before creating any policy; if the preflight is blocked, the script fails without leaving a test policy behind. Once preflight passes, it uses the same live loop but fails unless the forced tick produces `AgentTradeExecuted`, `execution_claimed=true` and an on-chain spend increase.
 
 > Local daemon scaffold: `npm run daemon -- status` shows the local agent address, chain, registered executor adapters, signer kind, watched policies and log path. `npm run daemon -- tick --wrapper-id <0x...>` runs the same Runtime Core tick path from the local process and writes JSONL activity under `.rescuegrid/daemon/`. It defaults to monitoring only; live submission still requires `--execution-enabled`, a matching deployed agent address and a funded BalanceManager. `--signer-kind local-daemon` signs only from the local daemon runtime with the local `AGENT_KEY`; Mainnet refuses `worker-secret` and requires an external/user-controlled signer mode.
 
@@ -101,7 +101,7 @@ Observed final mission evidence is Testnet-only:
 - `RESCUEGRID_FRONTEND_URL=http://localhost:5173 RESCUEGRID_WORKER_URL=http://localhost:8787 npm run baseline:smoke` passed against local Worker/frontend services and Sui Testnet reads, including `/api/runtime/status` signer/agent/data-provider checks and secret-leak assertions.
 - Browser/API surfaces were verified on `http://localhost:5175` with live Worker reads to `http://localhost:8787`.
 - Scripted agent-key Testnet validation created, listed, surfaced in UI/API, and revoked a current-run policy; chain and Worker reads stayed consistent post-revoke.
-- `npm run demo:loop` is the G2 live demo validator: create -> activate/monitor -> force tick -> revoke -> post-revoke tick. In the current funding state it should report the documented execution gate, not a fake fill.
+- `npm run demo:loop` is the G2 live demo validator: create -> activate/monitor -> force tick -> revoke -> post-revoke tick. In the current funding state it should report the documented execution gate, not a fake fill. `npm run demo:execute` is the strict variant: it preflights execution readiness before policy creation, then requires `AgentTradeExecuted`, `execution_claimed=true` and an on-chain spend increase.
 - Funding/readiness, tick auth, trigger-not-met, Guardian safety, revoked/failed/unresolved paths all remained non-success with unchanged spend and no execution-success activity; transaction-bearing runtime activity is idempotent by digest, and chain success evidence wins over duplicate runtime success rows.
 - Live policy lists reconcile Durable Object runtime state with chain state; terminal chain state wins and stale runtime rows surface as `runtime_state_stale`.
 - Successful real DeepBook execution was not run and should remain documented as deferred until the DBUSDC/DEEP gate is satisfied.

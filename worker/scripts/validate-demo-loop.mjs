@@ -12,7 +12,8 @@ import { setTimeout as delay } from 'node:timers/promises'
 import { Transaction } from '@mysten/sui/transactions'
 import { strategyHash } from '../src/strategy-core.js'
 import { getClient, readPolicyCreated, DEPLOYMENT } from '../src/sui-tx.js'
-import { readMandate, readWrapper } from '../src/chain.js'
+import { readBalanceManagerBalance, readMandate, readWrapper } from '../src/chain.js'
+import { buildFundingReadiness } from '../src/read-surfaces.js'
 import { loadAgentKeypairFromDevVars, readWorkerDevVar } from './agent-key-loader.mjs'
 
 const args = new Map()
@@ -45,8 +46,11 @@ gate; either way no raw secrets are printed.
 Options:
   --worker-url <url>       Worker URL (default: WORKER_URL or http://localhost:8787)
   --require-execution      Fail unless the forced tick produces an AgentTradeExecuted
-                           event and spend increase. Use this after DBUSDC/DEEP
-                           funding is available to prove the full PRD execution gate.`)
+                           event and spend increase. This mode preflights signer,
+                           execution and DBUSDC/DEEP/SUI funding before policy
+                           creation, so a known funding gate does not leave a
+                           test policy behind. Use this after DBUSDC/DEEP funding
+                           is available to prove the full PRD execution gate.`)
   process.exit(0)
 }
 
@@ -162,6 +166,74 @@ function assertTickLeg(result, { requireExecution = false } = {}) {
   return 'gated'
 }
 
+async function strictExecutionPreflight(strategy) {
+  if (!requireExecution) return null
+  let runtimeStatus
+  let funding
+  try {
+    const [status, dbusdcBalance, deepBalance, suiBalance] = await Promise.all([
+      getJson('/api/runtime/status'),
+      readBalanceManagerBalance(client, DEPLOYMENT.deepbook.dbusdc_coin_type),
+      readBalanceManagerBalance(client, DEPLOYMENT.deepbook.deep_coin_type),
+      client.getBalance({ owner: DEPLOYMENT.agent.address, coinType: '0x2::sui::SUI' }),
+    ])
+    runtimeStatus = status
+    funding = buildFundingReadiness({
+      agentAddress: DEPLOYMENT.agent.address,
+      balanceManagerId: DEPLOYMENT.agent.balance_manager_id,
+      dbusdcBalance: dbusdcBalance.toString(),
+      deepBalance: deepBalance.toString(),
+      suiBalanceMist: String(suiBalance.totalBalance ?? '0'),
+      executionEnabled: runtimeStatus.execution?.enabled === true,
+      requiredDbusdcBalance: strategy.execution.max_single_trade_amount,
+      requiredDeepBalance: '1',
+      requiredSuiGasMist: '1',
+    })
+  } catch (e) {
+    fail('Strict demo execution preflight failed before policy creation', {
+      code: 'STRICT_PREFLIGHT_READ_FAILED',
+      detail: e?.message || String(e),
+    })
+  }
+
+  const evidence = {
+    execution: {
+      configured: runtimeStatus.execution?.configured === true,
+      enabled: runtimeStatus.execution?.enabled === true,
+      mode: runtimeStatus.execution?.mode ?? null,
+      blocker_code: runtimeStatus.execution?.blocker_code ?? null,
+    },
+    signer: {
+      kind: runtimeStatus.signer?.kind ?? null,
+      available: runtimeStatus.signer?.available === true,
+      execution_enabled: runtimeStatus.signer?.execution_enabled === true,
+      unavailable_code: runtimeStatus.signer?.unavailable_code ?? null,
+    },
+    funding: {
+      balances: funding.balances,
+      thresholds: funding.thresholds,
+      execution_ready: funding.execution_ready,
+      execution_blocker_codes: funding.execution_blocker_codes,
+      funding_blocker_codes: funding.blocker_codes,
+    },
+  }
+  assert(funding.execution_ready === true, 'Strict demo execution preflight failed before policy creation', evidence)
+  return evidence
+}
+
+async function cleanupRevokeCreatedPolicy(wrapperId) {
+  const revokeBuilt = await postJson(`/api/policies/${wrapperId}/revoke`, { owner: ownerAddress, confirmed: true })
+  assert(revokeBuilt.wrapper_id === wrapperId, 'Cleanup revoke build wrapper id mismatch', revokeBuilt)
+  const revokeSubmitted = await client.signAndExecuteTransaction({
+    signer: keypair,
+    transaction: Transaction.from(revokeBuilt.tx_json),
+    options: { showEffects: true },
+  })
+  const revokeResolved = await waitForTx(revokeSubmitted.digest)
+  assert(revokeResolved.effects?.status?.status === 'success', 'cleanup revoke_policy transaction failed', txMeta(revokeResolved))
+  return revokeResolved
+}
+
 assert(DEPLOYMENT.chain === expectedChain, 'Deployment is not configured for Sui Testnet', { chain: DEPLOYMENT.chain })
 assert(internalTickToken, 'INTERNAL_AGENT_TICK_TOKEN is required for demo-loop validation. Set it in env or worker/.dev.vars.')
 
@@ -200,6 +272,22 @@ console.log(JSON.stringify({
   require_execution: requireExecution,
 }, null, 2))
 
+const strictPreflight = await strictExecutionPreflight(strategy)
+if (strictPreflight) {
+  console.log(JSON.stringify({
+    phase: 'strict_execution_preflight_ready',
+    execution: strictPreflight.execution,
+    signer: strictPreflight.signer,
+    funding: strictPreflight.funding,
+  }, null, 2))
+}
+
+let wrapperId = null
+let mandateId = null
+let revoked = false
+let completed = false
+
+try {
 const createBuilt = await postJson('/api/policies', {
   owner: ownerAddress,
   strategy: withoutStrategyHash(strategy),
@@ -216,8 +304,8 @@ const createResolved = await waitForTx(createSubmitted.digest)
 assert(createResolved.effects?.status?.status === 'success', 'create_policy transaction failed', txMeta(createResolved))
 const created = readPolicyCreated(createResolved)
 assert(created?.wrapper_id && created?.mandate_id, 'PolicyCreated event did not contain wrapper/mandate IDs', createResolved.events)
-const wrapperId = created.wrapper_id
-const mandateId = created.mandate_id
+wrapperId = created.wrapper_id
+mandateId = created.mandate_id
 const createEvent = (createResolved.events || []).find((e) => String(e.type).endsWith('::policy::PolicyCreated'))
 assert(hexFromMaybeVector(createEvent?.parsedJson?.strategy_hash) === strategy.strategy_hash, 'PolicyCreated strategy hash mismatch')
 
@@ -284,6 +372,7 @@ const revokeResolved = await waitForTx(revokeSubmitted.digest)
 assert(revokeResolved.effects?.status?.status === 'success', 'revoke_policy transaction failed', txMeta(revokeResolved))
 const mandateAfterRevoke = await readMandate(client, mandateId)
 assert(mandateAfterRevoke?.revoked === true, 'Mandate was not revoked on-chain after revoke tx', mandateAfterRevoke)
+revoked = true
 
 console.log(JSON.stringify({
   phase: 'revoked',
@@ -334,3 +423,26 @@ console.log(JSON.stringify({
   tick_tx_digest: tick.tx_digest ?? null,
   strategy_hash: strategy.strategy_hash,
 }, null, 2))
+completed = true
+} finally {
+  if (!completed && wrapperId && !revoked) {
+    try {
+      const cleanupResolved = await cleanupRevokeCreatedPolicy(wrapperId)
+      revoked = true
+      console.error(JSON.stringify({
+        phase: 'cleanup_revoked_after_failure',
+        wrapper_id: wrapperId,
+        mandate_id: mandateId,
+        tx: txMeta(cleanupResolved),
+      }, null, 2))
+    } catch (e) {
+      console.error(JSON.stringify({
+        phase: 'cleanup_revoke_failed',
+        wrapper_id: wrapperId,
+        mandate_id: mandateId,
+        code: 'CLEANUP_REVOKE_FAILED',
+        detail: e?.message || String(e),
+      }, null, 2))
+    }
+  }
+}

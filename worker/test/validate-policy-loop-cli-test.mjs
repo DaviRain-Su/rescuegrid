@@ -33,6 +33,8 @@ assert.match(demoHelp.stdout, /create -> activate\/monitor -> force tick -> revo
 assert.match(demoHelp.stdout, /documented DBUSDC\/DEEP funding/i)
 assert.match(demoHelp.stdout, /--require-execution/)
 assert.match(demoHelp.stdout, /AgentTradeExecuted/i)
+assert.match(demoHelp.stdout, /preflights signer/i)
+assert.match(demoHelp.stdout, /before policy\s+creation/i)
 assert.match(demoHelp.stdout, /no raw secrets/i)
 assert.equal(demoHelp.stdout.includes('AGENT_KEY='), false, 'demo help output must not print agent key values')
 assert.equal(demoHelp.stdout.includes('INTERNAL_AGENT_TICK_TOKEN='), false, 'demo help output must not print tick token values')
