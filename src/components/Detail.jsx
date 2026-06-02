@@ -7,6 +7,7 @@ import { RG } from '../data.js'
 import { Icon } from './primitives.jsx'
 import { Button } from '@heroui/react'
 import { useTxDetail } from '../queries/feeds.js'
+import { filterPolicyActivity } from '../activity-match.js'
 
 function CapRow({ granted, label, fn }) {
   return (
@@ -38,7 +39,7 @@ function resolveInspectSource(source) {
 
 export function PolicyInspect({ p, activity, onClose, onRevoke, onTx, readOnly = false, source = null }) {
   const pct = Math.round((p.budgetUsed / p.budgetCap) * 100)
-  const log = activity.filter(a => a.policy === p.name || a.policy === p.id)
+  const log = filterPolicyActivity(activity, p)
   const sourceMeta = resolveInspectSource(source)
   const liveSource = sourceMeta.kind !== 'demo'
   const objectLabel = liveSource ? 'Move Policy Object' : 'Demo policy-shaped object'
