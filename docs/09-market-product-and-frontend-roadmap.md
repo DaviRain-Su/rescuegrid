@@ -19,20 +19,39 @@ Comparable products fall into six buckets.
 | Yield aggregators / vaults | Beefy, Yearn, Sommelier | Users accept automated strategy vaults when yield, risk and fees are easy to inspect. | Let users own the policy instead of blindly depositing into a vault. |
 | On-chain asset management | Enzyme, Morpho Vaults | Configurable vault policies, caps, asset/protocol allow-lists and curator controls matter. | Convert these controls into RescueGrid mandates and Guardian rules. |
 | Perps / funding / basis products | Bluefin, Sudo Perps, DipCoin Perps, funding-arb vault patterns | Delta-neutral and funding/basis strategies are a major demand area. | Strategy builder + net exposure proof + funding flip guard + Sui venue caps. |
-| Sui DeFi primitives | DeepBook, Cetus, Turbos, Momentum, Magma, STEAMM, Scallop, NAVI, Suilend, AlphaLend, Bucket, SpringSui, Haedal, Volo, AlphaFi, Ondo, KAIO, Ember, Bluefin | Sui has spot liquidity, LP, lending, CDP, LST, vault, RWA and perps components. | A unified policy-constrained agent layer across those protocols. |
+| Sui DeFi primitives | DeepBook, Cetus, Bluefin Spot, Turbos, Momentum, NAVI, Suilend, Scallop, AlphaLend, Bucket, SpringSui, Haedal, Volo, AlphaFi, Ondo, KAIO, MatrixDock, Ember, Bluefin Pro | Sui has enough spot, LP, lending, CDP, LST, vault, RWA and perps components for a focused agent layer. | Cover the liquid Sui protocol set in monitoring, but only enable execution for vetted, high-liquidity adapters. |
 
 ### Sui-native protocol integration map
 
 This is the Sui-only integration surface for the hackathon branch. Multichain, CEX, bridge and Hyperliquid expansion remains in [`docs/06-post-mvp-multivenue-roadmap.md`](06-post-mvp-multivenue-roadmap.md).
 
+Coverage rule:
+
+- Use the current DefiLlama Sui non-CEX top 25/26 by Sui TVL as the default coverage pool.
+- Exclude CEX entries such as Bybit and Gate from this branch even if they appear in the Sui table.
+- Add a protocol outside the TVL cutoff only when it has meaningful Sui DEX volume or a strategically important execution surface. Turbos is the current example: it sits below the top 25/26 TVL cutoff but is one of the top Sui DEXs by recent volume.
+- Do not create one executor per protocol. Build category adapters and keep protocol-specific behavior behind configuration, conformance tests and target constraints.
+- Refresh the coverage pool before demos, submissions and adapter work; DefiLlama TVL and volume rankings are unstable inputs, not permanent product commitments.
+
+Execution rule:
+
+| Tier | Meaning | Protocols | Product stance |
+| --- | --- | --- | --- |
+| Tier 0 | Live / current executor | DeepBook V3 | Keep as the only current live executor until funding and execution evidence are clean. |
+| Tier 1 | Execution adapter candidates | Cetus CLMM, Bluefin Spot, Turbos, Momentum, NAVI, Suilend, Scallop, AlphaLend | Worth implementing because they have clear trading/lending operations and enough liquidity or volume. |
+| Tier 2 | Watch-first candidates | Bucket, Current, SpringSui, Haedal, Volo, AlphaFi, Kai, Mole, Ember | Useful for yield, health, redemption and position monitoring; execution waits for stronger constraints. |
+| Tier 3 | Display/watch-only | Ondo, KAIO, MatrixDock, Bluefin Pro, Sudo Perps, DipCoin Perps | Show risk and opportunity signals, but do not grant autonomous execution until issuer, settlement, margin and liquidation rules are specified. |
+
 | Category | Protocols to track | First RescueGrid surface | Adapter stance |
 | --- | --- | --- | --- |
 | Core spot execution | DeepBook | Current policy execution, order book, spread and rescue-grid proof | Only live MVP executor; keep funding gates explicit. |
-| Sui DEX / CLMM / AMM | Cetus, Turbos, Momentum, Magma, STEAMM, Bluefin Spot | LP monitor, Sui DEX spread table, fee APR and range-risk views | Watch + data first; Cetus range manager is the first likely execution adapter. |
-| Lending and CDP | NAVI, Suilend, Scallop, AlphaLend, Current, Bucket | Lending optimizer, borrow health guardian, CDP/peg-risk monitor | Health/repay and supply/redeem adapters after DeepBook; CDP execution only after target constraints are clear. |
-| LST / vault / yield aggregator | SpringSui, Haedal, Volo, Aftermath, AlphaFi, Kai, Mole, Ember | LST/vault yield monitor, idle-yield watchtower, vault risk drawer | Monitor first; adapters need position/vault id constraints and stale-state checks. |
-| RWA yield on Sui | Ondo, KAIO | RWA yield row, liquidity/settlement risk label, stable collateral monitor | Watch-only until redemption, liquidity and issuer-risk flows are specified. |
-| Sui-native perps | Bluefin, Sudo Perps, DipCoin Perps | Funding heatmap, liquidation buffer, hedge watchtower | Watch-only first; tiny/paper execution comes after margin and funding-flip safeguards. |
+| Liquid Sui DEX / CLMM / AMM | Cetus, Bluefin Spot, Turbos, Momentum | LP monitor, Sui DEX spread table, fee APR and range-risk views | Cetus first; Bluefin Spot/Turbos/Momentum after sustained volume and API quality checks. |
+| Conditional DEX watch | Magma, STEAMM, Aftermath AMM and other long-tail DEXs | Optional watch rows when they enter the volume or TVL cutoff | Do not implement execution adapters until they repeatedly clear the volume threshold. |
+| Lending | NAVI, Suilend, Scallop, AlphaLend | Lending optimizer, borrow health guardian, withdrawal liquidity monitor | Best next execution class after DeepBook because actions map cleanly to policy-scoped Sui PTBs. |
+| CDP / lending watch | Bucket, Current | CDP/peg-risk monitor, collateral/debt health, repay candidate drawer | Watch first; execution only after target id, repay sizing and stale-state constraints are specified. |
+| LST / vault / yield aggregator | SpringSui, Haedal, Volo, AlphaFi, Kai, Mole, Ember | LST/vault yield monitor, idle-yield watchtower, vault risk drawer | Monitor first; adapters need position/vault id constraints and redemption/liquidity checks. |
+| RWA yield on Sui | Ondo, KAIO, MatrixDock | RWA yield row, liquidity/settlement risk label, stable collateral monitor | Display/watch-only until issuer, redemption, liquidity and settlement risk flows are specified. |
+| Sui-native perps | Bluefin Pro, Sudo Perps, DipCoin Perps | Funding heatmap, liquidation buffer, hedge watchtower | Watch-only first; tiny/paper execution comes after margin and funding-flip safeguards. |
 
 ## 2. Strategy templates to show
 
@@ -52,12 +71,12 @@ The frontend should evolve from one "rescue grid" demo into a strategy catalog.
 
 3. **Perp DEX Spread / Basis Arbitrage**
    - User idea: perp DEX arbitrage between venues.
-   - Typical shape: compare mark/index/orderbook/funding across Bluefin, Sudo Perps and DipCoin Perps first.
+   - Typical shape: compare mark/index/orderbook/funding across Bluefin Pro, Sudo Perps and DipCoin Perps first.
    - UI must show: venue spread matrix, fees, slippage, open interest, liquidity depth, execution latency and partial-fill risk.
 
 4. **Lending Rate Optimizer**
    - User idea: lending.
-   - Typical shape: route idle stablecoins/SUI across Scallop, NAVI, Suilend, AlphaLend or Current.
+   - Typical shape: route idle stablecoins/SUI across NAVI, Suilend, Scallop and AlphaLend.
    - UI must show: supply APY, borrow APY, utilization, liquidation risk, collateral factor, withdrawal liquidity.
 
 5. **Borrow Health Guardian**
@@ -67,7 +86,7 @@ The frontend should evolve from one "rescue grid" demo into a strategy catalog.
 
 6. **LP Range Manager**
    - User idea: LP.
-   - Typical shape: Cetus CLMM/DLMM range placement first; Turbos, Momentum, Magma and STEAMM can enter as watch/data candidates.
+   - Typical shape: Cetus CLMM/DLMM range placement first; Bluefin Spot, Turbos and Momentum can enter as liquid DEX candidates.
    - UI must show: price range, current price, in-range status, fee APR, impermanent loss, rebalance threshold.
 
 ### Add after the first batch
@@ -117,7 +136,7 @@ Required components:
 - strategy category tabs: Risk Response, Funding, Perps, Lending, LP, Rebalance, Watchtower;
 - strategy cards with APY/risk/venues/capital required/status;
 - "available now", "testnet", "coming soon" status badges;
-- adapter badges: DeepBook, Cetus, Turbos, Momentum, Scallop, NAVI, Suilend, AlphaLend, Bucket, Bluefin;
+- adapter badges: DeepBook, Cetus, Bluefin Spot, Turbos, Momentum, NAVI, Suilend, Scallop, AlphaLend, Bucket, Bluefin Pro;
 - risk badges: market, liquidity, liquidation, oracle, smart contract, venue/custody;
 - one-click "Preview policy".
 
@@ -308,18 +327,20 @@ Ask design to produce these screens first:
 
 Recommended order:
 
-1. Sui protocol registry and watch-only data layer: DefiLlama Sui protocol coverage, public pool APIs and Sui RPC mapping.
-2. Lending health guardian / repay automation across NAVI, Suilend, Scallop, AlphaLend and Bucket.
-3. LP manager for Cetus DLMM/CLMM first; then Turbos, Momentum, Magma and STEAMM as watch/data candidates.
-4. LST, vault and RWA monitor for SpringSui, Haedal, Volo, AlphaFi, Kai, Mole, Ondo, KAIO and Ember.
-5. Sui-native perps monitor for Bluefin, Sudo Perps and DipCoin Perps in watch-only mode.
-6. Funding Rate Harvest with tiny/paper execution only after margin, liquidation and funding-flip handling are specified.
+1. Sui protocol registry and watch data layer: DefiLlama Sui non-CEX top 25/26 by TVL, plus volume exceptions such as Turbos.
+2. Liquid Sui DEX read adapters: DeepBook, Cetus, Bluefin Spot, Turbos and Momentum quotes, depth, pools, fee APR and spread rows.
+3. Lending health guardian / repay automation across NAVI, Suilend, Scallop and AlphaLend.
+4. LP manager for Cetus CLMM/DLMM first; consider Turbos or Momentum only after their APIs, volume and position constraints are stable.
+5. Bucket, Current, LST, vault and RWA monitors for health, redemption, liquidity and issuer risk.
+6. Sui-native perps monitor for Bluefin Pro, Sudo Perps and DipCoin Perps in watch-only mode.
+7. Funding Rate Harvest with tiny/paper execution only after margin, liquidation and funding-flip handling are specified.
 
 Reasoning:
 
-- Lending and LP management fit Sui-native adapters earlier and map cleanly to policy-scoped Sui PTBs.
-- Vault, RWA and CDP products need clearer redemption/liquidity/position-id constraints before execution authority.
-- Funding/perp arbitrage needs perps venue accounts, margin, liquidation and funding flip handling, so it should be watch-only first.
+- The frontend can show the top Sui protocol universe without implying that every protocol is executable.
+- DEX and lending execution should lead because they have observable liquidity, clear transaction shapes and policy-scoped Sui PTBs.
+- Vault, RWA, CDP and perps products need clearer redemption, liquidity, position-id, issuer, margin and liquidation constraints before execution authority.
+- Long-tail DEX protocols should remain watch-only unless they repeatedly clear the volume threshold.
 
 ### P3: production platform
 
@@ -357,5 +378,5 @@ Design should treat these as concrete deliverables, not loose inspiration.
 - [DeFi Saver Automation](https://defisaver.com/features/automation) and its [automation knowledge base](https://help.defisaver.com/features/automation) prove liquidation protection, stop-loss, take-profit, trailing-stop and leverage-management primitives.
 - [Morpho Vault roles](https://legacy.docs.morpho.org/morpho-vaults/concepts/roles), [Morpho Vault overview](https://legacy.docs.morpho.org/morpho-vaults/contracts/overview/) and [Morpho Public Allocator](https://docs.morpho.org/get-started/resources/contracts/public-allocator/) prove cap, curator, allocator and Guardian patterns for controlled automated allocation.
 - [Bluefin Funding](https://learn.bluefin.io/bluefin/bluefin-perps-exchange/trading/funding) proves Sui-native perp/funding demand, but also the need to show margin, funding-flip, venue and custody risks.
-- [DefiLlama Sui chain](https://defillama.com/chain/Sui), [DefiLlama protocol API](https://api.llama.fi/protocols) and [DefiLlama yield API](https://yields.llama.fi/pools) are the current public baseline for Sui protocol coverage, TVL and yield discovery.
+- [DefiLlama Sui chain](https://defillama.com/chain/Sui), [DefiLlama protocol API](https://api.llama.fi/protocols), [DefiLlama Sui DEX volume API](https://api.llama.fi/overview/dexs/sui?excludeTotalDataChart=true&excludeTotalDataChartBreakdown=true) and [DefiLlama yield API](https://yields.llama.fi/pools) are the current public baseline for Sui protocol coverage, TVL, volume and yield discovery.
 - [DeepBook official docs](https://docs.sui.io/standards/deepbookv3), [Cetus CLMM SDK](https://github.com/CetusProtocol/cetus-clmm-sui-sdk), [Suilend SDK](https://docs.suilend.fi/ecosystem/suilend-sdk-guide), [NAVI docs](https://docs.naviprotocol.io/) and [Scallop docs](https://docs.scallop.io/) prove Sui-native execution and lending adapters are a natural next step.

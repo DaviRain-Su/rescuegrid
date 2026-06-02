@@ -94,11 +94,11 @@
 | --- | --- | --- | --- | --- |
 | H1 | Explore | 3h | Local CLI daemon design spike | 明确 `rescuegrid daemon run/status/tick/logs` 命令、key storage、外部 signer 和 activity sync |
 | H2 | Commit | 4h | 抽出 Runtime Core package | Worker 和 CLI daemon 可复用 PolicyReader、Guardian、ExecutorAdapter registry、ActivityWriter 接口 |
-| H3 | Commit | 4h | Sui protocol registry and watch data layer | DefiLlama Sui protocol/yield feed、Sui RPC、public pool API 被统一映射成 protocol、venue、market、risk metadata；不得引入 non-Sui venue |
-| H4 | Explore | 4h | Sui lending/CDP adapter design | 明确 NAVI、Suilend、Scallop、AlphaLend、Current、Bucket 的 market id、collateral/debt state、repay sizing、stale-state pre-step 和 hot-potato ticket 约束 |
-| H5 | Explore | 4h | Sui CLMM/AMM adapter design | 明确 Cetus first；Turbos、Momentum、Magma、STEAMM 先做 watch/data；记录 position id、bin/range、fee collection、rebalance 和 agent delegation 风险 |
-| H6 | Explore | 3h | Sui LST/vault/RWA/perps watch design | 明确 SpringSui、Haedal、Volo、AlphaFi、Kai、Mole、Ondo、KAIO、Ember、Bluefin、Sudo、DipCoin 的可读状态、redemption/liquidity/margin 风险和 watch-only 边界 |
-| H7 | Commit | 4h | Adapter SDK skeleton | 新 adapter 必须提供 readMarket、planExecution、buildPtb、parseExecutionResult 和 conformance tests |
+| H3 | Commit | 4h | Sui Top 25/26 registry and watch data layer | DefiLlama Sui non-CEX Top 25/26、volume exceptions、Sui RPC、public pool API 被统一映射成 protocol、venue、market、risk metadata；CEX 和 non-Sui venue 不得进入当前分支 |
+| H4 | Explore | 4h | Liquid Sui DEX adapter design | 明确 DeepBook、Cetus、Bluefin Spot、Turbos、Momentum 的 quote/depth/pool/position constraints；Magma、STEAMM、Aftermath AMM 等长尾 DEX 只有连续达标才进入执行候选 |
+| H5 | Explore | 4h | Sui lending execution design | 明确 NAVI、Suilend、Scallop、AlphaLend 的 market id、collateral/debt state、repay sizing、withdrawal liquidity、stale-state pre-step 和 hot-potato ticket 约束 |
+| H6 | Explore | 3h | Watch-only protocol design | 明确 Bucket、Current、SpringSui、Haedal、Volo、AlphaFi、Kai、Mole、Ondo、KAIO、MatrixDock、Ember、Bluefin Pro、Sudo、DipCoin 的可读状态、redemption/liquidity/issuer/margin 风险和禁止执行边界 |
+| H7 | Commit | 4h | Adapter SDK skeleton | 新 adapter 必须提供 readMarket、planExecution、buildPtb、parseExecutionResult、liquidity gate、volume gate 和 conformance tests |
 
 ## Phase I - Post-MVP Multivenue Expansion
 

@@ -80,12 +80,20 @@ Rules:
 
 Post-MVP adapter candidates:
 
-- `sui-lending`: NAVI, Suilend, Scallop, AlphaLend and Current supply, redeem, unwind and health-risk-reduction flows.
-- `sui-cdp`: Bucket collateral, debt, peg-risk and repay/deleverage flows.
-- `sui-clmm`: Cetus first; Turbos, Momentum, Magma and STEAMM as watch/data candidates before range-management execution.
-- `sui-vault-lst`: SpringSui, Haedal, Volo, Aftermath, AlphaFi, Kai, Mole and Ember supply/redeem or watchtower flows.
-- `sui-rwa`: Ondo and KAIO watch-only RWA yield and liquidity/settlement risk surfaces before any execution authority.
-- `sui-perps-watch`: Bluefin, Sudo Perps and DipCoin Perps funding, liquidation and venue-risk monitoring before any tiny/paper execution.
+Adapter inclusion gates:
+
+- Monitoring coverage tracks the DefiLlama Sui non-CEX Top 25/26, plus explicit volume exceptions.
+- Execution adapters require sustained liquidity/volume, stable read APIs, explicit target ids, deterministic plan previews and Guardian-readable risk fields.
+- CEX entries, RWA issuer products and perps venues are excluded from autonomous execution until their custody, settlement, margin and liquidation semantics are specified.
+
+Candidate adapter classes:
+
+- `sui-lending`: NAVI, Suilend, Scallop and AlphaLend supply, redeem, unwind and health-risk-reduction flows. Current stays watch-first until liquidity and market constraints justify execution.
+- `sui-clmm`: Cetus first; Bluefin Spot, Turbos and Momentum as later liquid DEX candidates after quote/depth/position constraints are stable. Magma, STEAMM and other long-tail DEXs stay watch-only unless they repeatedly clear the volume threshold.
+- `sui-cdp-watch`: Bucket collateral, debt, peg-risk and repay/deleverage monitoring. Execution waits for target id, repay sizing and stale-state constraints.
+- `sui-vault-lst-watch`: SpringSui, Haedal, Volo, AlphaFi, Kai, Mole and Ember supply/redeem or watchtower flows. Execution waits for position/vault id constraints and redemption/liquidity checks.
+- `sui-rwa-watch`: Ondo, KAIO and MatrixDock watch-only RWA yield and liquidity/settlement risk surfaces before any execution authority.
+- `sui-perps-watch`: Bluefin Pro, Sudo Perps and DipCoin Perps funding, liquidation and venue-risk monitoring before any tiny/paper execution.
 
 These adapters are not allowed to reuse the Deepbook-specific `pool_id` constraint unless their target semantics are equivalent. If they need position ids, vault ids, lending market ids or bin ranges, add adapter-specific wrapper fields or a new wrapper version.
 
