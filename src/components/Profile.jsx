@@ -377,14 +377,14 @@ export function Profile({ account, holdings, policies, funding = null, live = fa
             </Button>
           </div>
 
-          {/* gas: live = real self-paid posture; demo = sponsored persona */}
+          {/* gas: live and demo both use explicit wallet + agent gas posture */}
           <div className="card" style={{ padding: '16px 18px' }}>
             <div className="card-hd" style={{ padding: 0, marginBottom: 12 }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                 <span style={{ color: 'var(--warn)' }}><Icon name="bolt" size={16} /></span>
-                <div className="card-title">{live ? 'Gas & fees' : 'Gas station'}{live && advisory}</div>
+                <div className="card-title">{live ? 'Gas & fees' : 'Agent gas'}{live && advisory}</div>
               </div>
-              <span className="badge badge-warn" style={{ fontSize: 9.5 }}>{readOnly ? 'read-only' : live ? 'self-paid' : 'sponsored'}</span>
+              <span className="badge badge-warn" style={{ fontSize: 9.5 }}>{readOnly ? 'read-only' : live ? 'self-paid' : 'explicit'}</span>
             </div>
             {live ? (
               <>
@@ -409,17 +409,17 @@ export function Profile({ account, holdings, policies, funding = null, live = fa
               <>
                 <div style={{ display: 'flex', gap: 12 }}>
                   <div style={{ flex: 1 }}>
-                    <div className="mono display" style={{ fontSize: 22, fontWeight: 600 }}>{a.gas?.sponsored ?? '—'}</div>
-                    <div style={{ fontSize: 11, color: 'var(--t2)', marginTop: 2 }}>txns sponsored</div>
+                    <div className="mono display" style={{ fontSize: 22, fontWeight: 600 }}>{a.gas?.agentTxs ?? '—'}</div>
+                    <div style={{ fontSize: 11, color: 'var(--t2)', marginTop: 2 }}>agent txns</div>
                   </div>
                   <div style={{ width: 1, background: 'var(--border)' }} />
                   <div style={{ flex: 1 }}>
-                    <div className="mono display" style={{ fontSize: 22, fontWeight: 600 }}>{a.gas?.saved ?? '—'}</div>
-                    <div style={{ fontSize: 11, color: 'var(--t2)', marginTop: 2 }}>SUI gas saved</div>
+                    <div className="mono display" style={{ fontSize: 22, fontWeight: 600 }}>{a.gas?.spent ?? '—'}</div>
+                    <div style={{ fontSize: 11, color: 'var(--t2)', marginTop: 2 }}>SUI gas spent</div>
                   </div>
                 </div>
                 <div style={{ fontSize: 10.5, color: 'var(--t2)', marginTop: 12, lineHeight: 1.45 }}>
-                  The agent pays fees from the {a.gas?.station || 'RescueGrid Gas Station'} — you hold no SUI for gas and never sign a fee.
+                  Demo mirrors live mode: policy changes are owner-signed, while autonomous execution uses the {a.gas?.station || 'dedicated agent gas key'} and remains blocked unless gas plus BalanceManager inventory are funded.
                 </div>
               </>
             )}

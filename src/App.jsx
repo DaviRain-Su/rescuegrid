@@ -612,11 +612,11 @@ export default function App({ onExit }) {
                 </span>
                 <Icon name="chevR" size={13} style={{ color: 'var(--t3)' }} />
               </button>
-              {/* gas sponsorship note */}
+              {/* execution readiness note */}
               <div style={{ display: 'flex', gap: 8, marginTop: 8, padding: '9px 10px', borderRadius: 'var(--r-sm)', background: 'var(--glass)' }}>
                 <span style={{ color: 'var(--warn)', flexShrink: 0, marginTop: 1 }}><Icon name="bolt" size={14} /></span>
                 <div style={{ fontSize: 10.5, lineHeight: 1.45, color: 'var(--t1)' }}>
-                  Gas is <strong style={{ color: 'var(--t0)' }}>sponsored</strong> — the agent pays fees from a gas station, so it acts without SUI of its own.
+                  Agent gas is <strong style={{ color: 'var(--t0)' }}>explicit</strong> — live execution requires SUI gas and funded DeepBook inventory on the deployment agent.
                 </div>
               </div>
             </div>

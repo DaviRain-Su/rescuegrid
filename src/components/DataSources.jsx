@@ -143,7 +143,7 @@ export function DataSources({ onToast, live, setLive }) {
               <span style={{ fontSize: 12.5, fontWeight: 600, color: 'var(--warn)' }}>Via backend</span>
             </div>
             <div style={{ fontSize: 11.5, color: 'var(--t1)', lineHeight: 1.5 }}>
-              DeepBook execution building, policy activation and signing support run through the Cloudflare Worker + Sui signer. The zkLogin executor <strong style={{ color: 'var(--t0)' }}>never touches the browser</strong>, and every action stays inside the scoped Move policy.
+              DeepBook execution building and policy activation run through the Cloudflare Worker. Create/revoke return unsigned tx_json for the wallet to sign; autonomous execution uses the dedicated agent key, and every action stays inside the scoped Move policy.
             </div>
           </div>
         </div>

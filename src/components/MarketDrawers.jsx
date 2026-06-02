@@ -272,7 +272,7 @@ export function AgentRuntimeDrawer({ mode, onClose, onToast }) {
             <span style={{ color: 'var(--warn)', flexShrink: 0 }}><Icon name="bolt" size={18} /></span>
             <div style={{ flex: 1 }}>
               <div style={{ fontSize: 12.5, fontWeight: 600 }}>{r.gas.station}</div>
-              <div style={{ fontSize: 11, color: 'var(--t2)' }}>Sponsors gas — agent holds no SUI of its own</div>
+              <div style={{ fontSize: 11, color: 'var(--t2)' }}>Agent key pays execution gas; readiness checks block when unfunded</div>
             </div>
             <div className="mono" style={{ fontSize: 14, fontWeight: 600 }}>{r.gas.bal} {r.gas.unit}</div>
           </div>

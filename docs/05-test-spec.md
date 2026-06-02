@@ -341,6 +341,7 @@ MVP desktop viewport:
 - Confirm flow creates Policy and updates state.
 - Activity view shows events and budget within one 5 second polling interval after chain state changes.
 - Revoke button changes state to revoked within one 5 second polling interval.
+- Policy Inspect names the real MoveGate Mandate + RescuePolicyWrapper model and does not show stale AgentPolicy, AgentCap, or sponsored-gas claims.
 - Primary buttons have text labels and disabled/loading states.
 
 Post-MVP mobile viewport:

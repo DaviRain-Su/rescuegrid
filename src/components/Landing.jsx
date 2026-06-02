@@ -202,11 +202,11 @@ export function Landing({ onLaunch }) {
             </div>
             {/* capability card */}
             <div style={{ padding: 46, background: 'var(--bg-0)', borderLeft: '1px solid var(--border)', display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
-              <div className="eyebrow" style={{ marginBottom: 14 }}>AgentPolicy · granted vs denied</div>
+              <div className="eyebrow" style={{ marginBottom: 14 }}>MoveGate + Wrapper · granted vs denied</div>
               <div style={{ display: 'flex', flexDirection: 'column', gap: 9 }}>
                 {[
-                  { fn: 'place_limit_order', ok: true },
-                  { fn: 'cancel_order', ok: true },
+                  { fn: 'movegate::authorize_action', ok: true },
+                  { fn: 'policy::record_agent_trade', ok: true },
                 ].map(c => (
                   <div key={c.fn} style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
                     <span style={{ width: 20, height: 20, borderRadius: 5, background: 'var(--safe-dim)', color: 'var(--safe)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><Check /></span>
@@ -215,7 +215,7 @@ export function Landing({ onLaunch }) {
                   </div>
                 ))}
                 <div className="divider" style={{ margin: '4px 0' }}></div>
-                {['coin::withdraw', 'public_transfer', 'policy::set_budget'].map(fn => (
+                {['wrapper.pool_id mismatch', 'public_transfer', 'revoked mandate'].map(fn => (
                   <div key={fn} style={{ display: 'flex', alignItems: 'center', gap: 10, opacity: .85 }}>
                     <span style={{ width: 20, height: 20, borderRadius: 5, background: 'var(--danger-dim)', color: 'var(--danger)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><Cross /></span>
                     <span className="mono" style={{ fontSize: 12, color: 'var(--t1)' }}>{fn}</span>

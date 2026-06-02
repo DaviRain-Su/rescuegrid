@@ -168,7 +168,7 @@ export function attachMarketData(RG) {
       yield: [
         { label: 'Funding watched', v: '+12.4%', c: 'var(--safe)' },
         { label: 'Trading fees', v: '-0.4%', c: 'var(--t1)' },
-        { label: 'Gas', v: 'sponsored', c: 'var(--t2)' },
+        { label: 'Gas', v: 'agent-paid', c: 'var(--t2)' },
       ],
       net: { label: 'Hedge value', v: 'Sui-only risk reduction' },
       risk: [
@@ -255,7 +255,7 @@ export function attachMarketData(RG) {
       yield: [
         { label: 'Avg entry vs market', v: '-6.2%', c: 'var(--safe)' },
         { label: 'Trading fees', v: '-0.4%', c: 'var(--t1)' },
-        { label: 'Gas', v: 'sponsored', c: 'var(--t2)' },
+        { label: 'Gas', v: 'agent-paid', c: 'var(--t2)' },
       ],
       net: { label: 'Dip captured', v: '~6% under market' },
       risk: [
@@ -382,8 +382,8 @@ export function attachMarketData(RG) {
     { feed: 'Switchboard / WAL/USD', status: 'stale', age: '14s', dev: '0.31%' },
   ]
   RG.signers = [
-    { name: 'zkLogin session key', kind: 'zklogin', status: 'ok', detail: 'epoch 612 / 614, about 36h left' },
-    { name: 'Cloud agent executor', kind: 'cloud', status: 'ok', detail: '0x7a3f...c91e, sponsored gas' },
+    { name: 'Owner wallet signer', kind: 'wallet', status: 'ok', detail: 'create/revoke only; no owner key custody' },
+    { name: 'Cloud agent executor', kind: 'cloud', status: 'ok', detail: '0x7a3f...c91e, explicit SUI gas key' },
     { name: 'Local daemon', kind: 'local', status: 'offline', detail: 'not running, cloud handling policies' },
   ]
 
@@ -417,7 +417,7 @@ export function attachMarketData(RG) {
     { id: 'cdp-rwa', scope: 'sui', group: 'On-chain', name: 'Sui CDP and RWA feeds', provider: 'Bucket / Ondo / KAIO / Ember', endpoint: 'Sui RPC + protocol APIs', type: 'REST / RPC', access: 'mixed', cadence: '60s', powers: 'CDP, peg-risk, RWA and capital allocator monitors', test: null },
     { id: 'bluefin', scope: 'sui', group: 'Derivatives', name: 'Bluefin funding rates', provider: 'Bluefin', endpoint: 'public Sui funding endpoint', type: 'REST / WS', access: 'mixed', cadence: '5s', powers: 'Sui perp hedge monitor', test: null },
     { id: 'perps-extra', scope: 'sui', group: 'Derivatives', name: 'Sui-native perps watch feeds', provider: 'Bluefin / Sudo / DipCoin', endpoint: 'public perps endpoints', type: 'REST / WS', access: 'mixed', cadence: '5s', powers: 'Funding, liquidation and venue-risk watchtower', test: null },
-    { id: 'signer', scope: 'sui', group: 'Execution', name: 'Sui agent signer / executor', provider: 'zkLogin + Cloudflare', endpoint: 'durable object + Sui signer', type: 'internal', access: 'proxy', cadence: 'on demand', powers: 'Policy execution and gas sponsor', test: null },
+    { id: 'signer', scope: 'sui', group: 'Execution', name: 'Sui agent signer / executor', provider: 'Wallet + Cloudflare agent key', endpoint: 'durable object + Sui signer', type: 'internal', access: 'proxy', cadence: 'on demand', powers: 'Policy tx building, execution and readiness gates', test: null },
   ]
 
   RG.runtimes = {
@@ -434,14 +434,15 @@ export function attachMarketData(RG) {
       loopMs: 850,
       tick: 'every 8s',
       watching: 3,
-      gas: { station: 'RescueGrid Gas Station', bal: 4.81, unit: 'SUI' },
+      gas: { station: 'Dedicated agent gas key', bal: 4.81, unit: 'SUI' },
       privacy: 'Decision logic runs on our edge; only signed Sui transactions hit chain.',
-      tags: ['always-on', 'zero-setup', 'sponsored gas'],
+      tags: ['always-on', 'zero-setup', 'explicit gas'],
       health: [
         { k: 'Worker', v: 'healthy', ok: true },
         { k: 'Durable Object', v: 'persistent state synced', ok: true },
         { k: 'RPC connection', v: 'fullnode.testnet, 41ms', ok: true },
-        { k: 'Signer (zkLogin)', v: 'epoch 612, about 36h left', ok: true },
+        { k: 'Agent gas key', v: 'dedicated Sui key, 4.81 SUI', ok: true },
+        { k: 'BalanceManager', v: 'funding gate checked', ok: null },
       ],
       log: [
         { t: '14:39:58', d: 'Heartbeat, 3 Sui policies evaluated, no action' },
@@ -462,14 +463,14 @@ export function attachMarketData(RG) {
       loopMs: null,
       tick: 'every 8s',
       watching: 0,
-      gas: { station: 'RescueGrid Gas Station', bal: 4.81, unit: 'SUI' },
+      gas: { station: 'Local agent gas key', bal: 0, unit: 'SUI' },
       privacy: 'Decision logic never leaves your machine.',
       tags: ['private', 'BYO LLM', 'self-hosted'],
       health: [
         { k: 'Daemon process', v: 'not running', ok: false },
         { k: 'Local LLM', v: 'no endpoint detected', ok: false },
         { k: 'RPC connection', v: 'would use your Sui RPC', ok: null },
-        { k: 'Signer (zkLogin)', v: 'shared session key', ok: true },
+        { k: 'Local agent key', v: 'BYO Sui key required', ok: null },
       ],
       log: [
         { t: '-', d: 'Daemon offline, cloud is currently handling Sui policies' },

@@ -284,7 +284,7 @@ export function RiskCenter({ policies, onEmergencyStop, onToast, stopped }) {
               return (
                 <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 11, padding: '11px 13px', borderRadius: 'var(--r-sm)', background: 'var(--glass)', border: '1px solid var(--border)', opacity: s.status === 'offline' ? .68 : 1 }}>
                   <span style={{ width: 28, height: 28, borderRadius: 8, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', background: h[1], color: h[0] }}>
-                    <Icon name={s.kind === 'zklogin' ? 'fingerprint' : s.kind === 'cloud' ? 'cloud' : 'cpu'} size={15} />
+                    <Icon name={s.kind === 'wallet' ? 'wallet' : s.kind === 'cloud' ? 'cloud' : 'cpu'} size={15} />
                   </span>
                   <div style={{ flex: 1, minWidth: 0 }}>
                     <div style={{ fontSize: 12.5, fontWeight: 600 }}>{s.name}</div>

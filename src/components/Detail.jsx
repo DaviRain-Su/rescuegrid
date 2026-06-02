@@ -1,6 +1,6 @@
 /* ===========================================================
    RescueGrid — Policy Inspect slide-over + on-chain explorer
-   Makes the Move Policy Object tangible: struct, capabilities,
+   Makes the MoveGate Mandate + RescuePolicyWrapper tangible: struct, capabilities,
    protocol allow-list, audit trail.
    =========================================================== */
 import { RG } from '../data.js'
@@ -37,22 +37,33 @@ function resolveInspectSource(source) {
   }
 }
 
+function shortId(value) {
+  if (!value || typeof value !== 'string') return '—'
+  return value.length > 16 ? `${value.slice(0, 8)}…${value.slice(-6)}` : value
+}
+
 export function PolicyInspect({ p, activity, onClose, onRevoke, onTx, readOnly = false, source = null }) {
   const pct = Math.round((p.budgetUsed / p.budgetCap) * 100)
   const log = filterPolicyActivity(activity, p)
   const sourceMeta = resolveInspectSource(source)
   const liveSource = sourceMeta.kind !== 'demo'
-  const objectLabel = liveSource ? 'Move Policy Object' : 'Demo policy-shaped object'
+  const objectLabel = liveSource ? 'MoveGate Mandate + Wrapper' : 'Demo policy-shaped object'
   const budgetLabel = liveSource ? 'On-chain budget ceiling' : 'Demo budget ceiling'
-  const structLabel = liveSource ? 'On-chain object · move' : 'Demo object shape · move-like'
+  const structLabel = liveSource ? 'RescuePolicyWrapper · move' : 'Demo wrapper shape · move-like'
   const auditLabel = liveSource ? `Audit trail · ${log.length} on-chain events` : `Demo audit trail · ${log.length} simulated events`
   const budgetCopy = liveSource
-    ? 'The agent calls assert_within_budget() before every order. Exceeding the cap aborts the transaction on-chain — it is impossible to overspend.'
-    : 'This budget is local demo state. It previews the cap a real Move policy would enforce after minting.'
+    ? 'The wrapper checks cumulative spent_amount against budget_ceiling before recording an agent trade. Exceeding the cap aborts the transaction on-chain.'
+    : 'This budget is local demo state. It previews the cap a real RescuePolicyWrapper would enforce after minting.'
   const capabilityCopy = liveSource
-    ? 'The agent literally has no capability to move funds out of your wallet. It can only trade within scope.'
-    : 'The demo shape denies withdraw and transfer capabilities. Real enforcement comes from the Move policy once minted.'
-  const expiryMs = new Date(p.expires).getTime()
+    ? 'MoveGate authorizes only the RescueGrid protocol/action, and the wrapper then enforces pool, budget, slippage and linked mandate constraints.'
+    : 'The demo shape previews MoveGate + Wrapper constraints. Real enforcement comes from the shared objects once minted.'
+  const wrapperId = p._wrapperId || p.id
+  const mandateId = p._mandateId || null
+  const budgetCoin = p.budgetCoinType || 'DBUSDC'
+  const poolId = p.poolId || p.scope.join(', ')
+  const strategyHash = p.strategyHash || null
+  const budgetUnits = Math.round(Number(p.budgetCap || 0) * 1_000_000)
+  const spentUnits = Math.round(Number(p.budgetUsed || 0) * 1_000_000)
   const statusMeta = {
     active: { cls: 'badge-safe', label: 'active', pulse: true },
     revoked: { cls: 'badge-danger', label: 'revoked', pulse: false },
@@ -61,7 +72,7 @@ export function PolicyInspect({ p, activity, onClose, onRevoke, onTx, readOnly =
   }[p.status] || { cls: 'badge-neutral', label: p.status || 'unknown', pulse: false }
 
   const protocols = [
-    { name: 'Deepbook v3', kind: 'CLOB · spot', on: p.scope.length > 0, note: 'order book — place / cancel limit orders' },
+    { name: 'Deepbook v3', kind: 'CLOB · spot', on: p.scope.length > 0, note: 'MVP executor adapter · target bound by pool_id' },
     { name: 'Cetus / Turbos / Momentum', kind: 'CLMM · LP', on: false, note: 'roadmap · watch first' },
     { name: 'NAVI / Suilend / Scallop', kind: 'lending', on: false, note: 'roadmap · health guardian' },
     { name: 'Bucket / AlphaLend / Current', kind: 'CDP · lending', on: false, note: 'roadmap · risk monitor' },
@@ -70,18 +81,19 @@ export function PolicyInspect({ p, activity, onClose, onRevoke, onTx, readOnly =
   ]
 
   const structLines = [
-    { t: 'public struct ', k: 'AgentPolicy', t2: ' has key {' },
-    { indent: 1, key: 'id', val: 'UID' },
-    { indent: 1, key: 'owner', val: `address  // ${p.owner ? p.owner.slice(0, 10) + '…' + p.owner.slice(-6) : RG.user.addr}` },
-    { indent: 1, key: 'agent_cap', val: 'ID  // session key, revocable' },
-    { indent: 1, key: 'budget_cap', val: `u64  // ${p.budgetCap}_000000 (${p.budgetCap} USDC)` },
-    { indent: 1, key: 'budget_spent', val: `u64  // ${p.budgetUsed}_000000` },
-    { indent: 1, key: 'allowed_pools', val: `vector<ID>  // [${p.scope.join(', ')}]` },
+    { t: 'public struct ', k: 'RescuePolicyWrapper', t2: ' has key, store {' },
+    { indent: 1, key: 'id', val: `UID  // ${shortId(wrapperId)}` },
+    { indent: 1, key: 'owner', val: `address  // ${p.owner ? shortId(p.owner) : RG.user.addr}` },
+    { indent: 1, key: 'mandate_id', val: `ID  // ${mandateId ? shortId(mandateId) : 'MoveGate mandate'}` },
+    { indent: 1, key: 'agent', val: `address  // ${p.agent ? shortId(p.agent) : 'deployment agent'}` },
+    { indent: 1, key: 'pool_id', val: `ID  // ${shortId(poolId)}` },
+    { indent: 1, key: 'budget_coin_type', val: `String  // ${budgetCoin}` },
+    { indent: 1, key: 'budget_ceiling', val: `u64  // ${budgetUnits} (${p.budgetCap} USDC)` },
+    { indent: 1, key: 'spent_amount', val: `u64  // ${spentUnits}` },
     { indent: 1, key: 'max_slippage_bps', val: `u16  // ${Math.round(p.maxSlippage * 100)}` },
-    { indent: 1, key: 'price_oracle', val: 'ID  // Pyth SUI/USDC feed' },
-    { indent: 1, key: 'gas_budget', val: 'u64  // sponsored · gas station' },
-    { indent: 1, key: 'expiry_ms', val: `u64  // ${expiryMs}` },
+    { indent: 1, key: 'strategy_hash', val: `vector<u8>  // ${strategyHash ? shortId(strategyHash) : 'confirmed intent hash'}` },
     { t: '}' },
+    { t: 'linked ', k: 'MoveGate Mandate', t2: ' enforces agent, expiry, revocation, protocol/action allow-list' },
   ]
 
   return (
@@ -143,15 +155,17 @@ export function PolicyInspect({ p, activity, onClose, onRevoke, onTx, readOnly =
           <div>
             <div className="eyebrow" style={{ marginBottom: 4 }}>Delegated capabilities</div>
             <div style={{ background: 'var(--glass)', border: '1px solid var(--border)', borderRadius: 'var(--r-md)', padding: '4px 16px' }}>
-              <CapRow granted label="Place limit order" fn="deepbook::place_limit_order" />
+              <CapRow granted label="Authorize rescue action" fn="movegate::mandate::authorize_action" />
               <div className="divider" />
-              <CapRow granted label="Cancel own order" fn="deepbook::cancel_order" />
+              <CapRow granted label="Record bounded rescue trade" fn="policy::record_agent_trade" />
               <div className="divider" />
-              <CapRow granted={false} label="Withdraw funds" fn="coin::withdraw" />
+              <CapRow granted label="Consume AuthToken once" fn="movegate::receipt::create_success_receipt" />
               <div className="divider" />
-              <CapRow granted={false} label="Transfer assets out" fn="transfer::public_transfer" />
+              <CapRow granted={false} label="Trade any other pool" fn="wrapper.pool_id mismatch" />
               <div className="divider" />
-              <CapRow granted={false} label="Modify this policy" fn="policy::set_budget" />
+              <CapRow granted={false} label="Transfer owner wallet assets" fn="transfer::public_transfer" />
+              <div className="divider" />
+              <CapRow granted={false} label="Execute after revoke or expiry" fn="MoveGate mandate check" />
             </div>
             <div style={{ fontSize: 11.5, color: 'var(--t2)', marginTop: 8 }}>{capabilityCopy}</div>
           </div>
@@ -184,29 +198,29 @@ export function PolicyInspect({ p, activity, onClose, onRevoke, onTx, readOnly =
               <div style={{ display: 'flex', gap: 11, padding: '11px 13px', borderRadius: 'var(--r-sm)', background: 'var(--glass)', border: '1px solid var(--border)' }}>
                 <span style={{ color: 'var(--sui)', flexShrink: 0 }}><Icon name="wallet" size={16} /></span>
                 <div>
-                  <div style={{ fontSize: 12.5, fontWeight: 600 }}>{liveSource ? 'Signs with a session key' : 'Session key model'}</div>
+                  <div style={{ fontSize: 12.5, fontWeight: 600 }}>{liveSource ? 'Owner signs create/revoke only' : 'Owner-signing model'}</div>
                   <div style={{ fontSize: 11.5, color: 'var(--t2)', marginTop: 2 }}>
                     {liveSource
-                      ? <>The agent uses the delegated <span className="mono" style={{ color: 'var(--t1)' }}>AgentCap</span> — never your zkLogin key. Revoke it and signing power vanishes.</>
-                      : <>Demo mode previews the delegated <span className="mono" style={{ color: 'var(--t1)' }}>AgentCap</span> model. No session key is active until a real policy is minted.</>}
+                      ? <>The Worker builds unsigned <span className="mono" style={{ color: 'var(--t1)' }}>tx_json</span>; your wallet signs create/revoke. The agent never receives your owner key.</>
+                      : <>Demo mode previews the owner-signed create/revoke path. No authority exists until a real wallet signs the policy transaction.</>}
                   </div>
                 </div>
               </div>
               <div style={{ display: 'flex', gap: 11, padding: '11px 13px', borderRadius: 'var(--r-sm)', background: 'var(--glass)', border: '1px solid var(--border)' }}>
                 <span style={{ color: 'var(--warn)', flexShrink: 0 }}><Icon name="bolt" size={16} /></span>
                 <div>
-                  <div style={{ fontSize: 12.5, fontWeight: 600 }}>{liveSource ? 'Gas is sponsored' : 'Sponsored gas model'}</div>
-                  <div style={{ fontSize: 11.5, color: 'var(--t2)', marginTop: 2 }}>{liveSource ? 'Fees are paid by a gas station via sponsored transactions, so the agent needs no SUI of its own to act autonomously.' : 'Demo mode shows the intended sponsored transaction path. No gas is spent by these sample rows.'}</div>
+                  <div style={{ fontSize: 12.5, fontWeight: 600 }}>{liveSource ? 'Agent gas is explicit' : 'Execution gas model'}</div>
+                  <div style={{ fontSize: 11.5, color: 'var(--t2)', marginTop: 2 }}>{liveSource ? 'Autonomous execution needs the deployment agent to hold SUI gas plus funded DeepBook BalanceManager inventory; readiness checks block when either is missing.' : 'Demo mode spends no gas. Live execution requires agent gas and funded BalanceManager inventory.'}</div>
                 </div>
               </div>
               <div style={{ display: 'flex', gap: 11, padding: '11px 13px', borderRadius: 'var(--r-sm)', background: 'var(--glass)', border: '1px solid var(--border)' }}>
                 <span style={{ color: 'var(--accent)', flexShrink: 0 }}><Icon name="target" size={16} /></span>
                 <div>
-                  <div style={{ fontSize: 12.5, fontWeight: 600 }}>{liveSource ? 'Triggers read a Pyth feed' : 'Trigger model'}</div>
+                  <div style={{ fontSize: 12.5, fontWeight: 600 }}>{liveSource ? 'Runtime watches DeepBook market data' : 'Trigger model'}</div>
                   <div style={{ fontSize: 11.5, color: 'var(--t2)', marginTop: 2 }}>
                     {liveSource
-                      ? <>Price conditions are asserted on-chain against the <span className="mono" style={{ color: 'var(--t1)' }}>Pyth</span> oracle — the agent can't fake a trigger.</>
-                      : <>Demo mode previews Pyth-backed trigger checks. Real assertions happen on-chain only after minting a policy.</>}
+                      ? <>The Durable Object monitors the SUI/DBUSDC feed, then Guardian and the wrapper enforce budget, pool, slippage, revocation and expiry before submission.</>
+                      : <>Demo mode previews the same trigger shape. Live checks rely on Worker market reads plus on-chain Mandate/Wrapper enforcement.</>}
                   </div>
                 </div>
               </div>

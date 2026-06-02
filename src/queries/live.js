@@ -45,6 +45,10 @@ export function mapLivePolicy(p, spentUnits = 0, status = 'active', mode = 'clou
     created: '2026-06-02',
     execs: 0,
     owner: p.owner,
+    agent: p.agent || null,
+    poolId: p.pool_id || null,
+    budgetCoinType: p.budget_coin_type || null,
+    strategyHash: p.strategy_hash || null,
     runtimeState: p.runtime_state || null,
     runtimeStateStale: Boolean(p.runtime_state_stale),
   }
