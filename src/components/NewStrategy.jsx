@@ -75,6 +75,12 @@ function sliderNumber(value) {
   return Array.isArray(value) ? Number(value[0]) : Number(value)
 }
 
+function shortValue(value) {
+  if (!value) return '—'
+  const s = String(value)
+  return s.length > 18 ? `${s.slice(0, 8)}…${s.slice(-6)}` : s
+}
+
 function LegBuilder({ scenario, budget, leverage, legs, setLegs }) {
   const venues = VENUE_OPTS[scenario] || VENUE_OPTS['funding-arb']
   const isSpot = scenario === 'spot'
@@ -309,7 +315,7 @@ export function NewStrategy({ onDone, mode, setMode, seed }) {
             <h2 className="display" style={{ fontSize: 19, fontWeight: 600 }}>Describe your strategy</h2>
           </div>
           <p style={{ color: 'var(--t1)', fontSize: 13.5, marginBottom: 16 }}>
-            Write it in plain language. The agent translates intent into a programmable transaction block (PTB) and a Move Policy Object that limits exactly what it can do.
+            Write it in plain language. The agent translates intent into a programmable transaction block (PTB) and a MoveGate Mandate + RescuePolicyWrapper that limits exactly what it can do.
           </p>
           <div style={{ position: 'relative' }}>
             <textarea value={text} onChange={e => setText(e.target.value)} rows={3}
@@ -355,6 +361,23 @@ export function NewStrategy({ onDone, mode, setMode, seed }) {
               <div className="mono" style={{ fontSize: 10.5, color: 'var(--t2)', wordBreak: 'break-all', marginBottom: 10 }}>
                 strategy_hash {livePreview.strategy_hash}
               </div>
+              {livePreview.strategy && (
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: 8, marginBottom: 12 }}>
+                  {[
+                    ['Owner', livePreview.strategy.owner],
+                    ['Agent', livePreview.agent_address || livePreview.strategy.agent],
+                    ['Pool', livePreview.strategy.pool_id],
+                    ['Budget', `${Number(livePreview.strategy.budget_ceiling || 0) / 1_000_000} USDC`],
+                    ['Slippage', `${((livePreview.strategy.execution?.max_slippage_bps || 0) / 100).toFixed(2)}%`],
+                    ['Expiry', new Date(livePreview.strategy.expires_at_ms).toISOString()],
+                  ].map(([k, v]) => (
+                    <div key={k} style={{ background: 'var(--bg-0)', border: '1px solid var(--border)', borderRadius: 'var(--r-sm)', padding: '8px 10px', minWidth: 0 }}>
+                      <div className="eyebrow" style={{ fontSize: 8.5 }}>{k}</div>
+                      <div className="mono" title={String(v)} style={{ fontSize: 10.5, color: k === 'Agent' ? 'var(--accent)' : 'var(--t1)', marginTop: 4, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{shortValue(v)}</div>
+                    </div>
+                  ))}
+                </div>
+              )}
               <div style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
                 {livePreview.ptb_preview.map((l, i) => (
                   <div key={i} style={{ fontSize: 12, color: 'var(--t1)' }}><span style={{ color: 'var(--accent)', marginRight: 6 }}>↳</span>{l}</div>
@@ -474,7 +497,7 @@ export function NewStrategy({ onDone, mode, setMode, seed }) {
               </div>
               <div style={{ flex: 1 }}>
                 <div className="display" style={{ fontWeight: 600, fontSize: 14, color: 'var(--danger)' }}>Guardian blocked this strategy</div>
-                <div style={{ fontSize: 12.5, color: 'var(--t1)', marginTop: 1 }}>{failCount} critical risks must be resolved before a Policy Object can be created. The agent will never deploy an unsafe intent.</div>
+                <div style={{ fontSize: 12.5, color: 'var(--t1)', marginTop: 1 }}>{failCount} critical risks must be resolved before a Mandate + Wrapper can be created. The agent will never deploy an unsafe intent.</div>
               </div>
             </div>
           )}
@@ -493,7 +516,7 @@ export function NewStrategy({ onDone, mode, setMode, seed }) {
         <div className="fade-up card" style={{ padding: 24 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 9, marginBottom: 4 }}>
             <span style={{ color: 'var(--accent)' }}><Icon name="shield" size={18} /></span>
-            <h2 className="display" style={{ fontSize: 19, fontWeight: 600 }}>Move Policy Object</h2>
+            <h2 className="display" style={{ fontSize: 19, fontWeight: 600 }}>MoveGate Mandate + Wrapper</h2>
           </div>
           <p style={{ color: 'var(--t1)', fontSize: 13.5, marginBottom: 20 }}>
             This on-chain object is the agent's leash. It can <strong style={{ color: 'var(--t0)' }}>never</strong> exceed these limits — enforced by Move, not by trust. You can revoke it any time.
@@ -668,7 +691,7 @@ export function NewStrategy({ onDone, mode, setMode, seed }) {
                 <Icon name={requireApproval ? 'eye' : 'link'} size={18} />
               </div>
               <div>
-                <div style={{ fontWeight: 600, fontSize: 13.5 }}>{readOnlyPreview ? 'Read-only Worker preview' : requireApproval ? 'Supervised — you approve each execution' : 'One signature creates the Policy Object'}</div>
+                <div style={{ fontWeight: 600, fontSize: 13.5 }}>{readOnlyPreview ? 'Read-only Worker preview' : requireApproval ? 'Supervised — you approve each execution' : 'One signature creates the Mandate + Wrapper'}</div>
                 <div style={{ fontSize: 12, color: 'var(--t2)' }}>
                   {readOnlyPreview
                     ? 'The parsed intent, PTB preview and Guardian output came from the live Worker. Connect a Sui wallet only when you want to sign and deploy.'

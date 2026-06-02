@@ -107,7 +107,7 @@ export function ActivityView({ activity, onTx, live = false, loading = false, so
       retry: 'A prior attempt failed; the agent re-quoted and resubmitted within the same limits.',
       monitor: 'A scheduled risk evaluation ran. Conditions stayed inside policy, so no action was taken.',
       policy: liveSource
-        ? 'You authorized a new on-chain Policy Object granting the agent scoped, capped authority.'
+        ? 'You authorized a MoveGate Mandate + RescuePolicyWrapper granting the agent scoped, capped authority.'
         : 'A demo policy-shaped record was created locally to preview scoped, capped agent authority.',
     }[a.kind] || 'Agent evaluated the policy and acted within limits.'
     const plan = {
@@ -379,7 +379,7 @@ export function PoliciesView({ policies, onRevoke, onInspect, onLive, live = fal
       {loading && <LoadingCard label="Loading live policies…" />}
       {!loading && policies.length === 0 && (
         <EmptyCard icon="shield" title="No policies yet"
-          detail={liveSource ? 'Create a strategy to mint your first Move Policy Object. The agent gets no authority until that transaction succeeds.' : 'Create a strategy to preview the policy shape in demo mode.'} />
+          detail={liveSource ? 'Create a strategy to mint your first MoveGate Mandate + RescuePolicyWrapper. The agent gets no authority until that transaction succeeds.' : 'Create a strategy to preview the policy shape in demo mode.'} />
       )}
       {!loading && policies.length > 0 && (
         <div className="rg-2col">

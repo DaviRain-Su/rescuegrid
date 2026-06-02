@@ -33,7 +33,7 @@ function rawEvent(type, parsedJson, tx = 'digest', timestampMs = NOW) {
   assert.equal(feed.source, 'chain')
   assert.equal(feed.kind, 'policy')
   assert.equal(feed.policy, '0x1234…cdef')
-  assert.equal(feed.title, 'Policy Object created')
+  assert.equal(feed.title, 'Policy authority created')
   assert.equal(feed.detail, 'Budget 500 USDC · max slip 1.2%')
   assert.equal(feed.tx, 'create-digest')
   assert.equal(feed.wrapper_id, WRAPPER)

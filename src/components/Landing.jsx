@@ -22,7 +22,7 @@ const FEATURES = [
 const STEPS = [
   { n: '01', t: 'Describe in plain language', s: '"When SUI drops 8%, deploy a 500 USDC rescue grid." The agent parses it into a readable PTB.' },
   { n: '02', t: 'Guardian checks the risk', s: 'Slippage, concentration, pool freshness and budget are reviewed before you ever confirm.' },
-  { n: '03', t: 'Sign the Policy Object', s: 'One signature mints an on-chain leash: budget cap, scope, slippage, expiry. The agent gets nothing more.' },
+  { n: '03', t: 'Sign the Mandate + Wrapper', s: 'One signature mints an on-chain leash: budget cap, scope, slippage, expiry. The agent gets nothing more.' },
   { n: '04', t: 'It monitors & rescues', s: 'Local or cloud, the agent watches 24/7 and executes on Deepbook within limits — logging every action.' },
 ]
 
@@ -86,7 +86,7 @@ export function Landing({ onLaunch }) {
             <div>
               <div className="badge badge-accent reveal" style={{ marginBottom: 22 }}><span className="dot pulse"></span>Sui Overflow 2026 · Agentic Web</div>
               <h1 className="h1 reveal">Autonomous DeFi rescue,<br/>on a <span style={{ color: 'var(--accent)' }}>leash you control</span>.</h1>
-              <p className="lead reveal">RescueGrid is an AI agent that monitors your positions, decides, and executes real trades on Deepbook — strictly inside a Move Policy Object you authorize once. Truly autonomous, never able to go rogue.</p>
+              <p className="lead reveal">RescueGrid is an AI agent that monitors your positions, decides, and executes real trades on Deepbook — strictly inside a MoveGate Mandate + RescuePolicyWrapper you authorize once. Truly autonomous, never able to go rogue.</p>
               <div className="cta-row reveal">
                 <a href="#" onClick={launch} className="btn btn-primary btn-lg">Launch RescueGrid</a>
                 <a href="#how" className="btn btn-lg">See how it works</a>
@@ -167,7 +167,7 @@ export function Landing({ onLaunch }) {
           <div style={{ textAlign: 'center', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 14 }}>
             <div className="eyebrow reveal">How it works</div>
             <h2 className="sec-title reveal">Authorize once. Then it runs itself.</h2>
-            <p className="sec-sub reveal">A single Move Policy Object turns intent into bounded autonomy.</p>
+            <p className="sec-sub reveal">A single Mandate + Wrapper turns intent into bounded autonomy.</p>
           </div>
           <div className="step-grid reveal" style={{ marginTop: 46 }}>
             {STEPS.map(s => (
@@ -185,7 +185,7 @@ export function Landing({ onLaunch }) {
           <div className="lp-card reveal" style={{ padding: 0, overflow: 'hidden', display: 'grid', gridTemplateColumns: '1fr 1fr' }}>
             <div style={{ padding: 46 }}>
               <div className="badge badge-sui" style={{ marginBottom: 18 }}>Why Sui</div>
-              <h2 className="sec-title" style={{ fontSize: 32 }}>The Move Policy Object<br/>is the whole point.</h2>
+              <h2 className="sec-title" style={{ fontSize: 32 }}>The MoveGate Wrapper<br/>is the whole point.</h2>
               <p style={{ color: 'var(--t1)', fontSize: 15, marginTop: 16, lineHeight: 1.6 }}>On Sui, authority is an <strong style={{ color: 'var(--t0)' }}>object you own</strong>. RescueGrid gives the agent a scoped capability — never your keys. Limits aren't a promise in our backend; they're enforced by Move at execution time.</p>
               <div style={{ display: 'flex', flexDirection: 'column', gap: 12, marginTop: 24 }}>
                 {[
@@ -295,7 +295,7 @@ export function Landing({ onLaunch }) {
               <svg width="26" height="26" viewBox="0 0 32 32" fill="none"><rect x="2" y="2" width="28" height="28" rx="8" fill="#06231f" stroke="#2EE6CE" strokeOpacity="0.5"/><path d="M9 19 l4-5 3 3 4-6" stroke="#2EE6CE" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/><circle cx="23" cy="11" r="2.2" fill="#2EE6CE"/></svg>
               <span className="display" style={{ fontWeight: 700 }}>RescueGrid</span>
             </div>
-            <div className="mono" style={{ fontSize: 12, color: 'var(--t2)' }}>Sui wallet · Move Policy Object · PTB · Deepbook v3 · Cloudflare Workers</div>
+            <div className="mono" style={{ fontSize: 12, color: 'var(--t2)' }}>Sui wallet · MoveGate Mandate · PTB · Deepbook v3 · Cloudflare Workers</div>
           </div>
         </footer>
       </div>

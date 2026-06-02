@@ -2,7 +2,7 @@
 
 > Autonomous DeFi risk-rescue agent on Sui — on a leash you control.
 
-RescueGrid is an AI agent for Sui Testnet that monitors positions, decides under Guardian policy checks, and is designed to execute DeepBook rescue trades strictly inside a **Move Policy Object** you authorize once. The current verified scope proves real Testnet policy create/read/revoke, live Worker read surfaces, and execution/funding gates; successful real DeepBook execution was intentionally deferred/skipped for now.
+RescueGrid is an AI agent for Sui Testnet that monitors positions, decides under Guardian policy checks, and is designed to execute DeepBook rescue trades strictly inside a **MoveGate Mandate + RescuePolicyWrapper** you authorize once. The current verified scope proves real Testnet policy create/read/revoke, live Worker read surfaces, and execution/funding gates; successful real DeepBook execution was intentionally deferred/skipped for now.
 
 This repo is the full implementation of the [Claude Design handoff](docs/), not just the mockup:
 

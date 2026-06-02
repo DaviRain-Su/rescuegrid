@@ -32,7 +32,7 @@ export const RG = {
     { pair: 'WAL/USDC',  side: 'Hedge',       size: 5700.55,  entry: 0.641, pnl: -118.90, pnlPct: -2.04, risk: 'med' },
   ],
 
-  // policies = on-chain Move Policy Objects
+  // policies = on-chain MoveGate Mandate + RescuePolicyWrapper records
   policies: [
     {
       id: '0x9c2a…41bf',
@@ -87,7 +87,7 @@ export const RG = {
     { t: '08:48:21', date: 'Today', kind: 'retry', policy: 'DEEP Accumulation DCA', title: 'Retry succeeded · 2nd attempt', detail: 'First submit failed (book moved) · re-quoted and filled 1,010 DEEP @ 0.099', amount: -100.00, tx: '0x2b7f…aa10', risk: 24, mode: 'local' },
     { t: '08:48:09', date: 'Today', kind: 'fail', policy: 'DEEP Accumulation DCA', title: 'Order failed · price moved', detail: 'Book shifted past limit before settlement · no funds spent · auto-retry queued', amount: 0, tx: '0x6c41…0d92', risk: 24, mode: 'local' },
     { t: '22:40:12', date: 'Yesterday', kind: 'exec', policy: 'SUI Crash Rescue Grid', title: 'Bought 11.4 SUI @ 4.39', detail: 'Grid rung #2 filled on Deepbook · slippage 0.6%', amount: -50.04, tx: '0x33de…5fa1', risk: 35, mode: 'cloud' },
-    { t: '18:02:44', date: 'Yesterday', kind: 'policy', policy: 'SUI Crash Rescue Grid', title: 'Policy Object created', detail: 'Budget 500 USDC · scope SUI/USDC · expires Jun 14', amount: 0, tx: '0x88ac…1d20', risk: null, mode: 'cloud' },
+    { t: '18:02:44', date: 'Yesterday', kind: 'policy', policy: 'SUI Crash Rescue Grid', title: 'Policy authority created', detail: 'Budget 500 USDC · scope SUI/USDC · expires Jun 14', amount: 0, tx: '0x88ac…1d20', risk: null, mode: 'cloud' },
   ],
 
   // example NL strategies (chips)

@@ -319,7 +319,7 @@ export function Profile({ account, holdings, policies, funding = null, live = fa
                   <div style={{ fontSize: 10.5, lineHeight: 1.45, color: 'var(--t1)' }}>
                     {readOnly
                       ? <>Loaded through the <strong style={{ color: 'var(--t0)' }}>live local Worker</strong> without wallet signing. Any direct-chain fallback is read-only and explicitly labeled in the app shell.</>
-                      : <>Connected via the <strong style={{ color: 'var(--t0)' }}>Sui wallet standard</strong>. Your keys never leave the wallet; the agent only gets a scoped Policy Object.</>}
+                      : <>Connected via the <strong style={{ color: 'var(--t0)' }}>Sui wallet standard</strong>. Your keys never leave the wallet; the agent only gets a scoped Mandate + Wrapper.</>}
                   </div>
                 </div>
               </>

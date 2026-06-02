@@ -111,7 +111,7 @@ export function parseIntent(text, owner, defaults = {}, nowMs = Date.now()) {
     `Allow agent ${AGENT_ADDRESS} to trade only pool ${strategy.pool_id}`,
     `Set budget ceiling to ${budgetNum} USDC`,
     `Set max slippage to ${(max_slippage_bps / 100).toFixed(2)}%`,
-    `Trigger when ${asset} drops ≥ ${threshold_pct}% (Pyth)`,
+    `Trigger when ${asset} drops ≥ ${threshold_pct}% from Worker market reads`,
     `Expire policy at ${new Date(expires_at_ms).toISOString()}`,
   ]
 

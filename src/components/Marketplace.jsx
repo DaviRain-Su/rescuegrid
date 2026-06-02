@@ -132,7 +132,7 @@ export function StrategyMarketplace({ onDeploy, onToast, onOpen }) {
         <div style={{ flex: 1, minWidth: 240 }}>
           <div className="display" style={{ fontSize: 16, fontWeight: 600 }}>Policy-constrained strategy templates</div>
           <div style={{ fontSize: 12.5, color: 'var(--t2)', marginTop: 3, maxWidth: 560, lineHeight: 1.5 }}>
-            Every template deploys as a Move Policy Object with its own Guardian rules and venue scope — the agent can act, but never beyond what you authorize.
+            Every template deploys as a MoveGate Mandate + RescuePolicyWrapper with its own Guardian rules and venue scope — the agent can act, but never beyond what you authorize.
           </div>
         </div>
         <div style={{ display: 'flex', gap: 22 }}>

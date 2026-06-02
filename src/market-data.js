@@ -401,7 +401,7 @@ export function attachMarketData(RG) {
       'Touch assets or venues outside policy scope',
       'Change its own policy or raise its own limits',
       'Approve token spend beyond the scoped amount',
-      'Act after you revoke the on-chain Policy Object',
+      'Act after you revoke the on-chain Mandate',
     ],
   }
 

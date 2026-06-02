@@ -495,7 +495,7 @@ export default function App({ onExit }) {
       scope: [meta.scope], maxSlippage: meta.slip, expires: '2026-06-14T00:00:00Z', created: '2026-06-01', execs: 0,
       requireApproval: !!meta.requireApproval, leverage: meta.leverage || null, legs: meta.legs || null }
     setPolicies(ps => [np, ...ps])
-    setActivity(a => [{ t: '14:28:40', date: 'Today', kind: 'policy', policy: np.name, title: 'Policy Object created', detail: `Budget ${meta.budget} USDC · scope ${meta.scope} · ${mode} mode · expires Jun 14`, amount: 0, tx: '0x' + Math.random().toString(16).slice(2,6) + '…' + Math.random().toString(16).slice(2,6), risk: null, mode }, ...a])
+    setActivity(a => [{ t: '14:28:40', date: 'Today', kind: 'policy', policy: np.name, title: 'Policy authority created', detail: `Budget ${meta.budget} USDC · scope ${meta.scope} · ${mode} mode · expires Jun 14`, amount: 0, tx: '0x' + Math.random().toString(16).slice(2,6) + '…' + Math.random().toString(16).slice(2,6), risk: null, mode }, ...a])
     showToast('Policy deployed — agent is now autonomous within limits', 'var(--accent)')
     pushNotif('policy', `Policy deployed · ${meta.name}`)
     setView('policies')

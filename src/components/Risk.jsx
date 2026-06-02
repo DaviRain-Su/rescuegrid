@@ -334,7 +334,7 @@ export function RiskCenter({ policies, onEmergencyStop, onToast, stopped }) {
         <div style={{ display: 'flex', gap: 9, marginTop: 16, padding: '11px 13px', borderRadius: 'var(--r-sm)', background: 'var(--glass)' }}>
           <span style={{ color: 'var(--sui)', flexShrink: 0, marginTop: 1 }}><Icon name="shield" size={14} /></span>
           <div style={{ fontSize: 11, color: 'var(--t1)', lineHeight: 1.5 }}>
-            These limits are enforced by the <strong style={{ color: 'var(--t0)' }}>Move Policy Object on-chain</strong>, not by the agent's good behavior. Revoke the object and all authority disappears in one transaction.
+            These limits are enforced by the <strong style={{ color: 'var(--t0)' }}>MoveGate Mandate + RescuePolicyWrapper on-chain</strong>, not by the agent's good behavior. Revoke the Mandate and all authority disappears in one transaction.
           </div>
         </div>
       </RCard>

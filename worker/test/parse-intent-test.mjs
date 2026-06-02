@@ -9,8 +9,18 @@ const NOW = Date.UTC(2026, 5, 2, 15, 30, 0)
 {
   const parsed = parseIntent(TEXT, OWNER, {}, NOW)
   assert.equal(parsed.status, 'ok')
+  assert.equal(parsed.agent_address, DEPLOYMENT.agent.address)
+  assert.equal(parsed.strategy.owner, OWNER)
+  assert.equal(parsed.strategy.agent, DEPLOYMENT.agent.address)
   assert.equal(parsed.strategy.executor_kind, 'deepbook')
+  assert.ok(parsed.ptb_preview.some((line) => line.includes(OWNER)))
+  assert.ok(parsed.ptb_preview.some((line) => line.includes(DEPLOYMENT.agent.address)))
   assert.ok(parsed.ptb_preview.some((line) => line.includes('deepbook executor adapter')))
+  assert.ok(parsed.ptb_preview.some((line) => line.includes(parsed.strategy.pool_id)))
+  assert.ok(parsed.ptb_preview.some((line) => line.includes('500 USDC')))
+  assert.ok(parsed.ptb_preview.some((line) => line.includes('1.00%')))
+  assert.ok(parsed.ptb_preview.some((line) => line.includes(new Date(parsed.strategy.expires_at_ms).toISOString())))
+  assert.equal(parsed.ptb_preview.some((line) => line.includes('Pyth')), false)
 }
 
 {

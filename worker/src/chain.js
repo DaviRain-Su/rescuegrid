@@ -95,7 +95,7 @@ export function policyEventToFeedItem(event, policyLabel = shortWrapperId(event?
     return {
       ...base,
       kind: 'policy',
-      title: 'Policy Object created',
+      title: 'Policy authority created',
       detail: `Budget ${Number(pj.budget_ceiling) / 1e6} USDC · max slip ${Number(pj.max_slippage_bps) / 100}%`,
       amount: 0,
     }

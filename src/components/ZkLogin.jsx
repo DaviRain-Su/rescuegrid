@@ -41,7 +41,7 @@ export function ZkLogin({ onAuth, onBackToLanding, workerConfigured = false }) {
             The AI agent that <span style={{ color: 'var(--accent)' }}>trades for you</span> — and can't go rogue.
           </h1>
           <p style={{ fontSize: 16, color: 'var(--t1)', marginTop: 20, lineHeight: 1.6, maxWidth: 460 }}>
-            Authorize once with a Move Policy Object. RescueGrid then monitors, decides and executes real trades on Deepbook — strictly inside the budget and scope you set on-chain.
+            Authorize once with a MoveGate Mandate + RescuePolicyWrapper. RescueGrid then monitors, decides and executes real trades on Deepbook — strictly inside the budget and scope you set on-chain.
           </p>
           <div style={{ display: 'flex', gap: 26, marginTop: 36 }}>
             {[
@@ -56,7 +56,7 @@ export function ZkLogin({ onAuth, onBackToLanding, workerConfigured = false }) {
             ))}
           </div>
         </div>
-        <div style={{ fontSize: 12, color: 'var(--t3)', fontFamily: 'var(--f-mono)' }}>Sui wallet · Move Policy Object · PTB · Deepbook v3</div>
+        <div style={{ fontSize: 12, color: 'var(--t3)', fontFamily: 'var(--f-mono)' }}>Sui wallet · MoveGate Mandate · PTB · Deepbook v3</div>
       </div>
 
       {/* right — auth */}
@@ -64,7 +64,7 @@ export function ZkLogin({ onAuth, onBackToLanding, workerConfigured = false }) {
         <div style={{ maxWidth: 360, margin: '0 auto', width: '100%' }}>
           <h2 className="display" style={{ fontSize: 24, fontWeight: 600 }}>Sign in</h2>
           <p style={{ fontSize: 13.5, color: 'var(--t1)', marginTop: 8, marginBottom: 22 }}>
-            Connect a Sui wallet to authorize the agent on-chain. The agent only ever gets a scoped Policy Object — never your keys.
+            Connect a Sui wallet to authorize the agent on-chain. The agent only ever gets a scoped Mandate + Wrapper — never your keys.
           </p>
 
           {/* Sui wallet — the real, credential-free sign-in */}
@@ -116,8 +116,8 @@ export function ZkLogin({ onAuth, onBackToLanding, workerConfigured = false }) {
 
           <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
             {[
-              { n: '1', t: 'Connect, don’t hand over keys', s: 'Your wallet signs once to mint a Move Policy Object. The agent acts only within it and never touches your keys.' },
-              { n: '2', t: 'Revoke any time', s: 'Delete the Policy Object and the agent’s authority is gone on-chain, instantly.' },
+              { n: '1', t: 'Connect, don’t hand over keys', s: 'Your wallet signs once to create a MoveGate Mandate + RescuePolicyWrapper. The agent acts only within them and never touches your keys.' },
+              { n: '2', t: 'Revoke any time', s: 'Revoke the Mandate and the agent’s authority is gone on-chain, instantly.' },
             ].map(s => (
               <div key={s.n} style={{ display: 'flex', gap: 12 }}>
                 <div style={{ width: 24, height: 24, borderRadius: '50%', background: 'var(--sui-dim)', color: 'var(--sui)', flexShrink: 0,
