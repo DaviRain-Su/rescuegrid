@@ -271,6 +271,7 @@ export default function App({ onExit }) {
   const liveMarket = liveDashboard.market
   const liveHoldings = liveDashboard.holdings
   const liveFunding = liveDashboard.funding
+  const liveExecutionReadiness = liveDashboard.executionReadiness
   const liveRuntimeStatus = liveDashboard.runtimeStatus
   const liveLoading = liveReadsEnabled && liveDashboardQuery.isPending
   const liveActivityLoading = liveReadsEnabled && !!liveDashboardQuery.loading?.activity
@@ -941,6 +942,7 @@ export default function App({ onExit }) {
               policies={displayedPolicies}
               holdings={liveReadsEnabled ? liveHoldings : RG.holdings}
               funding={liveReadsEnabled ? liveFunding : null}
+              executionReadiness={liveReadsEnabled ? liveExecutionReadiness : null}
               runtimeStatus={liveReadsEnabled ? liveRuntimeStatus : null}
               account={liveReadsEnabled ? {
                 avatar: liveMode ? owner.slice(2, 4).toUpperCase() : 'AG',

@@ -143,6 +143,10 @@ export function summarizeFundingReadiness(readiness) {
         blocker_codes: [],
         balances: readiness.balance_manager?.balances || readiness.funding?.balances || null,
         signer_kind: readiness.signer?.kind || null,
+        signer_available: Boolean(readiness.signer?.available),
+        signer_execution_enabled: Boolean(readiness.signer?.execution_enabled || readiness.execution?.enabled),
+        signer_capabilities: readiness.signer_capabilities || [],
+        external_signer: readiness.external_signer || null,
       },
     })
   }
@@ -158,6 +162,11 @@ export function summarizeFundingReadiness(readiness) {
       funding_blocker_codes: readiness.funding_blocker_codes || [],
       balances: readiness.balance_manager?.balances || readiness.funding?.balances || null,
       signer_kind: readiness.signer?.kind || null,
+      signer_available: Boolean(readiness.signer?.available),
+      signer_execution_enabled: Boolean(readiness.signer?.execution_enabled || readiness.execution?.enabled),
+      signer_unavailable_code: readiness.signer?.unavailable_code || readiness.execution?.blocker_code || null,
+      signer_capabilities: readiness.signer_capabilities || [],
+      external_signer: readiness.external_signer || null,
       execution_claimed: readiness.execution_claimed === true,
     },
   })

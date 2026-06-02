@@ -63,7 +63,10 @@ export async function buildExecutionReadiness({ env = {}, chainData = null, requ
       passport_id: DEPLOYMENT.agent.passport_id,
     },
     signer: status.signer,
+    signer_capabilities: status.signer_capabilities || [],
+    external_signer: status.external_signer || null,
     execution: status.execution,
+    runtime: status.runtime || null,
     balance_manager: {
       id: DEPLOYMENT.agent.balance_manager_id,
       holder: 'agent_balance_manager',

@@ -32,6 +32,37 @@ const readiness = {
     execution_configured: false,
     execution_enabled: false,
     unavailable_code: null,
+    known_signer_kinds: ['worker-secret', 'waap'],
+  },
+  signer_capabilities: [
+    {
+      kind: 'worker-secret',
+      selected: true,
+      runtime_scope: 'cloud-worker',
+      custody_model: 'worker-held-agent-key',
+      available: true,
+      execution_enabled: false,
+      runner_configured: null,
+    },
+    {
+      kind: 'waap',
+      selected: false,
+      runtime_scope: 'external-signer',
+      custody_model: 'external-policy-signer',
+      available: false,
+      execution_enabled: false,
+      runner_configured: false,
+      unavailable_code: 'UNSUPPORTED_SIGNER',
+    },
+  ],
+  external_signer: {
+    kind: 'waap',
+    selected: false,
+    status: 'not_selected',
+    available: false,
+    submission_runner_configured: false,
+    permission_token_configured: false,
+    secrets_returned: false,
   },
   execution_ready: false,
   funding_ready: false,
@@ -87,11 +118,16 @@ assert.equal(handoff.next_verification.funding_watch_command, 'npm run funding:w
 assert.equal(handoff.next_verification.funding_watch_report_command, 'npm run funding:watch:report')
 assert.equal(handoff.next_verification.strict_execution_command, 'npm run demo:execute')
 assert.equal(handoff.next_verification.strict_execution_report_command, 'npm run demo:execute:report')
+assert.equal(handoff.signer_capabilities.some((row) => row.kind === 'waap' && row.runner_configured === false), true)
+assert.equal(handoff.external_signer.kind, 'waap')
+assert.equal(handoff.external_signer.secrets_returned, false)
 assert.equal(JSON.stringify(handoff).includes('super-secret'), false)
 
 const markdown = serializeFundingHandoff(handoff, 'markdown')
 assert.match(markdown, /RescueGrid Funding Request/)
 assert.match(markdown, /DBUSDC coin type:/)
+assert.match(markdown, /Signer: worker-secret/)
+assert.match(markdown, /External signer: waap/)
 assert.match(markdown, /After funding, run:/)
 assert.match(markdown, /npm run funding:watch:report/)
 assert.equal(markdown.includes('super-secret'), false)
@@ -114,12 +150,19 @@ try {
 const env = fundingHandoffEnv({
   AGENT_KEY: 'super-secret',
   EXECUTION_ENABLED: 'true',
+  RESCUEGRID_WAAP_PERMISSION_TOKEN: 'do-not-print',
   REQUIRED_DBUSDC_BALANCE: '500',
 })
 assert.deepEqual(env, {
   AGENT_KEY: 'super-secret',
   EXECUTION_ENABLED: 'true',
   SIGNER_KIND: undefined,
+  RESCUEGRID_DAEMON_MODE: undefined,
+  RESCUEGRID_WAAP_CLI_ENABLED: undefined,
+  RESCUEGRID_WAAP_SUI_ADDRESS: undefined,
+  RESCUEGRID_WAAP_CHAIN: undefined,
+  RESCUEGRID_WAAP_RPC: undefined,
+  RESCUEGRID_WAAP_PERMISSION_TOKEN: 'do-not-print',
   REQUIRED_DBUSDC_BALANCE: '500',
   REQUIRED_DEEP_BALANCE: undefined,
   REQUIRED_AGENT_SUI_GAS_MIST: undefined,

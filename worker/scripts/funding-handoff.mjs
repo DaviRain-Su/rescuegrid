@@ -52,6 +52,12 @@ export function fundingHandoffEnv(env = process.env, { includeDevVars = env === 
     AGENT_KEY: firstValue(env.AGENT_KEY, devVar('AGENT_KEY')),
     EXECUTION_ENABLED: firstValue(env.EXECUTION_ENABLED, devVar('EXECUTION_ENABLED')),
     SIGNER_KIND: firstValue(env.SIGNER_KIND, env.RESCUEGRID_SIGNER_KIND, devVar('SIGNER_KIND'), devVar('RESCUEGRID_SIGNER_KIND')),
+    RESCUEGRID_DAEMON_MODE: firstValue(env.RESCUEGRID_DAEMON_MODE, devVar('RESCUEGRID_DAEMON_MODE')),
+    RESCUEGRID_WAAP_CLI_ENABLED: firstValue(env.RESCUEGRID_WAAP_CLI_ENABLED, env.WAAP_CLI_ENABLED, devVar('RESCUEGRID_WAAP_CLI_ENABLED'), devVar('WAAP_CLI_ENABLED')),
+    RESCUEGRID_WAAP_SUI_ADDRESS: firstValue(env.RESCUEGRID_WAAP_SUI_ADDRESS, env.WAAP_SUI_ADDRESS, devVar('RESCUEGRID_WAAP_SUI_ADDRESS'), devVar('WAAP_SUI_ADDRESS')),
+    RESCUEGRID_WAAP_CHAIN: firstValue(env.RESCUEGRID_WAAP_CHAIN, env.WAAP_CHAIN, env.RESCUEGRID_CHAIN, devVar('RESCUEGRID_WAAP_CHAIN'), devVar('WAAP_CHAIN'), devVar('RESCUEGRID_CHAIN')),
+    RESCUEGRID_WAAP_RPC: firstValue(env.RESCUEGRID_WAAP_RPC, env.WAAP_RPC, devVar('RESCUEGRID_WAAP_RPC'), devVar('WAAP_RPC')),
+    RESCUEGRID_WAAP_PERMISSION_TOKEN: firstValue(env.RESCUEGRID_WAAP_PERMISSION_TOKEN, env.WAAP_PERMISSION_TOKEN, devVar('RESCUEGRID_WAAP_PERMISSION_TOKEN'), devVar('WAAP_PERMISSION_TOKEN')),
     REQUIRED_DBUSDC_BALANCE: firstValue(env.REQUIRED_DBUSDC_BALANCE, devVar('REQUIRED_DBUSDC_BALANCE')),
     REQUIRED_DEEP_BALANCE: firstValue(env.REQUIRED_DEEP_BALANCE, devVar('REQUIRED_DEEP_BALANCE')),
     REQUIRED_AGENT_SUI_GAS_MIST: firstValue(env.REQUIRED_AGENT_SUI_GAS_MIST, devVar('REQUIRED_AGENT_SUI_GAS_MIST')),
@@ -144,7 +150,11 @@ export function buildFundingHandoff(readiness, { generatedAt = new Date().toISOS
       execution_configured: Boolean(readiness.signer?.execution_configured),
       execution_enabled: Boolean(readiness.signer?.execution_enabled),
       unavailable_code: readiness.signer?.unavailable_code || null,
+      unavailable_detail: readiness.signer?.unavailable_detail || null,
+      known_signer_kinds: readiness.signer?.known_signer_kinds || [],
     },
+    signer_capabilities: readiness.signer_capabilities || [],
+    external_signer: readiness.external_signer || null,
     deepbook: {
       market_id: readiness.scope?.market_id || 'SUI_DBUSDC',
       pool_id: readiness.scope?.pool_id || DEPLOYMENT.deepbook.pools.SUI_DBUSDC.pool_id,
@@ -191,6 +201,8 @@ function markdown(handoff) {
     `Chain: ${handoff.chain}`,
     `Ready for strict execution: ${handoff.ready_for_strict_execution}`,
     `Blockers: ${handoff.blocker_codes.join(', ') || 'none'}`,
+    `Signer: ${handoff.signer.kind} (${handoff.signer.unavailable_code || (handoff.signer.execution_enabled ? 'execution enabled' : 'execution gated')})`,
+    handoff.external_signer ? `External signer: ${handoff.external_signer.kind} · ${handoff.external_signer.status} · runner_configured=${handoff.external_signer.submission_runner_configured}` : null,
     '',
     `Agent: ${handoff.agent.address}`,
     `BalanceManager: ${handoff.agent.balance_manager_id}`,
@@ -212,7 +224,7 @@ function markdown(handoff) {
     `- ${handoff.next_verification.strict_execution_command}`,
     `- ${handoff.next_verification.strict_execution_report_command}`,
     '',
-  ].join('\n')
+  ].filter((line) => line != null).join('\n')
 }
 
 export function serializeFundingHandoff(handoff, format = 'json') {

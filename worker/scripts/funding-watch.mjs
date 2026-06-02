@@ -88,6 +88,8 @@ export function buildFundingWatchReport(readiness, {
     blocker_codes: handoff.blocker_codes,
     blocker_labels: handoff.blocker_labels,
     signer: handoff.signer,
+    signer_capabilities: handoff.signer_capabilities,
+    external_signer: handoff.external_signer,
     funding_targets: handoff.funding_targets,
     next_verification: handoff.next_verification,
     source_of_truth: handoff.source_of_truth,

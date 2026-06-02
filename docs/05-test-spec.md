@@ -317,6 +317,7 @@ Happy path:
 
 - 返回 `chain=sui:testnet`、`scope.executor_kind=deepbook`、`scope.market_id=SUI_DBUSDC`、部署 agent address、BalanceManager id 和 AgentPassport id。
 - 返回 runtime signer/status evidence、BalanceManager DBUSDC/DEEP、agent SUI gas、thresholds、funding blockers 和 execution blockers。
+- 返回 `signer_capabilities` 和 `external_signer`，且字段语义与 `/api/runtime/status` 一致；WaaP 地址、permission token 和 runner 只能以 public posture / blocker code 出现。
 - 当 `EXECUTION_ENABLED=false` 或 signer unavailable 时，`execution_ready=false` 且 `blocker_codes` 包含执行 blocker。
 - 当 BalanceManager 缺少 DBUSDC/DEEP 或 agent 缺少 SUI gas 时，`funding_ready=false` 且 `funding_blocker_codes` 包含对应资产 blocker。
 - `dbusdc_threshold`、`deep_threshold`、`sui_gas_threshold` 请求参数只能提高本次检查门槛，不能低于 Worker 配置的 minimum。
@@ -361,6 +362,7 @@ Happy path:
 - 输出 `purpose=external_deepbook_testnet_funding_request`、`chain=sui:testnet`、部署 agent address、AgentPassport id、BalanceManager id、DeepBook `SUI_DBUSDC` pool id、DBUSDC coin type 和 DEEP coin type。
 - 输出 BalanceManager DBUSDC / DEEP 的 observed、required、missing、usable 和 blocker code。
 - 输出 agent gas address 的 SUI_MIST observed、required、missing、usable 和 blocker code。
+- 输出 signer readiness、`signer_capabilities` 和 `external_signer` posture；若 WaaP 地址匹配但 local submission runner 未注入，必须保留 `WAAP_RUNNER_MISSING`，不能把 permission-token configured 当作 execution ready。
 - 输出 `next_verification.readiness_command="npm run daemon -- status --json"`、`next_verification.funding_watch_command="npm run funding:watch -- --json"`、`next_verification.funding_watch_report_command="npm run funding:watch:report"`、`next_verification.strict_execution_command="npm run demo:execute"` 和 `next_verification.strict_execution_report_command="npm run demo:execute:report"`。
 - 支持 `--dbusdc-threshold` / `--deep-threshold` / `--sui-gas-threshold`，且这些 request threshold 只能通过 `buildExecutionReadiness` 提高门槛，不能弱化 Worker 配置 minimum。
 - 支持 `--format markdown --out .rescuegrid/funding-request.md` 生成可转发 funding provider 的 artifact；artifact 必须包含 public agent / BalanceManager / coin type / observed / required / missing / next verification commands，且不得包含任何 secret。
@@ -377,7 +379,7 @@ Security / boundary:
 
 Happy path:
 
-- 默认 `npm run funding:watch -- --json` 运行一次，复用 `buildExecutionReadiness` + `buildFundingHandoff` 输出 `purpose=deepbook_execution_funding_watch`、`funding_ready`、`execution_ready`、blocker codes、public funding targets 和 next verification commands。
+- 默认 `npm run funding:watch -- --json` 运行一次，复用 `buildExecutionReadiness` + `buildFundingHandoff` 输出 `purpose=deepbook_execution_funding_watch`、`funding_ready`、`execution_ready`、blocker codes、signer capability posture、external signer posture、public funding targets 和 next verification commands。
 - `npm run funding:watch:report` 或 `--out .rescuegrid/funding-watch-report.json` 必须写出最新 watch JSON；blocked 状态也要写，且不得被当作 strict execution pass。
 - `--wait --interval-ms <ms> --max-attempts <n>` 轮询同一 readiness contract，直到 `execution_ready=true` 或达到 attempts 上限。
 - `--run-demo` / `--execute` 只有在 `execution_ready=true` 后才启动 strict `demo:execute`；blocked 状态必须返回非零退出码且不创建 policy。

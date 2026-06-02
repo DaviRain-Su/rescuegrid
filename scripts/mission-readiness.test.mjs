@@ -53,6 +53,8 @@ function readyFunding() {
     funding_blocker_codes: [],
     execution_claimed: false,
     signer: { kind: 'worker-secret', available: true },
+    signer_capabilities: [{ kind: 'worker-secret', selected: true, available: true, execution_enabled: true }],
+    external_signer: { kind: 'waap', selected: false, status: 'not_selected', secrets_returned: false },
     balance_manager: { balances: { DBUSDC: '1000000', DEEP: '1' } },
   }
 }
@@ -96,6 +98,12 @@ function blockedFunding() {
     funding_blocker_codes: ['INSUFFICIENT_DBUSDC'],
     execution_claimed: false,
     signer: { kind: 'worker-secret', available: true },
+    execution: { enabled: false, blocker_code: 'EXECUTION_DISABLED' },
+    signer_capabilities: [
+      { kind: 'worker-secret', selected: true, available: true, execution_enabled: false },
+      { kind: 'waap', selected: false, available: false, runner_configured: false },
+    ],
+    external_signer: { kind: 'waap', selected: false, status: 'not_selected', secrets_returned: false },
     balance_manager: { balances: { DBUSDC: '0', DEEP: '0' } },
   }
 }
@@ -148,6 +156,10 @@ function strictExecutionReport(overrides = {}) {
   assert.equal(report.blocker_codes.includes('WALLET_EVIDENCE_INCOMPLETE'), true)
   assert.equal(report.blocker_codes.includes('INSUFFICIENT_DBUSDC'), true)
   assert.equal(report.blocker_codes.includes('STRICT_EXECUTION_BLOCKED_BY_FUNDING'), true)
+  const fundingCheck = report.checks.find((row) => row.id === 'execution_funding_readiness')
+  assert.equal(fundingCheck.evidence.signer_unavailable_code, 'EXECUTION_DISABLED')
+  assert.equal(fundingCheck.evidence.signer_capabilities.some((row) => row.kind === 'waap'), true)
+  assert.equal(fundingCheck.evidence.external_signer.kind, 'waap')
 }
 
 {

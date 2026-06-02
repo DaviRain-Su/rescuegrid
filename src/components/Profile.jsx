@@ -45,8 +45,15 @@ function shortId(id) {
   return id && id.length > 16 ? `${id.slice(0, 6)}…${id.slice(-4)}` : id
 }
 
-function FundingReadiness({ funding, live }) {
+function FundingReadiness({ funding, executionReadiness, live }) {
   if (!live || !funding) return null
+  const readiness = executionReadiness || funding.execution_readiness || null
+  const signer = readiness?.signer || funding.signer || null
+  const signerCapabilities = readiness?.signer_capabilities || funding.signer_capabilities || []
+  const selectedCapability = signerCapabilities.find((row) => row.selected) || signerCapabilities.find((row) => row.kind === signer?.kind)
+  const externalSigner = readiness?.external_signer || funding.external_signer || null
+  const signerEnabled = Boolean(signer?.execution_enabled || readiness?.execution?.enabled)
+  const signerCode = signerEnabled ? 'execution enabled' : signer?.unavailable_code || readiness?.execution?.blocker_code || 'execution gated'
   const rows = funding.criteria || []
   const blocked = funding.readiness_state === 'blocked'
   return (
@@ -91,6 +98,29 @@ function FundingReadiness({ funding, live }) {
       {funding.blockers?.length > 0 && (
         <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginTop: 10 }}>
           {funding.blockers.map((b) => <span key={b.code} className="badge badge-warn" style={{ fontSize: 9 }}>{b.code}</span>)}
+        </div>
+      )}
+      {signer && (
+        <div style={{ marginTop: 10, padding: '9px 10px', borderRadius: 'var(--r-sm)', background: 'var(--glass)', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, flexWrap: 'wrap' }}>
+          <div style={{ minWidth: 0 }}>
+            <div className="mono" style={{ fontSize: 10.5, fontWeight: 600, color: 'var(--t1)' }}>
+              Signer preflight · {signer.kind}
+            </div>
+            <div className="mono" style={{ fontSize: 9.5, color: 'var(--t2)', marginTop: 3 }}>
+              {selectedCapability?.runtime_scope || 'runtime'} · {selectedCapability?.custody_model || 'signer'}{selectedCapability?.runner_configured === false ? ' · runner missing' : ''}
+            </div>
+          </div>
+          <span className={`badge ${signerEnabled ? 'badge-safe' : 'badge-warn'}`} style={{ fontSize: 9 }}>
+            {signerCode}
+          </span>
+        </div>
+      )}
+      {externalSigner && externalSigner.status !== 'not_selected' && (
+        <div style={{ marginTop: 8, display: 'flex', gap: 7, alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', color: 'var(--t2)', fontSize: 10.5 }}>
+          <span className="mono">External signer · {externalSigner.kind}</span>
+          <span className={`badge ${externalSigner.available ? 'badge-safe' : 'badge-warn'}`} style={{ fontSize: 9 }}>
+            {externalSigner.unavailable_code || externalSigner.status}
+          </span>
         </div>
       )}
       {funding.funding_ready && funding.execution_blockers?.some((b) => b.code === 'EXECUTION_DISABLED') && (
@@ -183,7 +213,7 @@ function RuntimeAuthorityStatus({ runtimeStatus }) {
   )
 }
 
-export function Profile({ account, holdings, policies, funding = null, runtimeStatus = null, live = false, readOnly = false, loading = false, onNav, onToast, onLogout }) {
+export function Profile({ account, holdings, policies, funding = null, executionReadiness = null, runtimeStatus = null, live = false, readOnly = false, loading = false, onNav, onToast, onLogout }) {
   const a = account
   const total = holdings.reduce((s, h) => s + h.value, 0)
   const free = holdings.filter(h => h.state === 'free').reduce((s, h) => s + h.value, 0)
@@ -369,7 +399,7 @@ export function Profile({ account, holdings, policies, funding = null, runtimeSt
                 })}
               </tbody>
             </table>
-            <FundingReadiness funding={funding} live={live} />
+            <FundingReadiness funding={funding} executionReadiness={executionReadiness} live={live} />
           </div>
         </div>
 

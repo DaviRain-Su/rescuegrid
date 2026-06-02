@@ -35,6 +35,35 @@ function readiness({ executionReady = false } = {}) {
       execution_enabled: executionReady,
       unavailable_code: executionReady ? null : 'EXECUTION_DISABLED',
     },
+    signer_capabilities: [
+      {
+        kind: 'worker-secret',
+        selected: true,
+        runtime_scope: 'cloud-worker',
+        custody_model: 'worker-held-agent-key',
+        available: executionReady,
+        execution_enabled: executionReady,
+        runner_configured: null,
+      },
+      {
+        kind: 'waap',
+        selected: false,
+        runtime_scope: 'external-signer',
+        custody_model: 'external-policy-signer',
+        available: false,
+        execution_enabled: false,
+        runner_configured: false,
+      },
+    ],
+    external_signer: {
+      kind: 'waap',
+      selected: false,
+      status: 'not_selected',
+      available: false,
+      submission_runner_configured: false,
+      permission_token_configured: false,
+      secrets_returned: false,
+    },
     execution_ready: executionReady,
     funding_ready: executionReady,
     blocker_codes: executionReady ? [] : ['EXECUTION_DISABLED', 'INSUFFICIENT_DBUSDC'],
@@ -105,6 +134,9 @@ function readiness({ executionReady = false } = {}) {
   assert.equal(report.policy_creation_blocked, true)
   assert.equal(report.execution_claimed, false)
   assert.equal(report.funding_targets.balance_manager.required_assets[0].missing, '100')
+  assert.equal(report.signer_capabilities.some((row) => row.kind === 'waap' && row.runner_configured === false), true)
+  assert.equal(report.external_signer.kind, 'waap')
+  assert.equal(report.external_signer.secrets_returned, false)
   assert.equal(JSON.stringify(report).includes('super-secret'), false)
 }
 

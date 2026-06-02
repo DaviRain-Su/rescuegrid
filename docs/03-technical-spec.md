@@ -1000,6 +1000,28 @@ Response:
     "passport_id": "0x..."
   },
   "signer": { "kind": "worker-secret", "available": false },
+  "signer_capabilities": [
+    {
+      "kind": "worker-secret",
+      "selected": true,
+      "runtime_scope": "cloud-worker",
+      "execution_enabled": false
+    },
+    {
+      "kind": "waap",
+      "selected": false,
+      "runtime_scope": "external-signer",
+      "runner_configured": false
+    }
+  ],
+  "external_signer": {
+    "kind": "waap",
+    "selected": false,
+    "status": "not_selected",
+    "submission_runner_configured": false,
+    "permission_token_configured": false,
+    "secrets_returned": false
+  },
   "execution": { "configured": false, "enabled": false, "blocker_code": "EXECUTION_DISABLED" },
   "funding": {
     "funding_ready": false,
@@ -1016,6 +1038,7 @@ Response:
 Rules:
 
 - `ready` / `execution_ready` are true only when signer execution is enabled and DBUSDC, DEEP and SUI gas thresholds are satisfied.
+- `signer_capabilities` and `external_signer` are copied from runtime status into this readiness contract so funding handoff, funding watch, mission readiness and Profile explain the same signer gate. These fields are public posture only and must not include permission token values, session files or secret material.
 - Query parameters `dbusdc_threshold`, `deep_threshold` and `sui_gas_threshold` may raise the required threshold for a strict demo or future policy, but they cannot weaken configured minimums.
 - `/api/balances` may include the same `funding` and `execution_readiness` object for Profile compatibility, but callers that need execution preflight should prefer this endpoint.
 - `execution_claimed` is always false here; only a real tick result with `AgentTradeExecuted` and spend increase can claim execution.
@@ -1033,6 +1056,14 @@ Output:
   "purpose": "external_deepbook_testnet_funding_request",
   "chain": "sui:testnet",
   "ready_for_strict_execution": false,
+  "signer": {
+    "kind": "worker-secret",
+    "available": true,
+    "execution_enabled": false,
+    "unavailable_code": null
+  },
+  "signer_capabilities": [],
+  "external_signer": { "kind": "waap", "status": "not_selected", "secrets_returned": false },
   "agent": {
     "address": "0x...",
     "passport_id": "0x...",
