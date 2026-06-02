@@ -10,7 +10,16 @@ const RISK_META = {
   med:  { c: 'var(--warn)',   cls: 'badge-warn' },
   high: { c: 'var(--danger)', cls: 'badge-danger' },
 };
-const TYPE_C = { Lending: 'var(--sui)', LP: 'var(--accent)', LST: 'var(--safe)', Vault: 'var(--warn)', CLOB: 'var(--accent)' };
+const TYPE_C = {
+  Lending: 'var(--sui)',
+  LP: 'var(--accent)',
+  LST: 'var(--safe)',
+  Vault: 'var(--warn)',
+  CLOB: 'var(--accent)',
+  RWA: 'var(--safe)',
+  CDP: 'var(--warn)',
+  Farm: 'var(--accent)',
+};
 
 function ChainChip({ ch, active, onClick }) {
   const live = ch.live;
@@ -29,11 +38,11 @@ function ChainChip({ ch, active, onClick }) {
 }
 
 /* ---------------- Yields tab ---------------- */
-const TYPE_SCENARIO = { LP: 'lp', Vault: 'lp', CLOB: 'lp', Lending: 'lend', LST: 'lend' };
+const TYPE_SCENARIO = { LP: 'lp', Vault: 'lp', CLOB: 'lp', Farm: 'lp', Lending: 'lend', LST: 'lend', RWA: 'lend', CDP: 'lend' };
 function YieldMonitor({ onDeploy, onInspect, chain, live, onToast }) {
   const [type, setType] = useState('all');
   const [sort, setSort] = useState('apy');
-  const types = ['all', 'Lending', 'LP', 'LST', 'Vault', 'CLOB'];
+  const types = ['all', 'Lending', 'LP', 'LST', 'Vault', 'RWA', 'CDP', 'Farm', 'CLOB'];
   const livePoolsQuery = useDefiLlamaYieldPools({ enabled: live });
   const liveRows = livePoolsQuery.data ? livePoolsQuery.data.filter(isSuiYieldRow) : null;
   const liveState = !live ? 'idle' : livePoolsQuery.isPending ? 'loading' : livePoolsQuery.isError ? 'err' : 'ok';

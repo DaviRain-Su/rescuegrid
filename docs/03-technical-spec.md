@@ -80,9 +80,12 @@ Rules:
 
 Post-MVP adapter candidates:
 
-- `cdpm`: Cetus DLMM Position Manager / LeafSheep-style agent operations.
-- `scallop`: supply, redeem, unwind and risk-reduction flows.
-- `kai`: SAV vault supply/redeem flows.
+- `sui-lending`: NAVI, Suilend, Scallop, AlphaLend and Current supply, redeem, unwind and health-risk-reduction flows.
+- `sui-cdp`: Bucket collateral, debt, peg-risk and repay/deleverage flows.
+- `sui-clmm`: Cetus first; Turbos, Momentum, Magma and STEAMM as watch/data candidates before range-management execution.
+- `sui-vault-lst`: SpringSui, Haedal, Volo, Aftermath, AlphaFi, Kai, Mole and Ember supply/redeem or watchtower flows.
+- `sui-rwa`: Ondo and KAIO watch-only RWA yield and liquidity/settlement risk surfaces before any execution authority.
+- `sui-perps-watch`: Bluefin, Sudo Perps and DipCoin Perps funding, liquidation and venue-risk monitoring before any tiny/paper execution.
 
 These adapters are not allowed to reuse the Deepbook-specific `pool_id` constraint unless their target semantics are equivalent. If they need position ids, vault ids, lending market ids or bin ranges, add adapter-specific wrapper fields or a new wrapper version.
 

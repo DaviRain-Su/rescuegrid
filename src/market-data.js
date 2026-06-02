@@ -281,34 +281,66 @@ export function attachMarketData(RG) {
     suilend: { name: 'Suilend', kind: 'Lending', c: '#8C7BFF' },
     navi: { name: 'NAVI', kind: 'Lending', c: '#34E0A1' },
     scallop: { name: 'Scallop', kind: 'Lending', c: '#5AA6FF' },
+    alphalend: { name: 'AlphaLend', kind: 'Lending', c: '#3E7BFF' },
+    current: { name: 'Current', kind: 'Lending', c: '#22C7B8' },
     aftermath: { name: 'Aftermath', kind: 'AMM / LST', c: '#FF9F45' },
     bluefin: { name: 'Bluefin', kind: 'Perp / Spot', c: '#3E7BFF' },
     deepbook: { name: 'DeepBook', kind: 'CLOB', c: '#2EE6CE' },
+    spring: { name: 'SpringSui', kind: 'Liquid staking', c: '#5AA6FF' },
     haedal: { name: 'Haedal', kind: 'Liquid staking', c: '#22C7B8' },
     volo: { name: 'Volo', kind: 'Liquid staking', c: '#6E8BFF' },
+    alphafi: { name: 'AlphaFi', kind: 'Yield aggregator', c: '#A78BFA' },
     kai: { name: 'Kai', kind: 'Yield vault', c: '#46D39A' },
+    mole: { name: 'Mole', kind: 'Yield vault', c: '#FF9F45' },
+    bucket: { name: 'Bucket', kind: 'CDP / Farm', c: '#FFC24B' },
+    ember: { name: 'Ember', kind: 'Capital allocator', c: '#8C7BFF' },
+    ondo: { name: 'Ondo', kind: 'RWA yield', c: '#34E0A1' },
+    kaio: { name: 'KAIO', kind: 'RWA vault', c: '#46D39A' },
+    turbos: { name: 'Turbos', kind: 'CLMM DEX', c: '#F97316' },
+    momentum: { name: 'Momentum', kind: 'CLMM DEX', c: '#2EE6CE' },
+    magma: { name: 'Magma', kind: 'AMM DEX', c: '#EF4444' },
+    steamm: { name: 'STEAMM', kind: 'AMM DEX', c: '#14B8A6' },
+    sudo: { name: 'Sudo', kind: 'Perps', c: '#6366F1' },
+    dipcoin: { name: 'DipCoin', kind: 'Perps', c: '#F59E0B' },
   }
 
   RG.yields = [
     { proto: 'suilend', market: 'USDC', type: 'Lending', chain: 'sui', tvl: 48.2, base: 5.1, reward: 1.7, risk: 'low', trend: [6.2, 6.3, 6.1, 6.5, 6.6, 6.4, 6.8] },
     { proto: 'navi', market: 'SUI', type: 'Lending', chain: 'sui', tvl: 61.5, base: 3.4, reward: 0.8, risk: 'low', trend: [4.0, 4.1, 4.0, 4.2, 4.1, 4.3, 4.2] },
     { proto: 'scallop', market: 'USDC', type: 'Lending', chain: 'sui', tvl: 33.1, base: 5.9, reward: 1.5, risk: 'low', trend: [7.0, 7.1, 7.3, 7.2, 7.4, 7.3, 7.4] },
+    { proto: 'alphalend', market: 'USDC', type: 'Lending', chain: 'sui', tvl: 62.9, base: 4.9, reward: 0.7, risk: 'med', trend: [5.1, 5.4, 5.2, 5.7, 5.5, 5.8, 5.6] },
+    { proto: 'current', market: 'haSUI', type: 'Lending', chain: 'sui', tvl: 11.6, base: 3.1, reward: 0.0, risk: 'low', trend: [3.0, 3.0, 3.1, 3.1, 3.2, 3.1, 3.1] },
     { proto: 'cetus', market: 'SUI/USDC', type: 'LP', chain: 'sui', tvl: 22.8, base: 14.2, reward: 14.2, risk: 'med', trend: [25, 26, 24, 29, 27, 30, 28.4] },
     { proto: 'cetus', market: 'DEEP/SUI', type: 'LP', chain: 'sui', tvl: 6.4, base: 31.0, reward: 33.1, risk: 'high', trend: [52, 58, 49, 66, 61, 70, 64.1] },
     { proto: 'bluefin', market: 'SUI/USDC', type: 'LP', chain: 'sui', tvl: 14.2, base: 18.4, reward: 13.3, risk: 'med', trend: [28, 30, 29, 33, 31, 34, 31.7] },
+    { proto: 'turbos', market: 'SUI/USDC', type: 'LP', chain: 'sui', tvl: 4.4, base: 10.2, reward: 1.8, risk: 'med', trend: [10.0, 10.8, 11.5, 10.9, 12.2, 11.8, 12.0] },
+    { proto: 'momentum', market: 'SUI/USDC', type: 'LP', chain: 'sui', tvl: 6.3, base: 12.1, reward: 2.2, risk: 'med', trend: [12.4, 13.1, 12.8, 14.2, 13.6, 14.8, 14.3] },
+    { proto: 'magma', market: 'SUI/USDC', type: 'LP', chain: 'sui', tvl: 4.5, base: 13.3, reward: 3.1, risk: 'med', trend: [13.8, 14.1, 13.7, 15.4, 15.9, 16.8, 16.4] },
+    { proto: 'steamm', market: 'SUI/USDC', type: 'LP', chain: 'sui', tvl: 2.6, base: 8.8, reward: 0.4, risk: 'med', trend: [8.5, 8.8, 9.1, 8.7, 9.3, 9.1, 9.2] },
     { proto: 'aftermath', market: 'afSUI/SUI', type: 'LST', chain: 'sui', tvl: 18.9, base: 9.6, reward: 0.0, risk: 'low', trend: [9.4, 9.5, 9.5, 9.6, 9.5, 9.7, 9.6] },
+    { proto: 'spring', market: 'sSUI/SUI', type: 'LST', chain: 'sui', tvl: 51.1, base: 3.2, reward: 0.0, risk: 'low', trend: [3.1, 3.2, 3.2, 3.3, 3.2, 3.2, 3.2] },
     { proto: 'haedal', market: 'haSUI', type: 'LST', chain: 'sui', tvl: 120.3, base: 3.1, reward: 0.0, risk: 'low', trend: [3.0, 3.1, 3.0, 3.1, 3.2, 3.1, 3.1] },
     { proto: 'volo', market: 'vSUI', type: 'LST', chain: 'sui', tvl: 52.0, base: 3.3, reward: 0.0, risk: 'low', trend: [3.2, 3.3, 3.2, 3.4, 3.3, 3.3, 3.3] },
+    { proto: 'alphafi', market: 'stSUI', type: 'LST', chain: 'sui', tvl: 5.9, base: 3.7, reward: 0.4, risk: 'low', trend: [3.5, 3.6, 3.8, 3.9, 3.8, 4.0, 4.1] },
     { proto: 'kai', market: 'USDC looped', type: 'Vault', chain: 'sui', tvl: 9.8, base: 11.0, reward: 7.2, risk: 'high', trend: [16, 17, 15, 19, 18, 20, 18.2] },
+    { proto: 'alphafi', market: 'SUI yield agg', type: 'Vault', chain: 'sui', tvl: 12.5, base: 8.6, reward: 1.2, risk: 'med', trend: [8.8, 9.1, 9.3, 9.6, 9.4, 10.1, 9.8] },
+    { proto: 'ember', market: 'USDC vault', type: 'Vault', chain: 'sui', tvl: 32.3, base: 2.5, reward: 0.0, risk: 'med', trend: [2.4, 2.5, 2.5, 2.6, 2.5, 2.5, 2.5] },
+    { proto: 'mole', market: 'USDC strategy', type: 'Vault', chain: 'sui', tvl: 8.3, base: 5.8, reward: 0.8, risk: 'med', trend: [5.7, 5.9, 6.1, 6.4, 6.2, 6.8, 6.6] },
+    { proto: 'bucket', market: 'BUCK farm', type: 'Farm', chain: 'sui', tvl: 38.0, base: 4.8, reward: 1.4, risk: 'med', trend: [5.9, 6.0, 6.2, 6.4, 6.3, 6.5, 6.2] },
+    { proto: 'bucket', market: 'BUCK CDP', type: 'CDP', chain: 'sui', tvl: 9.0, base: 0.0, reward: 3.8, risk: 'med', trend: [3.4, 3.6, 3.7, 3.9, 3.8, 3.8, 3.8] },
+    { proto: 'ondo', market: 'USDY', type: 'RWA', chain: 'sui', tvl: 23.1, base: 3.6, reward: 0.0, risk: 'low', trend: [3.4, 3.5, 3.5, 3.6, 3.6, 3.6, 3.6] },
+    { proto: 'kaio', market: 'RWA vault', type: 'RWA', chain: 'sui', tvl: 20.4, base: 4.2, reward: 0.0, risk: 'med', trend: [4.0, 4.0, 4.1, 4.2, 4.2, 4.2, 4.2] },
     { proto: 'deepbook', market: 'SUI/USDC', type: 'CLOB', chain: 'sui', tvl: 40.0, base: 0.0, reward: 11.5, risk: 'med', trend: [10, 11, 10.5, 12, 11, 12, 11.5] },
   ]
 
   RG.perpVenues = {
     deepbook: { name: 'DeepBook spot', kind: 'dex', tag: 'Sui', c: '#2EE6CE' },
     bluefin: { name: 'Bluefin', kind: 'dex', tag: 'Sui', c: '#3E7BFF' },
+    sudo: { name: 'Sudo Perps', kind: 'dex', tag: 'Sui', c: '#6366F1' },
+    dipcoin: { name: 'DipCoin Perps', kind: 'dex', tag: 'Sui', c: '#F59E0B' },
   }
   RG.perps = [
-    { sym: 'SUI', mark: 4.182, venues: [{ v: 'deepbook', funding: 0.0, oi: 40.0, px: 4.181 }, { v: 'bluefin', funding: 12.4, oi: 8.2, px: 4.183 }] },
+    { sym: 'SUI', mark: 4.182, venues: [{ v: 'deepbook', funding: 0.0, oi: 40.0, px: 4.181 }, { v: 'bluefin', funding: 12.4, oi: 8.2, px: 4.183 }, { v: 'sudo', funding: 6.3, oi: 6.3, px: 4.184 }, { v: 'dipcoin', funding: 4.1, oi: 2.0, px: 4.186 }] },
     { sym: 'DEEP', mark: 0.1043, venues: [{ v: 'deepbook', funding: 0.0, oi: 12.0, px: 0.1043 }, { v: 'bluefin', funding: 8.6, oi: 2.4, px: 0.1045 }] },
   ]
 
@@ -316,11 +348,15 @@ export function attachMarketData(RG) {
     deepbook: { name: 'DeepBook', kind: 'dex', tag: 'Sui', c: '#2EE6CE' },
     cetus: { name: 'Cetus', kind: 'dex', tag: 'Sui', c: '#2FD9E6' },
     bluefin: { name: 'Bluefin Spot', kind: 'dex', tag: 'Sui', c: '#3E7BFF' },
+    turbos: { name: 'Turbos', kind: 'dex', tag: 'Sui', c: '#F97316' },
+    momentum: { name: 'Momentum', kind: 'dex', tag: 'Sui', c: '#2EE6CE' },
+    magma: { name: 'Magma', kind: 'dex', tag: 'Sui', c: '#EF4444' },
+    steamm: { name: 'STEAMM', kind: 'dex', tag: 'Sui', c: '#14B8A6' },
   }
   RG.spots = [
-    { sym: 'SUI', venues: [{ v: 'deepbook', bid: 4.178, ask: 4.185 }, { v: 'cetus', bid: 4.190, ask: 4.196 }, { v: 'bluefin', bid: 4.181, ask: 4.188 }] },
-    { sym: 'DEEP', venues: [{ v: 'deepbook', bid: 0.1048, ask: 0.1050 }, { v: 'cetus', bid: 0.1054, ask: 0.1057 }] },
-    { sym: 'WAL', venues: [{ v: 'deepbook', bid: 0.626, ask: 0.629 }, { v: 'cetus', bid: 0.631, ask: 0.634 }] },
+    { sym: 'SUI', venues: [{ v: 'deepbook', bid: 4.178, ask: 4.185 }, { v: 'cetus', bid: 4.190, ask: 4.196 }, { v: 'bluefin', bid: 4.181, ask: 4.188 }, { v: 'turbos', bid: 4.187, ask: 4.193 }, { v: 'momentum', bid: 4.191, ask: 4.197 }, { v: 'magma', bid: 4.174, ask: 4.183 }, { v: 'steamm', bid: 4.180, ask: 4.189 }] },
+    { sym: 'DEEP', venues: [{ v: 'deepbook', bid: 0.1048, ask: 0.1050 }, { v: 'cetus', bid: 0.1054, ask: 0.1057 }, { v: 'turbos', bid: 0.1051, ask: 0.1055 }] },
+    { sym: 'WAL', venues: [{ v: 'deepbook', bid: 0.626, ask: 0.629 }, { v: 'cetus', bid: 0.631, ask: 0.634 }, { v: 'momentum', bid: 0.629, ask: 0.633 }] },
   ]
 
   RG.riskBudget = { authorized: 10500, atRisk: 6480, dailyLossCap: 800, dailyLossUsed: 142 }
@@ -329,6 +365,12 @@ export function attachMarketData(RG) {
     { venue: 'Cetus', kind: 'dex', exposure: 1000, cap: 3000 },
     { venue: 'Bluefin', kind: 'dex', exposure: 980, cap: 2500 },
     { venue: 'Scallop', kind: 'lend', exposure: 1750, cap: 3000 },
+    { venue: 'NAVI', kind: 'lend', exposure: 1200, cap: 3000 },
+    { venue: 'Suilend', kind: 'lend', exposure: 1150, cap: 3000 },
+    { venue: 'Turbos', kind: 'dex', exposure: 420, cap: 1200 },
+    { venue: 'Momentum', kind: 'dex', exposure: 360, cap: 1200 },
+    { venue: 'Bucket', kind: 'cdp', exposure: 300, cap: 1000 },
+    { venue: 'AlphaLend', kind: 'lend', exposure: 680, cap: 2000 },
   ]
   RG.liquidations = [
     { policy: 'Sui Perp Hedge', venue: 'Bluefin', side: 'Short', liqPx: 5.21, markPx: 4.18, buffer: 24.6, health: 'safe' },
@@ -365,11 +407,16 @@ export function attachMarketData(RG) {
 
   RG.dataFeeds = [
     { id: 'llama', scope: 'sui', group: 'Market data', name: 'Sui DeFi yields & TVL', provider: 'DefiLlama', endpoint: 'yields.llama.fi/pools?chain=Sui', type: 'REST', access: 'live', cadence: '60s', powers: 'Sui yield monitor and opportunities', test: 'https://yields.llama.fi/pools' },
+    { id: 'protocols', scope: 'sui', group: 'Market data', name: 'Sui protocol registry', provider: 'DefiLlama', endpoint: 'api.llama.fi/protocols?chain=Sui', type: 'REST', access: 'live', cadence: '5m', powers: 'Protocol coverage and adapter prioritization', test: 'https://api.llama.fi/protocols' },
     { id: 'pyth', scope: 'sui', group: 'Market data', name: 'Sui spot & oracle prices', provider: 'Pyth / Hermes', endpoint: 'hermes.pyth.network?query=sui', type: 'REST / SSE', access: 'live', cadence: '400ms', powers: 'Prices, risk gauge and Guardian', test: 'https://hermes.pyth.network/v2/price_feeds?query=sui&asset_type=crypto' },
     { id: 'cg', scope: 'sui', group: 'Market data', name: 'SUI / DEEP / WAL 24h data', provider: 'CoinGecko', endpoint: 'api.coingecko.com/sui-tokens', type: 'REST', access: 'live', cadence: '60s', powers: 'Tickers and sparklines', test: 'https://api.coingecko.com/api/v3/ping' },
     { id: 'suirpc', scope: 'sui', group: 'On-chain', name: 'Sui full-node RPC', provider: 'Sui / Mysten', endpoint: 'fullnode.testnet.sui.io', type: 'JSON-RPC', access: 'live', cadence: 'realtime', powers: 'Balances, policy objects and checkpoints', test: null },
     { id: 'deepbook', scope: 'sui', group: 'On-chain', name: 'DeepBook order book', provider: 'DeepBook indexer', endpoint: 'deepbook-indexer.testnet', type: 'REST / WS', access: 'live', cadence: 'realtime', powers: 'Spot books and CLOB depth', test: null },
+    { id: 'clmm', scope: 'sui', group: 'On-chain', name: 'Sui CLMM pool adapters', provider: 'Cetus / Turbos / Momentum', endpoint: 'Sui RPC + public pool APIs', type: 'REST / RPC', access: 'mixed', cadence: '15s', powers: 'LP range and same-chain DEX spread monitors', test: null },
+    { id: 'lst', scope: 'sui', group: 'On-chain', name: 'Sui LST and vault feeds', provider: 'SpringSui / Haedal / Volo / AlphaFi', endpoint: 'Sui RPC + protocol APIs', type: 'REST / RPC', access: 'mixed', cadence: '60s', powers: 'Liquid staking, vault and idle-yield monitors', test: null },
+    { id: 'cdp-rwa', scope: 'sui', group: 'On-chain', name: 'Sui CDP and RWA feeds', provider: 'Bucket / Ondo / KAIO / Ember', endpoint: 'Sui RPC + protocol APIs', type: 'REST / RPC', access: 'mixed', cadence: '60s', powers: 'CDP, peg-risk, RWA and capital allocator monitors', test: null },
     { id: 'bluefin', scope: 'sui', group: 'Derivatives', name: 'Bluefin funding rates', provider: 'Bluefin', endpoint: 'public Sui funding endpoint', type: 'REST / WS', access: 'mixed', cadence: '5s', powers: 'Sui perp hedge monitor', test: null },
+    { id: 'perps-extra', scope: 'sui', group: 'Derivatives', name: 'Sui-native perps watch feeds', provider: 'Bluefin / Sudo / DipCoin', endpoint: 'public perps endpoints', type: 'REST / WS', access: 'mixed', cadence: '5s', powers: 'Funding, liquidation and venue-risk watchtower', test: null },
     { id: 'signer', scope: 'sui', group: 'Execution', name: 'Sui agent signer / executor', provider: 'zkLogin + Cloudflare', endpoint: 'durable object + Sui signer', type: 'internal', access: 'proxy', cadence: 'on demand', powers: 'Policy execution and gas sponsor', test: null },
   ]
 

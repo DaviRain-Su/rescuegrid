@@ -3,6 +3,43 @@ import { RG } from '../data.js'
 
 const LIVE_CHAINS = new Set(['Sui'])
 const SUI_CHAIN_IDS = new Set(['sui'])
+const PROJECT_TYPES = {
+  'alphalend': 'Lending',
+  'bucket-farm': 'Farm',
+  'bucket-protocol-v2': 'CDP',
+  'current': 'Lending',
+  'ember-protocol': 'Vault',
+  'kai-finance': 'Vault',
+  'kaio': 'RWA',
+  'mole': 'Vault',
+  'navi-lending': 'Lending',
+  'ondo-yield-assets': 'RWA',
+  'scallop-lend': 'Lending',
+  'suilend': 'Lending',
+}
+const PROJECT_PROTO = {
+  'alphalend': 'alphalend',
+  'bluefin-spot': 'bluefin',
+  'bucket-farm': 'bucket',
+  'bucket-protocol-v2': 'bucket',
+  'cetus-clmm': 'cetus',
+  'current': 'current',
+  'ember-protocol': 'ember',
+  'haedal-protocol': 'haedal',
+  'kai-finance': 'kai',
+  'kaio': 'kaio',
+  'magma': 'magma',
+  'mole': 'mole',
+  'momentum': 'momentum',
+  'navi-lending': 'navi',
+  'ondo-yield-assets': 'ondo',
+  'scallop-lend': 'scallop',
+  'springsui': 'spring',
+  'steamm': 'steamm',
+  'suilend': 'suilend',
+  'turbos': 'turbos',
+  'volo-lst': 'volo',
+}
 
 export function isSuiYieldRow(row) {
   return SUI_CHAIN_IDS.has((row?.chain || '').toLowerCase())
@@ -15,6 +52,7 @@ function titleFromProject(project) {
 }
 
 export function mapDefiLlamaPool(pool) {
+  const rawProject = (pool.project || '').toLowerCase()
   const base = +(pool.apyBase || 0)
   const reward = +(pool.apyReward || 0)
   const apy = +(pool.apy || base + reward)
@@ -22,13 +60,14 @@ export function mapDefiLlamaPool(pool) {
   const isLP = /[-/]/.test(sym)
   const cleanSymbol = sym.replace(/[^A-Z]/g, '')
   const isLST = /^(ST|HASUI|VSUI|AFSUI)/.test(cleanSymbol) || /staked/i.test(pool.poolMeta || '')
-  const type = isLST ? 'LST' : isLP ? 'LP' : 'Lending'
+  const projectType = PROJECT_TYPES[rawProject]
+  const type = isLST ? 'LST' : isLP ? 'LP' : projectType || 'Lending'
   const risk = apy >= 30 || pool.ilRisk === 'yes' ? 'high' : apy >= 12 ? 'med' : 'low'
   const d7 = +(pool.apyPct7D || 0)
   const trend = Array.from({ length: 7 }, (_, i) => +(apy - d7 * (1 - i / 6)).toFixed(2))
 
   return {
-    proto: pool.project || 'pool',
+    proto: PROJECT_PROTO[rawProject] || rawProject || 'pool',
     market: sym,
     type,
     chain: (pool.chain || '').toLowerCase(),
@@ -65,7 +104,7 @@ export function useDefiLlamaYieldPools({ enabled }) {
 }
 
 export function mapYieldPoolToOpportunity(pool) {
-  const isLP = pool.type === 'LP' || pool.type === 'Vault' || pool.type === 'CLOB'
+  const isLP = pool.type === 'LP' || pool.type === 'Vault' || pool.type === 'Farm' || pool.type === 'CLOB'
   return {
     kind: 'yield',
     proto: pool.proto,

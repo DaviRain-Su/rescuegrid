@@ -61,9 +61,11 @@ export function PolicyInspect({ p, activity, onClose, onRevoke, onTx, readOnly =
 
   const protocols = [
     { name: 'Deepbook v3', kind: 'CLOB · spot', on: p.scope.length > 0, note: 'order book — place / cancel limit orders' },
-    { name: 'Cetus', kind: 'AMM · swap', on: false, note: 'roadmap' },
-    { name: 'Suilend', kind: 'lending', on: false, note: 'roadmap' },
-    { name: 'Navi', kind: 'lending', on: false, note: 'roadmap' },
+    { name: 'Cetus / Turbos / Momentum', kind: 'CLMM · LP', on: false, note: 'roadmap · watch first' },
+    { name: 'NAVI / Suilend / Scallop', kind: 'lending', on: false, note: 'roadmap · health guardian' },
+    { name: 'Bucket / AlphaLend / Current', kind: 'CDP · lending', on: false, note: 'roadmap · risk monitor' },
+    { name: 'SpringSui / Haedal / Volo', kind: 'LST · vault', on: false, note: 'roadmap · watchtower' },
+    { name: 'Bluefin / Sudo / DipCoin', kind: 'perps', on: false, note: 'roadmap · watch-only' },
   ]
 
   const structLines = [

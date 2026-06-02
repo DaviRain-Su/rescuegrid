@@ -18,8 +18,21 @@ Comparable products fall into six buckets.
 | Automation / risk managers | DeFi Saver | Liquidation protection, stop-loss, take-profit and leverage automation are proven user needs. | Bring this to Sui + agent policy objects + strategy templates. |
 | Yield aggregators / vaults | Beefy, Yearn, Sommelier | Users accept automated strategy vaults when yield, risk and fees are easy to inspect. | Let users own the policy instead of blindly depositing into a vault. |
 | On-chain asset management | Enzyme, Morpho Vaults | Configurable vault policies, caps, asset/protocol allow-lists and curator controls matter. | Convert these controls into RescueGrid mandates and Guardian rules. |
-| Perps / funding / basis products | Hyperliquid vaults, Ethena, Bluefin, funding-arb vaults | Delta-neutral and funding/basis strategies are a major demand area. | Strategy builder + net exposure proof + funding flip guard + venue caps. |
-| Sui DeFi primitives | DeepBook, Cetus DLMM, Scallop, NAVI, Suilend, Bluefin | Sui has spot liquidity, LP, lending and perps components. | A unified policy-constrained agent layer across those protocols. |
+| Perps / funding / basis products | Bluefin, Sudo Perps, DipCoin Perps, funding-arb vault patterns | Delta-neutral and funding/basis strategies are a major demand area. | Strategy builder + net exposure proof + funding flip guard + Sui venue caps. |
+| Sui DeFi primitives | DeepBook, Cetus, Turbos, Momentum, Magma, STEAMM, Scallop, NAVI, Suilend, AlphaLend, Bucket, SpringSui, Haedal, Volo, AlphaFi, Ondo, KAIO, Ember, Bluefin | Sui has spot liquidity, LP, lending, CDP, LST, vault, RWA and perps components. | A unified policy-constrained agent layer across those protocols. |
+
+### Sui-native protocol integration map
+
+This is the Sui-only integration surface for the hackathon branch. Multichain, CEX, bridge and Hyperliquid expansion remains in [`docs/06-post-mvp-multivenue-roadmap.md`](06-post-mvp-multivenue-roadmap.md).
+
+| Category | Protocols to track | First RescueGrid surface | Adapter stance |
+| --- | --- | --- | --- |
+| Core spot execution | DeepBook | Current policy execution, order book, spread and rescue-grid proof | Only live MVP executor; keep funding gates explicit. |
+| Sui DEX / CLMM / AMM | Cetus, Turbos, Momentum, Magma, STEAMM, Bluefin Spot | LP monitor, Sui DEX spread table, fee APR and range-risk views | Watch + data first; Cetus range manager is the first likely execution adapter. |
+| Lending and CDP | NAVI, Suilend, Scallop, AlphaLend, Current, Bucket | Lending optimizer, borrow health guardian, CDP/peg-risk monitor | Health/repay and supply/redeem adapters after DeepBook; CDP execution only after target constraints are clear. |
+| LST / vault / yield aggregator | SpringSui, Haedal, Volo, Aftermath, AlphaFi, Kai, Mole, Ember | LST/vault yield monitor, idle-yield watchtower, vault risk drawer | Monitor first; adapters need position/vault id constraints and stale-state checks. |
+| RWA yield on Sui | Ondo, KAIO | RWA yield row, liquidity/settlement risk label, stable collateral monitor | Watch-only until redemption, liquidity and issuer-risk flows are specified. |
+| Sui-native perps | Bluefin, Sudo Perps, DipCoin Perps | Funding heatmap, liquidation buffer, hedge watchtower | Watch-only first; tiny/paper execution comes after margin and funding-flip safeguards. |
 
 ## 2. Strategy templates to show
 
@@ -39,12 +52,12 @@ The frontend should evolve from one "rescue grid" demo into a strategy catalog.
 
 3. **Perp DEX Spread / Basis Arbitrage**
    - User idea: perp DEX arbitrage between venues.
-   - Typical shape: compare mark/index/orderbook/funding across Bluefin, Hyperliquid, dYdX/Drift-style venues later.
+   - Typical shape: compare mark/index/orderbook/funding across Bluefin, Sudo Perps and DipCoin Perps first.
    - UI must show: venue spread matrix, fees, slippage, open interest, liquidity depth, execution latency and partial-fill risk.
 
 4. **Lending Rate Optimizer**
    - User idea: lending.
-   - Typical shape: route idle stablecoins/SUI across Scallop, NAVI, Suilend, or future venues.
+   - Typical shape: route idle stablecoins/SUI across Scallop, NAVI, Suilend, AlphaLend or Current.
    - UI must show: supply APY, borrow APY, utilization, liquidation risk, collateral factor, withdrawal liquidity.
 
 5. **Borrow Health Guardian**
@@ -54,7 +67,7 @@ The frontend should evolve from one "rescue grid" demo into a strategy catalog.
 
 6. **LP Range Manager**
    - User idea: LP.
-   - Typical shape: Cetus CLMM/DLMM range placement, collect fees, rebalance bins/ranges, exit on volatility.
+   - Typical shape: Cetus CLMM/DLMM range placement first; Turbos, Momentum, Magma and STEAMM can enter as watch/data candidates.
    - UI must show: price range, current price, in-range status, fee APR, impermanent loss, rebalance threshold.
 
 ### Add after the first batch
@@ -80,7 +93,7 @@ The frontend should evolve from one "rescue grid" demo into a strategy catalog.
     - Later, not Sui MVP unless a Sui-native yield-tokenization primitive exists.
 
 12. **Vault Copy / Strategy Index**
-    - Enzyme/Morpho/Hyperliquid-vault-style browseable strategies.
+    - Sui vault/watchtower-style browseable strategies.
     - Later, once RescueGrid has enough native strategies to compare.
 
 13. **Cross-Venue Inventory Rebalancer**
@@ -104,7 +117,7 @@ Required components:
 - strategy category tabs: Risk Response, Funding, Perps, Lending, LP, Rebalance, Watchtower;
 - strategy cards with APY/risk/venues/capital required/status;
 - "available now", "testnet", "coming soon" status badges;
-- adapter badges: DeepBook, Cetus, Scallop, NAVI, Bluefin, Hyperliquid;
+- adapter badges: DeepBook, Cetus, Turbos, Momentum, Scallop, NAVI, Suilend, AlphaLend, Bucket, Bluefin;
 - risk badges: market, liquidity, liquidation, oracle, smart contract, venue/custody;
 - one-click "Preview policy".
 
@@ -225,9 +238,9 @@ Required row details:
 - budget impact;
 - retry/failure state.
 
-### H. Venue Accounts / Integrations
+### H. Sui Accounts / Integrations
 
-Purpose: make future multi-venue work understandable.
+Purpose: make Sui policy, signer and future adapter authority understandable.
 
 Required modules:
 
@@ -235,9 +248,8 @@ Required modules:
 - MoveGate/RescueGrid policy object;
 - cloud agent address;
 - local daemon status;
-- future Hyperliquid agent wallet;
-- future CEX trade-only key;
-- capability list per venue;
+- Sui protocol adapter status;
+- capability list per Sui venue/protocol;
 - reauth/revoke buttons.
 
 ## 4. Design brief
@@ -296,14 +308,17 @@ Ask design to produce these screens first:
 
 Recommended order:
 
-1. Lending health guardian / repay automation.
-2. LP manager for Cetus DLMM/CLMM.
-3. Bluefin/Hyperliquid funding monitor in watch-only mode.
-4. Funding Rate Harvest with tiny/paper execution.
+1. Sui protocol registry and watch-only data layer: DefiLlama Sui protocol coverage, public pool APIs and Sui RPC mapping.
+2. Lending health guardian / repay automation across NAVI, Suilend, Scallop, AlphaLend and Bucket.
+3. LP manager for Cetus DLMM/CLMM first; then Turbos, Momentum, Magma and STEAMM as watch/data candidates.
+4. LST, vault and RWA monitor for SpringSui, Haedal, Volo, AlphaFi, Kai, Mole, Ondo, KAIO and Ember.
+5. Sui-native perps monitor for Bluefin, Sudo Perps and DipCoin Perps in watch-only mode.
+6. Funding Rate Harvest with tiny/paper execution only after margin, liquidation and funding-flip handling are specified.
 
 Reasoning:
 
-- Lending and LP management fit Sui-native adapters earlier.
+- Lending and LP management fit Sui-native adapters earlier and map cleanly to policy-scoped Sui PTBs.
+- Vault, RWA and CDP products need clearer redemption/liquidity/position-id constraints before execution authority.
 - Funding/perp arbitrage needs perps venue accounts, margin, liquidation and funding flip handling, so it should be watch-only first.
 
 ### P3: production platform
@@ -341,5 +356,6 @@ Design should treat these as concrete deliverables, not loose inspiration.
 - [HeyAnon](https://docs.heyanon.ai/heyanon.ai) and [Mode AI Terminal](https://docs.mode.network/ai-agents/mode-ai-terminal) prove natural-language DeFi operations and transaction-preparation demand.
 - [DeFi Saver Automation](https://defisaver.com/features/automation) and its [automation knowledge base](https://help.defisaver.com/features/automation) prove liquidation protection, stop-loss, take-profit, trailing-stop and leverage-management primitives.
 - [Morpho Vault roles](https://legacy.docs.morpho.org/morpho-vaults/concepts/roles), [Morpho Vault overview](https://legacy.docs.morpho.org/morpho-vaults/contracts/overview/) and [Morpho Public Allocator](https://docs.morpho.org/get-started/resources/contracts/public-allocator/) prove cap, curator, allocator and Guardian patterns for controlled automated allocation.
-- [Hyperliquid Vaults](https://hyperliquid.gitbook.io/hyperliquid-docs/hypercore/vaults), [Bluefin Funding](https://learn.bluefin.io/bluefin/bluefin-perps-exchange/trading/funding), [Ethena overview](https://docs.ethena.fi/) and [Ethena funding risk](https://docs.ethena.fi/solution-overview/risks/funding-risk) prove perp/funding/basis demand, but also the need to show margin, funding-flip, venue and custody risks.
-- [Cetus](https://cetus.click/), [Cetus CLMM SDK](https://github.com/CetusProtocol/cetus-clmm-sui-sdk), [Suilend SDK](https://docs.suilend.fi/ecosystem/suilend-sdk-guide) and [NAVI docs](https://docs.naviprotocol.io/) prove Sui-native LP and lending adapters are a natural next step.
+- [Bluefin Funding](https://learn.bluefin.io/bluefin/bluefin-perps-exchange/trading/funding) proves Sui-native perp/funding demand, but also the need to show margin, funding-flip, venue and custody risks.
+- [DefiLlama Sui chain](https://defillama.com/chain/Sui), [DefiLlama protocol API](https://api.llama.fi/protocols) and [DefiLlama yield API](https://yields.llama.fi/pools) are the current public baseline for Sui protocol coverage, TVL and yield discovery.
+- [DeepBook official docs](https://docs.sui.io/standards/deepbookv3), [Cetus CLMM SDK](https://github.com/CetusProtocol/cetus-clmm-sui-sdk), [Suilend SDK](https://docs.suilend.fi/ecosystem/suilend-sdk-guide), [NAVI docs](https://docs.naviprotocol.io/) and [Scallop docs](https://docs.scallop.io/) prove Sui-native execution and lending adapters are a natural next step.
