@@ -14,6 +14,7 @@ import { strategyHash } from '../src/strategy-core.js'
 import { getClient, readPolicyCreated, DEPLOYMENT } from '../src/sui-tx.js'
 import { readMandate, readWrapper } from '../src/chain.js'
 import { loadAgentKeypairFromDevVars, readWorkerDevVar } from './agent-key-loader.mjs'
+import { buildDemoExecutionReport, writeDemoExecutionReportArtifact } from './demo-execution-report.mjs'
 
 const args = new Map()
 for (let i = 2; i < process.argv.length; i += 1) {
@@ -35,6 +36,7 @@ if (args.has('--help') || process.argv.includes('-h')) {
 
 Usage:
   node worker/scripts/validate-demo-loop.mjs [--worker-url http://localhost:8787] [--require-execution]
+  node worker/scripts/validate-demo-loop.mjs --require-execution --out .rescuegrid/demo-execute-report.json
 
 Requires a local Worker with INTERNAL_AGENT_TICK_TOKEN configured and
 RESCUEGRID_DEMO_MODE=true so force_trigger can exercise the agent tick path.
@@ -49,12 +51,15 @@ Options:
                            execution and DBUSDC/DEEP/SUI funding before policy
                            creation, so a known funding gate does not leave a
                            test policy behind. Use this after DBUSDC/DEEP funding
-                           is available to prove the full PRD execution gate.`)
+                           is available to prove the full PRD execution gate.
+  --out <path>             Write the final pass report as JSON after the full
+                           create -> tick -> revoke -> post-revoke sequence passes.`)
   process.exit(0)
 }
 
 const workerUrl = String(args.get('--worker-url') || process.env.WORKER_URL || 'http://localhost:8787').replace(/\/$/, '')
 const requireExecution = args.has('--require-execution') || process.env.RESCUEGRID_REQUIRE_EXECUTION === 'true'
+const reportOutPath = args.get('--out') || args.get('--report-out') || args.get('--output')
 const expectedChain = 'sui:testnet'
 const client = getClient()
 const keypair = loadAgentKeypairFromDevVars()
@@ -376,24 +381,38 @@ console.log(JSON.stringify({
   chain_event_types: finalActivity.events.map((e) => e.type),
 }, null, 2))
 
-console.log(JSON.stringify({
-  phase: 'pass',
-  assertions: [
-    'G2-CREATE',
-    'G2-ACTIVATE-MONITOR',
-    tickOutcome === 'executed' ? 'G2-EXECUTE' : 'G2-DOCUMENTED-FUNDING-GATE',
-    'G2-REVOKE',
-    'G2-POST-REVOKE-NO-EXECUTION',
-  ],
+const passReport = buildDemoExecutionReport({
+  workerUrl,
+  chain: DEPLOYMENT.chain,
+  requireExecution,
   current_run_marker: currentRunMarker,
-  wrapper_id: wrapperId,
-  mandate_id: mandateId,
-  create_tx_digest: createResolved.digest,
-  revoke_tx_digest: revokeResolved.digest,
-  tick_outcome: tickOutcome,
-  tick_tx_digest: tick.tx_digest ?? null,
-  strategy_hash: strategy.strategy_hash,
-}, null, 2))
+  ownerAddress,
+  delegatedAgentAddress,
+  wrapperId,
+  mandateId,
+  strategyHash: strategy.strategy_hash,
+  createResolved,
+  revokeResolved,
+  tick,
+  tickOutcome,
+  beforeTickWrapper,
+  afterTickWrapper,
+  postRevokeTick,
+  finalActivity,
+  strictPreflight,
+})
+
+console.log(JSON.stringify(passReport, null, 2))
+if (reportOutPath) {
+  const artifact = writeDemoExecutionReportArtifact(passReport, { outPath: reportOutPath })
+  console.log(JSON.stringify({
+    phase: 'report_written',
+    purpose: passReport.purpose,
+    artifact,
+    execution_claimed: passReport.execution_claimed,
+    tick_tx_digest: passReport.tick_tx_digest,
+  }, null, 2))
+}
 completed = true
 } finally {
   if (!completed && wrapperId && !revoked) {

@@ -19,6 +19,7 @@ const REQUIRED_SCRIPTS = [
   'test:wallet-flow',
   'test:wallet-evidence',
   'test:mission-readiness',
+  'test:demo-execution-report',
   'wallet:evidence',
   'wallet:evidence:verify',
   'mission:readiness',
@@ -26,6 +27,7 @@ const REQUIRED_SCRIPTS = [
   'funding:watch',
   'demo:loop',
   'demo:execute',
+  'demo:execute:report',
   'safety:negative',
   'baseline:smoke',
 ]
@@ -156,7 +158,10 @@ function executionReportEvidence(report) {
     phase: report?.phase || null,
     wrapper_id: report?.wrapper_id || null,
     mandate_id: report?.mandate_id || null,
+    tick_outcome: report?.tick_outcome || null,
     tick_tx_digest: report?.tick_tx_digest || report?.tx_digest || null,
+    agent_trade_event_found: report?.agent_trade_event_found === true,
+    spend_increased: report?.spend_increased === true,
     assertions,
   }
 }
@@ -179,12 +184,15 @@ export function summarizeStrictExecutionEvidence(report, fundingCheck) {
   const hasExecutionAssertion = assertions.includes('G2-EXECUTE')
   const txDigest = report.tick_tx_digest || report.tx_digest || null
   const executionClaimed = report.execution_claimed === true
-  if (report.phase === 'pass' && hasExecutionAssertion && executionClaimed && txDigest) {
+  const eventProven = report.agent_trade_event_found === true
+  const spendProven = report.spend_increased === true
+  const tickExecuted = report.tick_outcome === 'executed' || report.action === 'executed'
+  if (report.phase === 'pass' && hasExecutionAssertion && executionClaimed && txDigest && eventProven && spendProven && tickExecuted) {
     return check({
       id: 'strict_execution_evidence',
       label: 'AgentTradeExecuted strict execution evidence',
       status: 'passed',
-      detail: 'strict demo execution report includes G2-EXECUTE and a tick tx digest',
+      detail: 'strict demo execution report includes G2-EXECUTE, AgentTradeExecuted evidence, spend increase and a tick tx digest',
       evidence: executionReportEvidence(report),
     })
   }
@@ -243,7 +251,7 @@ function nextActions({ walletCheck, fundingCheck, strictExecutionCheck }) {
     actions.push('Send the DBUSDC/DEEP funding handoff to an external funding provider, then rerun npm run funding:watch -- --json.')
   }
   if (fundingCheck?.status === 'passed' && strictExecutionCheck?.status !== 'passed') {
-    actions.push('Run npm run demo:execute and keep a pass report proving G2-EXECUTE, AgentTradeExecuted, execution_claimed=true and spend increase.')
+    actions.push('Run npm run demo:execute:report to write .rescuegrid/demo-execute-report.json proving G2-EXECUTE, AgentTradeExecuted, execution_claimed=true and spend increase.')
   }
   return actions
 }

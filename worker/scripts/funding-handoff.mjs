@@ -166,6 +166,7 @@ export function buildFundingHandoff(readiness, { generatedAt = new Date().toISOS
       readiness_command: 'npm run daemon -- status --json',
       funding_watch_command: 'npm run funding:watch -- --json',
       strict_execution_command: 'npm run demo:execute',
+      strict_execution_report_command: 'npm run demo:execute:report',
       success_condition: 'Strict execution must preflight ready, create a policy, force a tick, then prove AgentTradeExecuted, execution_claimed=true and on-chain spend increase.',
     },
     source_of_truth: readiness.source_of_truth || [
@@ -207,6 +208,7 @@ function markdown(handoff) {
     `- ${handoff.next_verification.readiness_command}`,
     `- ${handoff.next_verification.funding_watch_command}`,
     `- ${handoff.next_verification.strict_execution_command}`,
+    `- ${handoff.next_verification.strict_execution_report_command}`,
     '',
   ].join('\n')
 }

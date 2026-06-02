@@ -13,6 +13,7 @@ const requiredScripts = {
   'test:wallet-flow': 'node src/queries/wallet-flow.test.mjs',
   'test:wallet-evidence': 'node scripts/wallet-clickthrough-evidence.test.mjs',
   'test:mission-readiness': 'node scripts/mission-readiness.test.mjs',
+  'test:demo-execution-report': 'npm --prefix worker run test:demo-execution-report',
   'wallet:evidence': 'node scripts/wallet-clickthrough-evidence.mjs',
   'wallet:evidence:verify': 'node scripts/wallet-clickthrough-evidence.mjs --verify',
   'mission:readiness': 'node scripts/mission-readiness.mjs',
@@ -20,6 +21,7 @@ const requiredScripts = {
   'funding:watch': 'node worker/scripts/funding-watch.mjs',
   'demo:loop': 'node worker/scripts/validate-demo-loop.mjs',
   'demo:execute': 'node worker/scripts/validate-demo-loop.mjs --require-execution',
+  'demo:execute:report': 'node worker/scripts/validate-demo-loop.mjs --require-execution --out .rescuegrid/demo-execute-report.json',
   'safety:negative': 'node worker/scripts/validate-safety-negative-paths.mjs',
   'baseline:smoke': 'node scripts/baseline-smoke.mjs',
 }
@@ -66,7 +68,10 @@ function strictExecutionReport(overrides = {}) {
   return {
     phase: 'pass',
     assertions: ['G2-EXECUTE'],
+    tick_outcome: 'executed',
     execution_claimed: true,
+    agent_trade_event_found: true,
+    spend_increased: true,
     tick_tx_digest: 'tickDigest',
     wrapper_id: '0xwrapper',
     mandate_id: '0xmandate',
@@ -133,6 +138,19 @@ function strictExecutionReport(overrides = {}) {
   assert.equal(report.full_prd_ready, false)
   assert.equal(executionCheck.status, 'failed')
   assert.equal(report.blocker_codes.includes('STRICT_EXECUTION_NOT_PROVEN'), true)
+}
+
+{
+  const report = buildMissionReadinessReport({
+    scripts: requiredScripts,
+    walletReport: verifiedWalletReport(),
+    fundingReadiness: readyFunding(),
+    executionReport: strictExecutionReport({ agent_trade_event_found: false }),
+  })
+  const executionCheck = report.checks.find((row) => row.id === 'strict_execution_evidence')
+  assert.equal(report.status, 'failed')
+  assert.equal(executionCheck.status, 'failed')
+  assert.equal(executionCheck.evidence.agent_trade_event_found, false)
 }
 
 {

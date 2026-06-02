@@ -46,6 +46,7 @@ npm run test:session-mode           # live/read-only/demo session boundaries
 npm run test:wallet-flow            # mock wallet create/revoke orchestration
 npm run test:wallet-evidence        # wallet click-through evidence artifact contract
 npm run test:mission-readiness      # PRD readiness gate contract
+npm run test:demo-execution-report  # strict execution report artifact contract
 cd move/rescuegrid && sui move test # Move tests
 npm run config                      # sanitized Testnet deployment IDs
 npm run wallet:evidence -- --format markdown --out .rescuegrid/wallet-clickthrough-evidence.md
@@ -58,6 +59,7 @@ npm run chain-data:status -- --json # secret-safe ChainDataProvider status; add 
 npm run safety:negative             # live Testnet validate-plan safety proof; creates/revokes test policies
 npm run demo:loop                   # create -> activate/tick -> revoke live demo evidence
 npm run demo:execute                # strict mode: preflight funding/signer, then require AgentTradeExecuted
+npm run demo:execute:report         # strict mode + .rescuegrid/demo-execute-report.json on pass
 RESCUEGRID_FRONTEND_URL=http://localhost:5175 RESCUEGRID_WORKER_URL=http://localhost:8787 npm run baseline:smoke
 ```
 
@@ -107,7 +109,7 @@ The Worker also exposes `/api/runtime/status` for non-secret cloud agent, signer
 
 > Demo-loop validation path: with the local Worker running and `INTERNAL_AGENT_TICK_TOKEN` + `RESCUEGRID_DEMO_MODE=true` configured, `npm run demo:loop` creates a Testnet policy, activates the Durable Object runtime, forces one internal tick, records either a real execution or the documented funding gate, revokes, then proves the post-revoke tick stops without execution.
 
-> Strict execution validation path: after the BalanceManager is funded with usable DBUSDC/DEEP and `EXECUTION_ENABLED=true`, run `npm run demo:execute`. It first preflights `/api/runtime/status`, BalanceManager DBUSDC/DEEP, and agent SUI gas before creating any policy; if the preflight is blocked, the script fails without leaving a test policy behind. Once preflight passes, it uses the same live loop but fails unless the forced tick produces `AgentTradeExecuted`, `execution_claimed=true` and an on-chain spend increase.
+> Strict execution validation path: after the BalanceManager is funded with usable DBUSDC/DEEP and `EXECUTION_ENABLED=true`, run `npm run demo:execute` or `npm run demo:execute:report`. It first preflights `/api/runtime/status`, BalanceManager DBUSDC/DEEP, and agent SUI gas before creating any policy; if the preflight is blocked, the script fails without leaving a test policy behind. Once preflight passes, it uses the same live loop but fails unless the forced tick produces `AgentTradeExecuted`, `execution_claimed=true` and an on-chain spend increase. The report variant writes `.rescuegrid/demo-execute-report.json` only after the full create -> execute -> revoke -> post-revoke sequence passes.
 
 > Funding watch path: `npm run funding:watch -- --json` runs the same readiness contract once and prints public blockers. `npm run funding:watch -- --wait --run-demo --worker-url http://localhost:8787` polls until signer/funding readiness is true, then launches strict `demo:execute`; while blocked, it does not create a policy or submit a PTB.
 
@@ -127,7 +129,7 @@ Observed final mission evidence is Testnet-only:
 - Latest live run passed on 2026-06-03: active create tx `5iiumZ4C2JjXbM85mJ8wVgpKh8oasBHu5MxJsJF28CYh`, expiring create tx `EXydDTMDVh17EJA1iwxB3nX84kD4vkBtmRmwKucZ1ZLE`, revoke tx `EQrRShhZUYK7Zz9fGQgjJagvkkEJ3h4bEqR9A7nK9K5s`, blocker codes `OVER_BUDGET`, `OVER_SLIPPAGE`, `WRONG_POOL`, `WRONG_AGENT`, `MANDATE_MISMATCH`, `POLICY_EXPIRED`, `POLICY_REVOKED`, all with `submitted=false`, `execution_claimed=false` and spend `0 -> 0`.
 - `npm run demo:loop` is the G2 live demo validator: create -> activate/monitor -> force tick -> revoke -> post-revoke tick. In the current funding state it should report the documented execution gate, not a fake fill. `npm run demo:execute` is the strict variant: it preflights execution readiness before policy creation, then requires `AgentTradeExecuted`, `execution_claimed=true` and an on-chain spend increase.
 - `npm run wallet:evidence -- --format markdown --out .rescuegrid/wallet-clickthrough-evidence.md` is the read-only browser-wallet evidence artifact generator. `npm run wallet:evidence:verify -- --input .rescuegrid/wallet-clickthrough-evidence.md` verifies a filled artifact by checking the create/revoke tx digests against Sui `PolicyCreated` / `PolicyRevoked` events and optional Worker detail reads. The generated blank artifact is not itself proof that the browser wallet flow was clicked.
-- `npm run mission:readiness` is the secret-safe final PRD gate. It checks required validation scripts, verifies the filled wallet artifact, reads the same execution funding readiness contract used by `funding:watch`, and requires a strict `demo:execute` report proving `AgentTradeExecuted`. In the current state it should return non-zero with `status=blocked`, because the wallet artifact is not filled, DBUSDC/DEEP funding is not ready, and no strict execution report exists.
+- `npm run mission:readiness` is the secret-safe final PRD gate. It checks required validation scripts, verifies the filled wallet artifact, reads the same execution funding readiness contract used by `funding:watch`, and requires `.rescuegrid/demo-execute-report.json` from `npm run demo:execute:report` proving `AgentTradeExecuted`, `execution_claimed=true`, spend increase and a tick tx digest. In the current state it should return non-zero with `status=blocked`, because the wallet artifact is not filled, DBUSDC/DEEP funding is not ready, and no strict execution report exists.
 - Latest demo-loop run passed on 2026-06-03: create tx `49dk3PCrukukRLkuKFEJc1s3QQwAj4cc2E1v8uxP1fSv`, wrapper `0x2a358220…948593e`, forced tick `EXECUTION_DISABLED` with `execution_claimed=false` and spend `0 -> 0`, revoke tx `CuK54YNnw7vb5PxxQy2p66JdvKfSvzy8K8VXUPzYfCQg`, post-revoke tick `POLICY_REVOKED`.
 - Funding/readiness, tick auth, trigger-not-met, Guardian safety, revoked/failed/unresolved paths all remained non-success with unchanged spend and no execution-success activity; transaction-bearing runtime activity is idempotent by digest, and chain success evidence wins over duplicate runtime success rows.
 - Live policy lists reconcile Durable Object runtime state with chain state; terminal chain state wins and stale runtime rows surface as `runtime_state_stale`.

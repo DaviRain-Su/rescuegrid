@@ -324,6 +324,19 @@ Security / boundary:
 - `execution_claimed` 必须始终为 `false`；只有实际 tick 返回 `AgentTradeExecuted` + spend increase 才能声明执行成功。
 - `npm run demo:execute` strict preflight 必须使用该 endpoint，而不是维护第二套资金/签名判断。
 
+### `npm run demo:execute:report`
+
+Happy path:
+
+- 等同于 `npm run demo:execute` 的 strict mode，但在完整 create -> execute -> revoke -> post-revoke 闭环通过后写入 `.rescuegrid/demo-execute-report.json`。
+- report 必须包含 `purpose=rescuegrid_demo_execution_report`、`phase=pass`、`chain=sui:testnet`、`wrapper_id`、`mandate_id`、`strategy_hash`、create/revoke tx digest、`tick_outcome=executed`、`tick_tx_digest`、`execution_claimed=true`、`agent_trade_event_found=true`、`spend_increased=true`、`assertions` 包含 `G2-EXECUTE`。
+- report 必须包含 post-revoke evidence：`post_revoke.action=stopped_revoked`、`post_revoke.code=POLICY_REVOKED`、`post_revoke.execution_claimed=false`。
+
+Security / boundary:
+
+- `--out` 只在完整 strict execution pass 后写 report；preflight blocked 时不得创建 policy，也不得写出可被 `mission:readiness` 当作 success 的 report。
+- report 不得包含 `AGENT_KEY`、owner key、`INTERNAL_AGENT_TICK_TOKEN`、WaaP session file、permission token 或任何 secret value。
+
 ### `npm run funding:request`
 
 Happy path:
@@ -331,7 +344,7 @@ Happy path:
 - 输出 `purpose=external_deepbook_testnet_funding_request`、`chain=sui:testnet`、部署 agent address、AgentPassport id、BalanceManager id、DeepBook `SUI_DBUSDC` pool id、DBUSDC coin type 和 DEEP coin type。
 - 输出 BalanceManager DBUSDC / DEEP 的 observed、required、missing、usable 和 blocker code。
 - 输出 agent gas address 的 SUI_MIST observed、required、missing、usable 和 blocker code。
-- 输出 `next_verification.readiness_command="npm run daemon -- status --json"`、`next_verification.funding_watch_command="npm run funding:watch -- --json"` 和 `next_verification.strict_execution_command="npm run demo:execute"`。
+- 输出 `next_verification.readiness_command="npm run daemon -- status --json"`、`next_verification.funding_watch_command="npm run funding:watch -- --json"`、`next_verification.strict_execution_command="npm run demo:execute"` 和 `next_verification.strict_execution_report_command="npm run demo:execute:report"`。
 - 支持 `--dbusdc-threshold` / `--deep-threshold` / `--sui-gas-threshold`，且这些 request threshold 只能通过 `buildExecutionReadiness` 提高门槛，不能弱化 Worker 配置 minimum。
 - 支持 `--format markdown --out .rescuegrid/funding-request.md` 生成可转发 funding provider 的 artifact；artifact 必须包含 public agent / BalanceManager / coin type / observed / required / missing / next verification commands，且不得包含任何 secret。
 
@@ -520,7 +533,8 @@ MVP desktop viewport:
 - `npm run test:wallet-flow` covers the frontend wallet orchestration contract with a mock signer: parse -> build `tx_json` -> wallet sign -> `waitForTransaction(showObjectChanges/showEvents)` -> require `PolicyCreated.wrapper_id` -> activate runtime, plus revoke build -> wallet sign.
 - `npm run test:wallet-evidence` covers the wallet click-through evidence artifact contract: the artifact is read-only, captures only public Worker status/readiness posture, lists create/revoke evidence fields, keeps `actual_clickthrough_completed=false` until manually filled, verifies filled create/revoke tx digests against Sui events, and never claims DeepBook execution.
 - `npm run wallet:evidence -- --format markdown --out .rescuegrid/wallet-clickthrough-evidence.md` must be run before real wallet QA; during the browser run, fill the artifact with owner address, create tx digest, `wrapper_id`, `mandate_id`, strategy hash, revoke tx digest and screenshots for sign-in, wallet approvals, active policy and revoked state. After filling it, `npm run wallet:evidence:verify -- --input .rescuegrid/wallet-clickthrough-evidence.md` must pass or report the exact missing/mismatched field.
-- `npm run test:mission-readiness` covers the final PRD readiness report contract: `status=ready` only when required scripts, filled wallet evidence, funding readiness and strict execution evidence all pass; incomplete wallet evidence, missing funding readiness or missing strict execution evidence must classify as `blocked`; contradictory artifacts such as a strict execution report with `execution_claimed=false` must classify as `failed`.
+- `npm run test:mission-readiness` covers the final PRD readiness report contract: `status=ready` only when required scripts, filled wallet evidence, funding readiness and strict execution evidence all pass; incomplete wallet evidence, missing funding readiness or missing strict execution evidence must classify as `blocked`; contradictory artifacts such as a strict execution report with `execution_claimed=false`, missing `AgentTradeExecuted` evidence or missing spend increase must classify as `failed`.
+- `npm run test:demo-execution-report` covers the strict execution report helper: executed reports include `G2-EXECUTE`, `execution_claimed=true`, `agent_trade_event_found=true`, `spend_increased=true` and tx digests; funding-gated reports stay non-executed and cannot satisfy the mission gate.
 - `npm run mission:readiness` is read-only and may return non-zero while the project is externally blocked. It must not create policies, submit PTBs, call `demo:execute`, or print `AGENT_KEY`, owner key, `INTERNAL_AGENT_TICK_TOKEN`, WaaP permission token, WaaP session value or endpoint secrets.
 - Activity view shows events and budget within one 5 second polling interval after chain state changes.
 - `npm run test:activity-ledger` covers the Activity ledger normalization contract: signer blocker code extraction, WaaP approval evidence rows, signer-block filter state, non-signer funding blockers, and policy lookup by wrapper id.
@@ -576,9 +590,9 @@ Passing criteria:
 - At least one real Sui Testnet transaction is visible.
 - At least one real Deepbook-related execution is visible, or a documented Testnet blocker is explicitly shown by `npm run demo:loop` with fallback approved before demo.
 - `npm run safety:negative` provides the safety-negative acceptance proof for the fallback path: every known Guardian / wrapper / mandate blocker must be pre-submission and non-mutating.
-- Once DBUSDC/DEEP funding is available, `npm run demo:execute` or `node worker/scripts/validate-demo-loop.mjs --require-execution` must replace the fallback path. Strict mode must preflight runtime signer status, BalanceManager DBUSDC/DEEP and agent SUI gas before policy creation, fail without creating a test policy when the known gate is not ready, and fail after creation unless the forced tick proves `AgentTradeExecuted`, `execution_claimed=true` and on-chain spend increase.
+- Once DBUSDC/DEEP funding is available, `npm run demo:execute` or `node worker/scripts/validate-demo-loop.mjs --require-execution` must replace the fallback path. Strict mode must preflight runtime signer status, BalanceManager DBUSDC/DEEP and agent SUI gas before policy creation, fail without creating a test policy when the known gate is not ready, and fail after creation unless the forced tick proves `AgentTradeExecuted`, `execution_claimed=true` and on-chain spend increase. To satisfy the final aggregate gate, run `npm run demo:execute:report` so the pass report is written to `.rescuegrid/demo-execute-report.json`.
 - Browser wallet evidence must include a filled `.rescuegrid/wallet-clickthrough-evidence.md` artifact from `npm run wallet:evidence` plus a passing `npm run wallet:evidence:verify -- --input .rescuegrid/wallet-clickthrough-evidence.md`; the generated blank artifact alone is not a passing click-through proof.
-- `npm run mission:readiness` must be the final aggregate gate before claiming the PRD complete. It may report `status=blocked` while DBUSDC/DEEP or manual wallet evidence is missing, but it must never report `status=ready` without a verified wallet artifact, funding readiness, and strict `AgentTradeExecuted` evidence.
+- `npm run mission:readiness` must be the final aggregate gate before claiming the PRD complete. It may report `status=blocked` while DBUSDC/DEEP or manual wallet evidence is missing, but it must never report `status=ready` without a verified wallet artifact, funding readiness, and `.rescuegrid/demo-execute-report.json` proving strict `AgentTradeExecuted` execution.
 - Revocation is visible both in UI and chain state.
 - No step requires exposing a user private key to the Agent.
 - The deployed agent address shown in preview matches the agent recorded in the Mandate and Wrapper.
