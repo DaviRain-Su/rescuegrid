@@ -1,6 +1,6 @@
-import { useState } from 'react'
 import { RG } from '../data.js'
 import { Icon } from './primitives.jsx'
+import { useFeedTestMutation } from '../queries/feeds.js'
 
 const ACCESS_META = {
   live:  { c: 'var(--safe)',   label: 'Live · direct', note: 'Public, CORS-open — the browser fetches it directly.' },
@@ -10,36 +10,17 @@ const ACCESS_META = {
 const GROUP_ICON = { 'Market data': 'percent', 'On-chain': 'layers', 'Derivatives': 'swap', 'Execution': 'bolt' };
 
 function FeedTestButton({ feed }) {
-  const [state, setState] = useState('idle'); // idle | testing | ok | err
-  const [result, setResult] = useState('');
+  const testFeedMutation = useFeedTestMutation();
+  const state = testFeedMutation.isPending ? 'testing' : testFeedMutation.isSuccess ? 'ok' : testFeedMutation.isError ? 'err' : 'idle';
+  const result = testFeedMutation.isSuccess
+    ? `${testFeedMutation.data.summary} · ${testFeedMutation.data.ms}ms`
+    : testFeedMutation.isError
+      ? `${testFeedMutation.error?.message || testFeedMutation.error} — may be rate-limited; pipeline is unchanged`
+      : '';
 
   const run = async () => {
     if (!feed.test) return;
-    setState('testing'); setResult('');
-    const t0 = performance.now();
-    try {
-      const res = await fetch(feed.test, { method: 'GET' });
-      const ms = Math.round(performance.now() - t0);
-      if (!res.ok) throw new Error('HTTP ' + res.status);
-      const data = await res.json();
-      let summary = '';
-      if (feed.id === 'llama' && data && data.data) {
-        const suiPools = data.data.filter(p => (p.chain || '').toLowerCase() === 'sui');
-        const topSui = suiPools.slice().filter(p => (p.apy || 0) > 0 && (p.apy || 0) < 300).sort((a, b) => (b.apy || 0) - (a.apy || 0))[0];
-        summary = `${data.data.length.toLocaleString()} pools live · ${suiPools.length} on Sui` + (topSui ? ` · top ${topSui.project} ${(topSui.apy || 0).toFixed(1)}%` : '');
-      } else if (feed.id === 'pyth' && Array.isArray(data)) {
-        summary = `${data.length} SUI price feed${data.length === 1 ? '' : 's'} resolved on Hermes`;
-      } else if (feed.id === 'cg') {
-        summary = data.gecko_says ? 'CoinGecko API reachable · ' + data.gecko_says : 'reachable';
-      } else {
-        summary = 'reachable';
-      }
-      setResult(`${summary} · ${ms}ms`);
-      setState('ok');
-    } catch (e) {
-      setResult(String(e.message || e) + ' — may be rate-limited; pipeline is unchanged');
-      setState('err');
-    }
+    testFeedMutation.mutate(feed);
   };
 
   if (!feed.test) {
@@ -170,4 +151,3 @@ export function DataSources({ onToast, live, setLive }) {
     </div>
   );
 }
-

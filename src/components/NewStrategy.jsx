@@ -1,7 +1,9 @@
 /* ===========================================================
    RescueGrid — New Strategy flow (intent → policy)
    =========================================================== */
-import { useState, useEffect } from 'react'
+import { useMemo, useState } from 'react'
+import { useMutation } from '@tanstack/react-query'
+import { useForm } from '@tanstack/react-form'
 import { useCurrentAccount } from '@mysten/dapp-kit'
 import { RG } from '../data.js'
 import { Icon, Sparkline, fmtUsd } from './primitives.jsx'
@@ -62,6 +64,16 @@ const VENUE_OPTS = {
   spot: ['Binance', 'OKX', 'Bybit', 'Cetus', 'DeepBook', 'Raydium', 'Uniswap'],
 }
 const MARK_PX = { 'funding-arb': 4.182, spot: 4.182 }
+
+function defaultLegsFor(scenario) {
+  if (scenario === 'spot') return [{ venue: 'OKX', side: 'long', pct: 50 }, { venue: 'Raydium', side: 'short', pct: 50 }]
+  if (scenario === 'funding-arb') return [{ venue: 'Aevo', side: 'short', pct: 50 }, { venue: 'Hyperliquid', side: 'long', pct: 50 }]
+  return [{ venue: 'Bluefin', side: 'short', pct: 50 }, { venue: 'Hyperliquid', side: 'long', pct: 50 }]
+}
+
+function sliderNumber(value) {
+  return Array.isArray(value) ? Number(value[0]) : Number(value)
+}
 
 function LegBuilder({ scenario, budget, leverage, legs, setLegs }) {
   const venues = VENUE_OPTS[scenario] || VENUE_OPTS['funding-arb']
@@ -149,19 +161,20 @@ export function NewStrategy({ onDone, mode, setMode, seed }) {
   // a market/catalog "Deploy" seeds the wizard: jump to Review with the scenario pre-filled
   const seeded = seed && PARSED[seed.scenario] ? seed.scenario : null
   const seedMeta = seeded ? PARSED[seeded].meta : null
+  const defaultValues = useMemo(() => ({
+    text: (seed && seed.text) || '',
+    scenario: seeded || 'safe',
+    budget: seedMeta ? seedMeta.budget : 500,
+    slip: seedMeta ? seedMeta.slip : 1.2,
+    expiry: 14,
+    leverage: 2,
+    liqBuffer: 25,
+    flipThresh: 0,
+    requireApproval: false,
+    legs: defaultLegsFor(seeded || 'safe'),
+  }), [seed, seedMeta, seeded])
+  const form = useForm({ defaultValues })
   const [step, setStep] = useState(seeded ? 1 : 0)
-  const [text, setText] = useState((seed && seed.text) || '')
-  const [parsing, setParsing] = useState(false)
-  const [scenario, setScenario] = useState(seeded || 'safe')
-  const [budget, setBudget] = useState(seedMeta ? seedMeta.budget : 500)
-  const [slip, setSlip] = useState(seedMeta ? seedMeta.slip : 1.2)
-  const [expiry, setExpiry] = useState(14)
-  // Builder v2 — advanced, strategy-aware controls
-  const [leverage, setLeverage] = useState(2)
-  const [liqBuffer, setLiqBuffer] = useState(25)
-  const [flipThresh, setFlipThresh] = useState(0)
-  const [requireApproval, setRequireApproval] = useState(false)
-  const [legs, setLegs] = useState([{ venue: 'Bluefin', side: 'short', pct: 50 }, { venue: 'Hyperliquid', side: 'long', pct: 50 }])
   const [livePreview, setLivePreview] = useState(null)
   const [livePreviewSource, setLivePreviewSource] = useState(null)
   const [liveBacktest, setLiveBacktest] = useState(null)
@@ -171,25 +184,6 @@ export function NewStrategy({ onDone, mode, setMode, seed }) {
   const readOnlyPreview = !account && workerPreview
   const previewOwner = account?.address || deployment.agent.address
   const steps = ['Intent', 'Review', 'Policy', 'Deploy']
-  const P = PARSED[scenario]
-  const meta = P.meta || RG.parsed.meta
-  // which advanced (builder v2) controls apply to this strategy
-  const adv = {
-    leverage: ['funding-arb', 'hedge'].includes(scenario),
-    twoLeg: ['funding-arb', 'spot'].includes(scenario),
-    flip: scenario === 'funding-arb',
-    ltv: scenario === 'lend',
-  }
-  const blocked = P.guardian.some(g => g.level === 'fail')
-  const failCount = P.guardian.filter(g => g.level === 'fail').length
-  const BT = (live && liveBacktest) ? liveBacktest : P.backtest
-  const btLive = !!(live && liveBacktest)
-
-  // seed leg-builder defaults per scenario
-  useEffect(() => {
-    if (scenario === 'spot') setLegs([{ venue: 'OKX', side: 'long', pct: 50 }, { venue: 'Raydium', side: 'short', pct: 50 }])
-    else if (scenario === 'funding-arb') setLegs([{ venue: 'Aevo', side: 'short', pct: 50 }, { venue: 'Hyperliquid', side: 'long', pct: 50 }])
-  }, [scenario])
 
   const classify = (s) => {
     if (/entire|all-?in|ignore slippage|everything|max leverage|20x/i.test(s)) return 'risky'
@@ -202,40 +196,59 @@ export function NewStrategy({ onDone, mode, setMode, seed }) {
     return 'safe'
   }
 
-  const parse = async () => {
-    setParsing(true)
-    const sc = classify(text)
+  const parseIntentMutation = useMutation({
+    mutationFn: async (values) => {
+      const sc = classify(values.text)
     const m = PARSED[sc].meta
+      let preview = null
+      let previewSource = null
+      let backtest = null
     if (live) {
       // Worker-first parse; local parser is only a fallback when a connected wallet has no Worker URL configured.
       try {
-        const preview = workerPreview
-          ? await parseWorkerIntent(previewOwner, text)
-          : parseLocalIntent(text, previewOwner)
-        setLivePreview(preview)
-        setLivePreviewSource(workerPreview ? 'Worker' : 'local fallback')
+          preview = workerPreview
+            ? await parseWorkerIntent(previewOwner, values.text)
+            : parseLocalIntent(values.text, previewOwner)
+          previewSource = workerPreview ? 'Worker' : 'local fallback'
         if (preview?.status === 'ok' && preview.strategy) {
           const th = Number(preview.strategy.trigger?.threshold_pct) || 8
-          const bud = preview.strategy.budget_ceiling ? Number(preview.strategy.budget_ceiling) / 1e6 : budget
+            const bud = preview.strategy.budget_ceiling ? Number(preview.strategy.budget_ceiling) / 1e6 : values.budget
           try {
             const h = await getSuiPriceHistory(30)
-            setLiveBacktest(h.status === 'ok' && h.prices.length > 2 ? runBacktest(h.prices, { thresholdPct: th, budget: bud }) : null)
-          } catch { setLiveBacktest(null) }
-        } else setLiveBacktest(null)
+              backtest = h.status === 'ok' && h.prices.length > 2 ? runBacktest(h.prices, { thresholdPct: th, budget: bud }) : null
+            } catch { backtest = null }
+        }
       } catch {
-        setLivePreview(null)
-        setLivePreviewSource(null)
-        setLiveBacktest(null)
+          preview = null
+          previewSource = null
+          backtest = null
       }
     } else {
       await new Promise(r => setTimeout(r, 1400))
-      setLivePreview(null)
-      setLivePreviewSource(null)
+        preview = null
+        previewSource = null
     }
-    setParsing(false)
-    setScenario(sc)
-    if (m) { setBudget(m.budget); setSlip(m.slip) }
-    setStep(1)
+      return { sc, meta: m, preview, previewSource, backtest }
+    },
+    onSuccess: ({ sc, meta: nextMeta, preview, previewSource, backtest }) => {
+      form.setFieldValue('scenario', sc)
+      form.setFieldValue('legs', defaultLegsFor(sc))
+      if (nextMeta) {
+        form.setFieldValue('budget', nextMeta.budget)
+        form.setFieldValue('slip', nextMeta.slip)
+      }
+      setLivePreview(preview)
+      setLivePreviewSource(previewSource)
+      setLiveBacktest(backtest)
+      setStep(1)
+    },
+  })
+
+  const parse = (values) => {
+    setLivePreview(null)
+    setLivePreviewSource(null)
+    setLiveBacktest(null)
+    parseIntentMutation.mutate(values)
   }
 
   return (
@@ -243,6 +256,44 @@ export function NewStrategy({ onDone, mode, setMode, seed }) {
       <div className="card" style={{ padding: '18px 22px' }}>
         <Stepper step={step} steps={steps} />
       </div>
+
+      <form.Subscribe selector={(state) => state.values}>
+        {(values) => {
+          const text = values.text || ''
+          const scenario = values.scenario || 'safe'
+          const budget = Number(values.budget)
+          const slip = Number(values.slip)
+          const expiry = Number(values.expiry)
+          const leverage = Number(values.leverage)
+          const liqBuffer = Number(values.liqBuffer)
+          const flipThresh = Number(values.flipThresh)
+          const requireApproval = Boolean(values.requireApproval)
+          const legs = values.legs || []
+          const parsing = parseIntentMutation.isPending
+          const P = PARSED[scenario] || RG.parsed
+          const meta = P.meta || RG.parsed.meta
+          const adv = {
+            leverage: ['funding-arb', 'hedge'].includes(scenario),
+            twoLeg: ['funding-arb', 'spot'].includes(scenario),
+            flip: scenario === 'funding-arb',
+            ltv: scenario === 'lend',
+          }
+          const blocked = P.guardian.some(g => g.level === 'fail')
+          const failCount = P.guardian.filter(g => g.level === 'fail').length
+          const BT = (live && liveBacktest) ? liveBacktest : P.backtest
+          const btLive = !!(live && liveBacktest)
+          const setText = (next) => form.setFieldValue('text', next)
+          const setBudget = (next) => form.setFieldValue('budget', sliderNumber(next))
+          const setSlip = (next) => form.setFieldValue('slip', sliderNumber(next))
+          const setExpiry = (next) => form.setFieldValue('expiry', sliderNumber(next))
+          const setLeverage = (next) => form.setFieldValue('leverage', sliderNumber(next))
+          const setLiqBuffer = (next) => form.setFieldValue('liqBuffer', sliderNumber(next))
+          const setFlipThresh = (next) => form.setFieldValue('flipThresh', sliderNumber(next))
+          const setRequireApproval = (next) => form.setFieldValue('requireApproval', typeof next === 'function' ? next(requireApproval) : next)
+          const setLegs = (next) => form.setFieldValue('legs', typeof next === 'function' ? next(legs) : next)
+
+          return (
+            <>
 
       {/* STEP 0 — intent */}
       {step === 0 && (
@@ -275,7 +326,7 @@ export function NewStrategy({ onDone, mode, setMode, seed }) {
             </Button>
           </div>
           <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 22 }}>
-            <Button className="bg-accent text-accent-foreground font-semibold" isDisabled={!text.trim() || parsing} onPress={parse}>
+            <Button className="bg-accent text-accent-foreground font-semibold" isDisabled={!text.trim() || parsing} onPress={() => parse(values)}>
               {parsing ? <><Icon name="refresh" size={15} style={{ animation: 'spin 1s linear infinite' }} /> Parsing intent…</> : <>Parse intent <Icon name="chevR" size={15} /></>}
             </Button>
           </div>
@@ -448,7 +499,7 @@ export function NewStrategy({ onDone, mode, setMode, seed }) {
                 <label style={{ fontSize: 13, fontWeight: 600 }}>Budget ceiling</label>
                 <span className="mono" style={{ fontSize: 14, color: 'var(--accent)', fontWeight: 600 }}>{budget} USDC</span>
               </div>
-              <Slider value={budget} onChange={setBudget} minValue={100} maxValue={2000} step={50} className="w-full">
+              <Slider aria-label="Budget ceiling" value={budget} onChange={setBudget} minValue={100} maxValue={2000} step={50} className="w-full">
                 <Slider.Track><Slider.Fill className="bg-accent" /><Slider.Thumb /></Slider.Track>
               </Slider>
               <div style={{ fontSize: 11.5, color: 'var(--t2)', marginTop: 6 }}>Hard cap on total spend. The agent self-checks remaining budget before every order.</div>
@@ -460,7 +511,7 @@ export function NewStrategy({ onDone, mode, setMode, seed }) {
                   <label style={{ fontSize: 13, fontWeight: 600 }}>Max slippage</label>
                   <span className="mono" style={{ fontSize: 14, color: 'var(--accent)', fontWeight: 600 }}>{slip.toFixed(1)}%</span>
                 </div>
-                <Slider value={slip} onChange={setSlip} minValue={0.2} maxValue={3} step={0.1} className="w-full">
+                <Slider aria-label="Max slippage" value={slip} onChange={setSlip} minValue={0.2} maxValue={3} step={0.1} className="w-full">
                   <Slider.Track><Slider.Fill className="bg-accent" /><Slider.Thumb /></Slider.Track>
                 </Slider>
               </div>
@@ -469,7 +520,7 @@ export function NewStrategy({ onDone, mode, setMode, seed }) {
                   <label style={{ fontSize: 13, fontWeight: 600 }}>Expires in</label>
                   <span className="mono" style={{ fontSize: 14, color: 'var(--accent)', fontWeight: 600 }}>{expiry} days</span>
                 </div>
-                <Slider value={expiry} onChange={setExpiry} minValue={1} maxValue={30} step={1} className="w-full">
+                <Slider aria-label="Policy expiry" value={expiry} onChange={setExpiry} minValue={1} maxValue={30} step={1} className="w-full">
                   <Slider.Track><Slider.Fill className="bg-accent" /><Slider.Thumb /></Slider.Track>
                 </Slider>
               </div>
@@ -629,6 +680,10 @@ export function NewStrategy({ onDone, mode, setMode, seed }) {
           </div>
         </div>
       )}
+            </>
+          )
+        }}
+      </form.Subscribe>
     </div>
   )
 }

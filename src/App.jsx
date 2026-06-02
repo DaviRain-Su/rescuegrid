@@ -3,6 +3,7 @@
    =========================================================== */
 import { useState, useEffect, useRef } from 'react'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
+import { useNavigate, useSearch } from '@tanstack/react-router'
 import { useCurrentAccount, useCurrentWallet, useSuiClient, useSignAndExecuteTransaction, useDisconnectWallet } from '@mysten/dapp-kit'
 import { Transaction } from '@mysten/sui/transactions'
 import { RG } from './data.js'
@@ -41,6 +42,32 @@ const TWEAK_DEFAULTS = {
   liveJitter: true,
 }
 
+const APP_VIEWS = new Set([
+  'dashboard',
+  'new',
+  'activity',
+  'markets',
+  'strategies',
+  'strategy-detail',
+  'active',
+  'risk',
+  'data',
+  'policies',
+  'profile',
+])
+
+function normalizeView(view) {
+  return APP_VIEWS.has(view) ? view : 'dashboard'
+}
+
+function cleanAppSearch(search) {
+  const next = { ...search }
+  if (!next.view || next.view === 'dashboard') delete next.view
+  if (!next.strategy) delete next.strategy
+  if (!next.live) delete next.live
+  return next
+}
+
 // blend a hex toward another hex by t (0..1) — deepens accent for light mode
 function mixHex(hex, toward, t) {
   const p = h => { const x = h.replace('#', ''); const n = parseInt(x.length === 3 ? x.split('').map(c => c + c).join('') : x, 16); return [(n >> 16) & 255, (n >> 8) & 255, n & 255] }
@@ -66,15 +93,17 @@ function apiFailure(label, result) {
 }
 
 export default function App({ onExit }) {
+  const navigate = useNavigate()
+  const search = useSearch({ from: '/app' })
   const [authed, setAuthed] = useState(false)
   const [sessionMode, setSessionMode] = useState('signed-out')
   const [t, setTweak] = useTweaks(TWEAK_DEFAULTS)
-  const [view, setView] = useState('dashboard')
+  const [view, setViewState] = useState(() => normalizeView(search.view))
   const [inspect, setInspect] = useState(null)
   const [txView, setTxView] = useState(null)
   const [seed, setSeed] = useState(null)
-  const [stratId, setStratId] = useState(null)
-  const [liveId, setLiveId] = useState(null)
+  const [stratId, setStratIdState] = useState(() => search.strategy || null)
+  const [liveId, setLiveIdState] = useState(() => search.live || null)
   const [liveFeed, setLiveFeed] = useState(false)
   const [runtimeOpen, setRuntimeOpen] = useState(false)
   const [runtimeMode, setRuntimeMode] = useState(null)
@@ -93,6 +122,42 @@ export default function App({ onExit }) {
   const prevStatuses = useRef(null)
   const timers = useRef([])
   const notifId = useRef(100)
+
+  const updateSearch = (patch) => {
+    navigate({
+      to: '/app',
+      replace: true,
+      search: (prev) => cleanAppSearch({ ...prev, ...patch }),
+    })
+  }
+  const setView = (nextView) => {
+    const resolved = normalizeView(nextView)
+    setViewState(resolved)
+    updateSearch({
+      view: resolved,
+      strategy: resolved === 'strategy-detail' ? stratId : null,
+      live: resolved === 'active' ? liveId : null,
+    })
+  }
+  const openStrategy = (id) => {
+    setStratIdState(id)
+    setViewState('strategy-detail')
+    updateSearch({ view: 'strategy-detail', strategy: id, live: null })
+  }
+  const openLivePolicy = (id) => {
+    setLiveIdState(id)
+    setViewState('active')
+    updateSearch({ view: 'active', live: id, strategy: null })
+  }
+
+  useEffect(() => {
+    const nextView = normalizeView(search.view)
+    setViewState(prev => prev === nextView ? prev : nextView)
+    const nextStrategy = search.strategy || null
+    setStratIdState(prev => prev === nextStrategy ? prev : nextStrategy)
+    const nextLive = search.live || null
+    setLiveIdState(prev => prev === nextLive ? prev : nextLive)
+  }, [search.view, search.strategy, search.live])
 
   // Live mode: connected Sui account. Reads are Worker-first with direct-chain
   // fallback; writes require Worker-built transactions.
@@ -332,22 +397,9 @@ export default function App({ onExit }) {
   // -> wallet signs -> Worker activates the Durable Object runtime.
   const deployLive = async (text, meta) => {
     try {
-      const parsed = await parseIntent(owner, text || `When SUI drops more than 8%, deploy a ${meta.budget} USDC rescue grid`)
-      if (parsed.status !== 'ok') { showToast(`Parse failed: ${parsed.message || parsed.code}`, 'var(--danger)'); return false }
-      const built = await buildPolicyTx(owner, parsed.strategy, parsed.strategy_hash)
-      if (built.status !== 'ok') { showToast(`Build failed: ${built.message || built.code}`, 'var(--danger)'); return false }
-      const signed = await signAndExec({ transaction: Transaction.from(built.tx_json) })
-      const res = await suiClient.waitForTransaction({ digest: signed.digest, options: { showObjectChanges: true, showEvents: true } })
-      const ev = (res.events || []).find(e => String(e.type).endsWith('::policy::PolicyCreated'))
-      const wrapperId = ev?.parsedJson?.wrapper_id
-      if (wrapperId) await activatePolicy(wrapperId).catch(() => {})
-      showToast('Policy created on-chain — agent authorized within limits', 'var(--accent)')
-      pushNotif('policy', `Policy deployed on-chain · ${meta.name}`)
-      setView('policies')
-      setTimeout(() => refreshLivePolicies(), 1500)
+      await deployLiveMutation.mutateAsync({ text, meta })
       return true
-    } catch (e) {
-      showToast(`On-chain deploy failed: ${String(e?.message || e).slice(0, 80)}`, 'var(--danger)')
+    } catch {
       return false
     }
   }
@@ -641,14 +693,14 @@ export default function App({ onExit }) {
             {view === 'activity' && <ActivityView activity={shownActivity} onTx={setTxView} live={liveReadsEnabled} loading={liveReadsEnabled && liveLoading} />}
             {view === 'markets' && <MarketsView onDeploy={(s) => { setSeed(s); setView('new') }} live={liveFeed} onToast={showToast} />}
             {view === 'risk' && <RiskCenter policies={policies} stopped={halted} onEmergencyStop={emergencyStop} onToast={showToast} />}
-            {view === 'strategies' && <StrategyMarketplace onDeploy={(s) => { setSeed(s); setView('new') }} onToast={showToast} onOpen={(id) => { setStratId(id); setView('strategy-detail') }} />}
+            {view === 'strategies' && <StrategyMarketplace onDeploy={(s) => { setSeed(s); setView('new') }} onToast={showToast} onOpen={openStrategy} />}
             {view === 'strategy-detail' && <StrategyDetail id={stratId} onBack={() => setView('strategies')} onDeploy={(s) => { setSeed(s); setView('new') }} onToast={showToast} />}
             {view === 'data' && <DataSources onToast={showToast} live={liveFeed} setLive={setLiveFeed} />}
             {view === 'active' && (policies.find(x => x.id === liveId)
               ? <ActiveStrategy p={policies.find(x => x.id === liveId)} activity={shownActivity} onBack={() => setView('policies')}
                   onToggle={togglePolicy} onRebalance={rebalanceNow} onRevoke={handleRevoke} onTx={setTxView} onToast={showToast} />
-              : <PoliciesView policies={policies} onRevoke={handleRevoke} onInspect={setInspect} onLive={(p) => { setLiveId(p.id); setView('active') }} live={liveReadsEnabled} readOnly={readOnlyLiveMode} loading={liveReadsEnabled && liveLoading} />)}
-            {view === 'policies' && <PoliciesView policies={policies} onRevoke={handleRevoke} onInspect={setInspect} onLive={(p) => { setLiveId(p.id); setView('active') }} live={liveReadsEnabled} readOnly={readOnlyLiveMode} loading={liveReadsEnabled && liveLoading} />}
+              : <PoliciesView policies={policies} onRevoke={handleRevoke} onInspect={setInspect} onLive={(p) => openLivePolicy(p.id)} live={liveReadsEnabled} readOnly={readOnlyLiveMode} loading={liveReadsEnabled && liveLoading} />)}
+            {view === 'policies' && <PoliciesView policies={policies} onRevoke={handleRevoke} onInspect={setInspect} onLive={(p) => openLivePolicy(p.id)} live={liveReadsEnabled} readOnly={readOnlyLiveMode} loading={liveReadsEnabled && liveLoading} />}
             {view === 'profile' && <Profile
               live={liveReadsEnabled}
               readOnly={readOnlyLiveMode}

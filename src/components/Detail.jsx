@@ -3,11 +3,10 @@
    Makes the Move Policy Object tangible: struct, capabilities,
    protocol allow-list, audit trail.
    =========================================================== */
-import { useState, useEffect } from 'react'
 import { RG } from '../data.js'
-import { getTransaction } from '../api.js'
 import { Icon } from './primitives.jsx'
 import { Button } from '@heroui/react'
+import { useTxDetail } from '../queries/feeds.js'
 
 function CapRow({ granted, label, fn }) {
   return (
@@ -216,16 +215,9 @@ function coinMeta(ct) {
 }
 
 export function TxDrawer({ tx, onClose }) {
-  const [data, setData] = useState(null)
-  const [err, setErr] = useState(null)
-  useEffect(() => {
-    let alive = true
-    setData(null); setErr(null)
-    getTransaction(tx)
-      .then((r) => { if (alive) (r.status === 'ok' ? setData(r.tx) : setErr(r.message || 'Transaction not found')) })
-      .catch((e) => { if (alive) setErr(String(e?.message || e)) })
-    return () => { alive = false }
-  }, [tx])
+  const txQuery = useTxDetail(tx)
+  const data = txQuery.data || null
+  const err = txQuery.isError ? String(txQuery.error?.message || txQuery.error) : null
 
   const short = (a) => (a ? a.slice(0, 6) + '…' + a.slice(-4) : '—')
   const explorer = `https://suiscan.xyz/testnet/tx/${tx}`

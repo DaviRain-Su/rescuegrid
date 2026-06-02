@@ -4,6 +4,7 @@
 // present, but no Enoki wallet is registered.
 import { useEffect } from 'react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
+import { ReactQueryDevtools } from '@tanstack/react-query-devtools'
 import { SuiClientProvider, WalletProvider, createNetworkConfig, useSuiClient } from '@mysten/dapp-kit'
 import { registerEnokiWallets } from '@mysten/enoki'
 import '@mysten/dapp-kit/dist/index.css'
@@ -44,6 +45,7 @@ export function Providers({ children }) {
           {children}
         </WalletProvider>
       </SuiClientProvider>
+      {import.meta.env.DEV && <ReactQueryDevtools buttonPosition="bottom-right" position="bottom" />}
     </QueryClientProvider>
   )
 }

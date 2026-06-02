@@ -1,7 +1,9 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo } from 'react'
+import { flexRender, getCoreRowModel, useReactTable } from '@tanstack/react-table'
 import { RG } from '../data.js'
 import { Icon, Token, Sparkline, ProtoGlyph, fmtUsd, fmtTvlM } from './primitives.jsx'
 import { PoolDrawer } from './MarketDrawers.jsx'
+import { demoYieldOpportunities, mapYieldPoolToOpportunity, useDefiLlamaYieldPools } from '../queries/markets.js'
 
 const RISK_META = {
   low:  { c: 'var(--safe)',   cls: 'badge-safe' },
@@ -31,58 +33,124 @@ const TYPE_SCENARIO = { LP: 'lp', Vault: 'lp', CLOB: 'lp', Lending: 'lend', LST:
 function YieldMonitor({ onDeploy, onInspect, chain, live, onToast }) {
   const [type, setType] = useState('all');
   const [sort, setSort] = useState('apy');
-  const [liveRows, setLiveRows] = useState(null);   // fetched DefiLlama pools
-  const [liveState, setLiveState] = useState('idle'); // idle | loading | ok | err
   const types = ['all', 'Lending', 'LP', 'LST', 'Vault', 'CLOB'];
+  const livePoolsQuery = useDefiLlamaYieldPools({ enabled: live });
+  const liveRows = livePoolsQuery.data || null;
+  const liveState = !live ? 'idle' : livePoolsQuery.isPending ? 'loading' : livePoolsQuery.isError ? 'err' : 'ok';
 
-  // when Live feed is on, pull real pools from DefiLlama and map to row shape
   useEffect(() => {
-    if (!live) { setLiveState('idle'); setLiveRows(null); return; }
-    let cancelled = false;
-    setLiveState('loading');
-    (async () => {
-      try {
-        const res = await fetch('https://yields.llama.fi/pools');
-        if (!res.ok) throw new Error('HTTP ' + res.status);
-        const json = await res.json();
-        const rows = (json.data || [])
-          .filter(p => ['Sui', 'Aptos', 'Solana', 'Ethereum', 'Base'].includes(p.chain))
-          .map(p => {
-            const base = +(p.apyBase || 0), reward = +(p.apyReward || 0);
-            const apy = +(p.apy || base + reward);
-            const sym = (p.symbol || '?').toUpperCase();
-            const isLP = /[-/]/.test(sym);
-            const isLST = /^(ST|HASUI|VSUI|AFSUI|JITOSOL|AMAPT)/.test(sym.replace(/[^A-Z]/g, '')) || /staked/i.test(p.poolMeta || '');
-            const type = isLST ? 'LST' : isLP ? 'LP' : 'Lending';
-            const risk = apy >= 30 || (p.ilRisk === 'yes') ? 'high' : apy >= 12 ? 'med' : 'low';
-            const d7 = +(p.apyPct7D || 0);
-            const trend = Array.from({ length: 7 }, (_, i) => +(apy - d7 * (1 - i / 6)).toFixed(2));
-            return { proto: (p.project || 'pool'), market: sym, type, chain: (p.chain || '').toLowerCase(),
-              tvl: (p.tvlUsd || 0) / 1e6, base, reward, apy, risk, trend, live: true, id: p.pool };
-          })
-          .filter(p => p.tvl >= 0.5 && p.apy < 300 && p.apy > 0);
-        if (cancelled) return;
-        setLiveRows(rows);
-        setLiveState('ok');
-        const sui = rows.filter(r => r.chain === 'sui').length;
-        onToast && onToast(`Live · ${rows.length.toLocaleString()} pools from DefiLlama · ${sui} on Sui`, 'var(--accent)');
-      } catch (e) {
-        if (cancelled) return;
-        setLiveState('err');
-        onToast && onToast('Live fetch failed (' + (e.message || e) + ') — showing demo data', 'var(--warn)');
-      }
-    })();
-    return () => { cancelled = true; };
-  }, [live]);
+    if (!live) return;
+    if (livePoolsQuery.isSuccess) {
+      const rows = livePoolsQuery.data || [];
+      const sui = rows.filter(r => r.chain === 'sui').length;
+      onToast && onToast(`Live · ${rows.length.toLocaleString()} pools from DefiLlama · ${sui} on Sui`, 'var(--accent)');
+    } else if (livePoolsQuery.isError) {
+      onToast && onToast('Live fetch failed (' + (livePoolsQuery.error?.message || livePoolsQuery.error) + ') — showing demo data', 'var(--warn)');
+    }
+  }, [live, livePoolsQuery.isSuccess, livePoolsQuery.isError, livePoolsQuery.dataUpdatedAt, livePoolsQuery.error, livePoolsQuery.data]);
 
   const source = (live && liveRows) ? liveRows : RG.yields;
-  const rows = source
+  const rows = useMemo(() => source
     .filter(y => (chain === 'all' || y.chain === chain) && (type === 'all' || y.type === type))
     .map(y => ({ ...y, apy: y.apy != null ? y.apy : y.base + y.reward }))
     .sort((a, b) => sort === 'apy' ? b.apy - a.apy : sort === 'tvl' ? b.tvl - a.tvl
       : ({ low: 0, med: 1, high: 2 }[a.risk] - { low: 0, med: 1, high: 2 }[b.risk]))
-    .slice(0, live && liveRows ? 40 : 100);
-  const maxApy = Math.max(...RG.yields.map(y => y.base + y.reward));
+    .slice(0, live && liveRows ? 40 : 100), [source, chain, type, sort, live, liveRows]);
+  const columns = useMemo(() => [
+    {
+      id: 'protocol',
+      header: 'Protocol / market',
+      cell: ({ row }) => {
+        const y = row.original;
+        const pm = RG.protocols[y.proto] || { name: (y.proto || 'pool').replace(/(^|[-_])([a-z])/g, (m, s, c) => (s ? ' ' : '') + c.toUpperCase()), c: '#5C6A78' };
+        const cm = RG.chains.find(c => c.id === y.chain) || { name: y.chain, c: 'var(--t2)' };
+        return (
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12, minWidth: 0 }}>
+            <ProtoGlyph proto={y.proto} size={34} />
+            <div style={{ minWidth: 0 }}>
+              <div style={{ fontSize: 13.5, fontWeight: 600 }}>{pm.name}</div>
+              <div className="mono" style={{ fontSize: 11, color: 'var(--t2)', display: 'flex', alignItems: 'center', gap: 6, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                <span style={{ width: 6, height: 6, borderRadius: '50%', background: cm.c, flexShrink: 0 }} />{cm.name} · {y.market}
+              </div>
+            </div>
+          </div>
+        );
+      },
+    },
+    {
+      accessorKey: 'type',
+      header: 'Type',
+      cell: ({ row }) => {
+        const y = row.original;
+        const c = TYPE_C[y.type] || 'var(--t2)';
+        return (
+          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 11.5, fontWeight: 600,
+            padding: '3px 9px', borderRadius: 7, color: c, background: `color-mix(in srgb, ${c} 13%, transparent)` }}>
+            {y.type}
+          </span>
+        );
+      },
+    },
+    {
+      accessorKey: 'tvl',
+      header: 'TVL',
+      meta: { align: 'right' },
+      cell: ({ row }) => <div className="mono" style={{ fontSize: 13, fontWeight: 600, textAlign: 'right' }}>{fmtTvlM(row.original.tvl)}</div>,
+    },
+    {
+      id: 'trend',
+      header: '7d',
+      meta: { align: 'right' },
+      cell: ({ row }) => {
+        const trend = row.original.trend || [];
+        return (
+          <div style={{ display: 'flex', justifyContent: 'flex-end', paddingRight: 4 }}>
+            <Sparkline data={trend} w={58} h={22} strokeW={1.6}
+              color={trend[trend.length - 1] >= trend[0] ? 'var(--safe)' : 'var(--danger)'} fill={false} />
+          </div>
+        );
+      },
+    },
+    {
+      accessorKey: 'apy',
+      header: 'APY',
+      cell: ({ row }) => {
+        const y = row.original;
+        const basePct = y.apy > 0 ? (y.base / y.apy) * 100 : 0;
+        return (
+          <div style={{ paddingLeft: 6 }}>
+            <div style={{ display: 'flex', alignItems: 'baseline', gap: 6 }}>
+              <span className="mono display" style={{ fontSize: 18, fontWeight: 600, color: 'var(--accent)' }}>{y.apy.toFixed(1)}%</span>
+              <span className="mono" style={{ fontSize: 10.5, color: 'var(--t2)' }}>{y.base.toFixed(1)} base{y.reward > 0 ? ` · ${y.reward.toFixed(1)} rwd` : ''}</span>
+            </div>
+            <div style={{ height: 4, background: 'var(--bg-0)', borderRadius: 100, overflow: 'hidden', marginTop: 5, display: 'flex', maxWidth: 150 }}>
+              <div style={{ width: `${basePct}%`, background: 'var(--sui)' }} />
+              <div style={{ width: `${100 - basePct}%`, background: 'var(--accent)' }} />
+            </div>
+          </div>
+        );
+      },
+    },
+    {
+      accessorKey: 'risk',
+      header: 'Risk',
+      meta: { align: 'right' },
+      cell: ({ row }) => {
+        const y = row.original;
+        const rm = RISK_META[y.risk] || RISK_META.med;
+        return (
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 10 }}>
+            <span className={`badge ${rm.cls}`}><span className="dot"></span>{y.risk}</span>
+            <button onClick={(e) => { e.stopPropagation(); onDeploy && onDeploy({ scenario: TYPE_SCENARIO[y.type] || 'lend' }); }} className="btn btn-sm mkt-deploy"
+              style={{ padding: '6px 10px', borderColor: 'var(--accent)', color: 'var(--accent)', background: 'var(--accent-dim)' }}>
+              <Icon name="bolt" size={12} />
+            </button>
+          </div>
+        );
+      },
+    },
+  ], [onDeploy]);
+  const table = useReactTable({ data: rows, columns, getCoreRowModel: getCoreRowModel() });
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
@@ -109,67 +177,27 @@ function YieldMonitor({ onDeploy, onInspect, chain, live, onToast }) {
 
       {/* table */}
       <div className="card" style={{ overflow: 'hidden' }}>
-        <div style={{ display: 'grid', gridTemplateColumns: '2.4fr 1fr 1fr 1.1fr 1.9fr 1.2fr', padding: '11px 18px',
-          borderBottom: '1px solid var(--border)' }}>
-          {['Protocol / market', 'Type', 'TVL', '7d', 'APY', 'Risk'].map((h, i) => (
-            <div key={h} className="eyebrow" style={{ fontSize: 9.5, textAlign: i >= 2 && i !== 4 ? 'right' : 'left' }}>{h}</div>
-          ))}
-        </div>
-        {rows.map((y, i) => {
-          const pm = RG.protocols[y.proto] || { name: (y.proto || 'pool').replace(/(^|[-_])([a-z])/g, (m, s, c) => (s ? ' ' : '') + c.toUpperCase()), c: '#5C6A78' };
-          const cm = RG.chains.find(c => c.id === y.chain) || { name: y.chain, c: 'var(--t2)' };
-          const rm = RISK_META[y.risk];
-          const basePct = y.apy > 0 ? (y.base / y.apy) * 100 : 0;
-          return (
-            <div key={y.id || (y.proto + y.market + i)} className="mkt-row" onClick={() => onInspect && onInspect(y)}
-              style={{ display: 'grid', gridTemplateColumns: '2.4fr 1fr 1fr 1.1fr 1.9fr 1.2fr', alignItems: 'center', cursor: 'pointer',
-                padding: '13px 18px', borderTop: i ? '1px solid var(--border)' : 'none', transition: 'background .12s' }}>
-              {/* protocol / market */}
-              <div style={{ display: 'flex', alignItems: 'center', gap: 12, minWidth: 0 }}>
-                <ProtoGlyph proto={y.proto} size={34} />
-                <div style={{ minWidth: 0 }}>
-                  <div style={{ fontSize: 13.5, fontWeight: 600 }}>{pm.name}</div>
-                  <div className="mono" style={{ fontSize: 11, color: 'var(--t2)', display: 'flex', alignItems: 'center', gap: 6, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                    <span style={{ width: 6, height: 6, borderRadius: '50%', background: cm.c, flexShrink: 0 }} />{cm.name} · {y.market}
-                  </div>
-                </div>
+        {table.getHeaderGroups().map(headerGroup => (
+          <div key={headerGroup.id} style={{ display: 'grid', gridTemplateColumns: '2.4fr 1fr 1fr 1.1fr 1.9fr 1.2fr', padding: '11px 18px',
+            borderBottom: '1px solid var(--border)' }}>
+            {headerGroup.headers.map(header => (
+              <div key={header.id} className="eyebrow" style={{ fontSize: 9.5, textAlign: header.column.columnDef.meta?.align || 'left' }}>
+                {header.isPlaceholder ? null : flexRender(header.column.columnDef.header, header.getContext())}
               </div>
-              {/* type */}
-              <div>
-                <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 11.5, fontWeight: 600,
-                  padding: '3px 9px', borderRadius: 7, color: TYPE_C[y.type], background: `color-mix(in srgb, ${TYPE_C[y.type]} 13%, transparent)` }}>
-                  {y.type}
-                </span>
+            ))}
+          </div>
+        ))}
+        {table.getRowModel().rows.map((row, i) => (
+          <div key={row.id} className="mkt-row" onClick={() => onInspect && onInspect(row.original)}
+            style={{ display: 'grid', gridTemplateColumns: '2.4fr 1fr 1fr 1.1fr 1.9fr 1.2fr', alignItems: 'center', cursor: 'pointer',
+              padding: '13px 18px', borderTop: i ? '1px solid var(--border)' : 'none', transition: 'background .12s' }}>
+            {row.getVisibleCells().map(cell => (
+              <div key={cell.id}>
+                {flexRender(cell.column.columnDef.cell, cell.getContext())}
               </div>
-              {/* tvl */}
-              <div className="mono" style={{ fontSize: 13, fontWeight: 600, textAlign: 'right' }}>{fmtTvlM(y.tvl)}</div>
-              {/* 7d spark */}
-              <div style={{ display: 'flex', justifyContent: 'flex-end', paddingRight: 4 }}>
-                <Sparkline data={y.trend} w={58} h={22} strokeW={1.6}
-                  color={y.trend[y.trend.length - 1] >= y.trend[0] ? 'var(--safe)' : 'var(--danger)'} fill={false} />
-              </div>
-              {/* apy */}
-              <div style={{ paddingLeft: 6 }}>
-                <div style={{ display: 'flex', alignItems: 'baseline', gap: 6 }}>
-                  <span className="mono display" style={{ fontSize: 18, fontWeight: 600, color: 'var(--accent)' }}>{y.apy.toFixed(1)}%</span>
-                  <span className="mono" style={{ fontSize: 10.5, color: 'var(--t2)' }}>{y.base.toFixed(1)} base{y.reward > 0 ? ` · ${y.reward.toFixed(1)} rwd` : ''}</span>
-                </div>
-                <div style={{ height: 4, background: 'var(--bg-0)', borderRadius: 100, overflow: 'hidden', marginTop: 5, display: 'flex', maxWidth: 150 }}>
-                  <div style={{ width: `${basePct}%`, background: 'var(--sui)' }} />
-                  <div style={{ width: `${100 - basePct}%`, background: 'var(--accent)' }} />
-                </div>
-              </div>
-              {/* risk + deploy */}
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 10 }}>
-                <span className={`badge ${rm.cls}`}><span className="dot"></span>{y.risk}</span>
-                <button onClick={(e) => { e.stopPropagation(); onDeploy && onDeploy({ scenario: TYPE_SCENARIO[y.type] || 'lend' }); }} className="btn btn-sm mkt-deploy"
-                  style={{ padding: '6px 10px', borderColor: 'var(--accent)', color: 'var(--accent)', background: 'var(--accent-dim)' }}>
-                  <Icon name="bolt" size={12} />
-                </button>
-              </div>
-            </div>
-          );
-        })}
+            ))}
+          </div>
+        ))}
       </div>
       <div style={{ fontSize: 11.5, color: 'var(--t2)', display: 'flex', alignItems: 'center', gap: 7 }}>
         {live && liveState === 'loading'
@@ -402,40 +430,21 @@ function SpotArb({ onDeploy }) {
 /* ---------------- Unified opportunities ---------------- */
 function Opportunities({ onDeploy, live, onToast }) {
   const [cat, setCat] = useState('all');
-  const [liveYields, setLiveYields] = useState(null);
-  const chainName = id => (RG.chains.find(c => c.id === id) || {}).name || id;
+  const livePoolsQuery = useDefiLlamaYieldPools({ enabled: live });
 
-  // when Live, pull real DefiLlama pools for the Yield slice (top by APY, sane filter)
   useEffect(() => {
-    if (!live) { setLiveYields(null); return; }
-    let cancelled = false;
-    (async () => {
-      try {
-        const res = await fetch('https://yields.llama.fi/pools');
-        if (!res.ok) throw new Error('HTTP ' + res.status);
-        const json = await res.json();
-        const rows = (json.data || [])
-          .filter(p => ['Sui', 'Aptos', 'Solana', 'Ethereum', 'Base'].includes(p.chain) && (p.apy || 0) > 0 && (p.apy || 0) < 300 && (p.tvlUsd || 0) >= 5e5)
-          .sort((a, b) => (b.apy || 0) - (a.apy || 0))
-          .slice(0, 16)
-          .map(p => {
-            const sym = (p.symbol || '?').toUpperCase();
-            const isLP = /[-/]/.test(sym);
-            return { kind: 'yield', proto: p.project, name: (p.project || 'pool').replace(/(^|[-_])([a-z])/g, (m, s, c) => (s ? ' ' : '') + c.toUpperCase()),
-              sub: p.chain + ' · ' + sym, cat: 'Yield', catC: 'var(--sui)', edge: +(p.apy || 0), unit: 'APY',
-              risk: (p.apy >= 30 || p.ilRisk === 'yes') ? 'high' : p.apy >= 12 ? 'med' : 'low', scenario: isLP ? 'lp' : 'lend' };
-          });
-        if (cancelled) return;
-        setLiveYields(rows);
-        onToast && onToast(`Opportunities · ${rows.length} live yield rows from DefiLlama`, 'var(--accent)');
-      } catch (e) { if (!cancelled) { setLiveYields(null); onToast && onToast('Live opportunities unavailable — showing demo', 'var(--warn)'); } }
-    })();
-    return () => { cancelled = true; };
-  }, [live]);
+    if (!live) return;
+    if (livePoolsQuery.isSuccess) {
+      onToast && onToast(`Opportunities · ${Math.min(16, livePoolsQuery.data.length)} live yield rows from DefiLlama`, 'var(--accent)');
+    } else if (livePoolsQuery.isError) {
+      onToast && onToast('Live opportunities unavailable — showing demo', 'var(--warn)');
+    }
+  }, [live, livePoolsQuery.isSuccess, livePoolsQuery.isError, livePoolsQuery.dataUpdatedAt, livePoolsQuery.data]);
 
-  const yieldOpps = (live && liveYields) ? liveYields : RG.yields.map(y => ({ kind: 'yield', proto: y.proto, name: RG.protocols[y.proto].name,
-    sub: chainName(y.chain) + ' · ' + y.market, cat: 'Yield', catC: 'var(--sui)',
-    edge: y.base + y.reward, unit: 'APY', risk: y.risk, scenario: TYPE_SCENARIO[y.type] || 'lend' }));
+  const liveYields = live && livePoolsQuery.data
+    ? livePoolsQuery.data.slice().sort((a, b) => b.apy - a.apy).slice(0, 16).map(mapYieldPoolToOpportunity)
+    : null;
+  const yieldOpps = liveYields || demoYieldOpportunities(TYPE_SCENARIO);
   const opps = [
     ...yieldOpps,
     ...RG.perps.map(p => { const a = arbOf(p); return { kind: 'perp', sym: p.sym, name: p.sym + '-PERP',
@@ -496,7 +505,7 @@ function Opportunities({ onDeploy, live, onToast }) {
       </div>
       <div style={{ fontSize: 11.5, color: 'var(--t2)', display: 'flex', alignItems: 'center', gap: 7 }}>
         <Icon name="radar" size={13} style={{ color: 'var(--accent)' }} />
-        Every yield, funding-rate and spot spread the agent tracks — ranked by edge across {RG.chains.length} chains + CEX · {rows.length} shown{live && liveYields ? ' · yields live from DefiLlama' : ''} · tap the bolt to deploy.
+        Every yield, funding-rate and spot spread the agent tracks — ranked by edge across {RG.chains.length} chains + CEX · {rows.length} shown{live && liveYields ? ' · yields live from DefiLlama' : live && livePoolsQuery.isPending ? ' · fetching live yields' : ''} · tap the bolt to deploy.
       </div>
     </div>
   );

@@ -91,7 +91,7 @@ Observed final mission evidence is Testnet-only:
 
 ## Tech
 
-- **Vite + React** (JSX) with a Cloudflare Worker backend for live mode; shared, SDK-agnostic logic lives in `core/` (reused by the Worker too). Demo mode still uses plausible mock data in [`src/data.js`](src/data.js).
+- **Vite + React** (JSX) with TanStack Query for live Worker/chain reads, public feed queries, mutation state and transaction detail caching; TanStack Router for app/deep-link navigation; TanStack Table for scanner-style market tables; and TanStack Form for the strategy builder's editable policy fields. Query/Router Devtools run in development only. The Cloudflare Worker remains the live-mode API backend; shared, SDK-agnostic logic lives in `core/` (reused by the Worker too). Demo mode still uses plausible mock data in [`src/data.js`](src/data.js).
 - Design system (`neon-on-near-black`, glassy dark fintech) lives in [`src/styles.css`](src/styles.css); landing-only styles in [`src/landing.css`](src/landing.css).
 
 ```
