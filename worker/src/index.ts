@@ -9,6 +9,7 @@ import { buildCreatePolicyTx, buildRevokeTx } from './sui-tx.js'
 import { getActivity, listPoliciesByOwner, listActivityByOwner, getOwnerSummary, getMarket, getBalances, readWrapper, readBalanceManagerBalance } from './chain.js'
 import { getClient, DEPLOYMENT } from './sui-tx.js'
 import { runTick } from './tick.js'
+import { validateForceTrigger, validateTickAuthorization } from './tick-auth.js'
 import { buildFundingReadiness, parseIntentWithStability } from './read-surfaces.js'
 import { AGENT_ADDRESS } from './config.js'
 import { DEFAULT_TICK_INTERVAL_SECONDS } from './config.js'
@@ -274,9 +275,8 @@ app.get('/api/policies/:wrapper_id/runtime', async (c) => {
 app.post('/api/agent/tick', async (c) => {
   const auth = c.req.header('Authorization')
   const expected = c.env.INTERNAL_AGENT_TICK_TOKEN
-  if (!expected || auth !== `Bearer ${expected}`) {
-    return c.json({ status: 'error', code: 'UNAUTHORIZED', message: 'Invalid internal token.' }, 401)
-  }
+  const authResult = validateTickAuthorization({ authorizationHeader: auth, expectedToken: expected })
+  if (!authResult.ok) return c.json(authResult.body, authResult.status as 401)
   let body: { wrapper_id?: string; force_trigger?: boolean }
   try {
     body = await c.req.json()
@@ -284,8 +284,9 @@ app.post('/api/agent/tick', async (c) => {
     return c.json({ status: 'error', code: 'BAD_REQUEST', message: 'Invalid JSON body.' }, 400)
   }
   if (!body.wrapper_id) return c.json({ status: 'error', code: 'BAD_REQUEST', message: 'wrapper_id required.' }, 400)
-  const forceTrigger = body.force_trigger === true && c.env.RESCUEGRID_DEMO_MODE === 'true'
-  const result = await runTick(c.env, { wrapperId: body.wrapper_id, forceTrigger })
+  const forceResult = validateForceTrigger({ forceTriggerRequested: body.force_trigger === true, demoMode: c.env.RESCUEGRID_DEMO_MODE })
+  if (!forceResult.ok) return c.json(forceResult.body, forceResult.status as 403)
+  const result = await runTick(c.env, { wrapperId: body.wrapper_id, forceTrigger: forceResult.forceTrigger })
   return c.json({ status: 'ok', ...result })
 })
 
@@ -353,9 +354,9 @@ export class AgentRuntime {
   }
 
   async monitorPrice(asset: string): Promise<number> {
-    const pool = asset === 'SUI' ? 'SUI_USDC' : null
+    const pool = asset === 'SUI' ? 'SUI_DBUSDC' : null
     if (!pool) return 0
-    const r = await fetch('https://deepbook-indexer.mainnet.mystenlabs.com/ticker')
+    const r = await fetch('https://deepbook-indexer.testnet.mystenlabs.com/ticker')
     if (!r.ok) return 0
     const j = (await r.json()) as Record<string, { last_price?: number }>
     return Number(j[pool]?.last_price) || 0

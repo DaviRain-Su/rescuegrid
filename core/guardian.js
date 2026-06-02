@@ -12,15 +12,26 @@ export const GUARDIAN_REASON = {
   POOL_MISMATCH: 5,
   CONCENTRATION: 6,
   MANDATE_MISMATCH: 7,
+  AGENT_MISMATCH: 8,
+}
+
+export const GUARDIAN_BLOCKER_CODE = {
+  [GUARDIAN_REASON.SLIPPAGE]: 'OVER_SLIPPAGE',
+  [GUARDIAN_REASON.BUDGET]: 'OVER_BUDGET',
+  [GUARDIAN_REASON.EXPIRED]: 'POLICY_EXPIRED',
+  [GUARDIAN_REASON.REVOKED]: 'POLICY_REVOKED',
+  [GUARDIAN_REASON.POOL_MISMATCH]: 'WRONG_POOL',
+  [GUARDIAN_REASON.MANDATE_MISMATCH]: 'MANDATE_MISMATCH',
+  [GUARDIAN_REASON.AGENT_MISMATCH]: 'WRONG_AGENT',
 }
 
 /**
  * @param {object} a
- * @param {{id:string, revoked:boolean, expires_at_ms:number|string}} a.mandate
- * @param {{mandate_id:string, pool_id:string, budget_ceiling:string, spent_amount:string, max_slippage_bps:number}} a.wrapper
+ * @param {{id:string, revoked:boolean, expires_at_ms:number|string, agent?:string}} a.mandate
+ * @param {{mandate_id:string, pool_id:string, budget_ceiling:string, spent_amount:string, max_slippage_bps:number, agent?:string}} a.wrapper
  * @param {{pool_id:string, amount:string, estimated_slippage_bps:number}} a.proposed
  * @param {number} a.nowMs
- * @returns {{decision:'allow'|'block', reason?:number, label:string, detail:string, remaining:string, concentration_pct?:number, warnings?:object[]}}
+ * @returns {{decision:'allow'|'block', reason?:number, code?:string, label:string, detail:string, remaining:string, concentration_pct?:number, warnings?:object[]}}
  */
 export function runGuardian({ mandate, wrapper, proposed, nowMs }) {
   const ceiling = BigInt(wrapper.budget_ceiling)
@@ -29,11 +40,13 @@ export function runGuardian({ mandate, wrapper, proposed, nowMs }) {
   const amount = BigInt(proposed.amount)
   const expires = Number(mandate.expires_at_ms)
 
-  const block = (reason, label, detail) => ({ decision: 'block', reason, label, detail, remaining: remaining.toString() })
+  const block = (reason, label, detail) => ({ decision: 'block', reason, code: GUARDIAN_BLOCKER_CODE[reason], label, detail, remaining: remaining.toString() })
 
   // Order per docs §9 pseudocode.
   if (wrapper.mandate_id !== mandate.id)
     return block(GUARDIAN_REASON.MANDATE_MISMATCH, 'Mandate/wrapper mismatch', 'wrapper.mandate_id != mandate.id')
+  if (wrapper.agent && mandate.agent && wrapper.agent !== mandate.agent)
+    return block(GUARDIAN_REASON.AGENT_MISMATCH, 'Agent mismatch', 'wrapper.agent != mandate.agent')
   if (mandate.revoked)
     return block(GUARDIAN_REASON.REVOKED, 'Mandate revoked', 'Policy authority has been revoked on-chain.')
   if (nowMs >= expires)

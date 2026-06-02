@@ -11,20 +11,31 @@ const check = (name, got, want) => {
 
 const MID = '0xMANDATE'
 const OWNER = '0x1111111111111111111111111111111111111111111111111111111111111111'
+const AGENT = '0xAGENT'
+const POOL = '0xPOOL'
 const base = {
-  wrapper: { mandate_id: MID, pool_id: '0xPOOL', budget_ceiling: '1000000', spent_amount: '0', max_slippage_bps: 100 },
-  mandate: { id: MID, revoked: false, expires_at_ms: 10_000 },
+  wrapper: { mandate_id: MID, agent: AGENT, pool_id: POOL, budget_ceiling: '1000000', spent_amount: '0', max_slippage_bps: 100 },
+  mandate: { id: MID, agent: AGENT, revoked: false, expires_at_ms: 10_000 },
   triggerMet: true,
-  proposed: { pool_id: '0xPOOL', amount: '100000', estimated_slippage_bps: 50 },
+  proposed: { pool_id: POOL, amount: '100000', estimated_slippage_bps: 50 },
   nowMs: 1_000,
   executionEnabled: true,
 }
 const run = (o) => decideTick({ ...base, ...o })
 
 check('revoked -> stopped_revoked', run({ mandate: { id: MID, revoked: true, expires_at_ms: 10_000 } }).action, 'stopped_revoked')
+check('revoked exposes stable code', run({ mandate: { id: MID, revoked: true, expires_at_ms: 10_000 } }).code, 'POLICY_REVOKED')
 check('expired -> stopped_expired', run({ nowMs: 20_000 }).action, 'stopped_expired')
+check('expired exposes stable code', run({ nowMs: 20_000 }).code, 'POLICY_EXPIRED')
 check('no trigger -> no_op', run({ triggerMet: false }).action, 'no_op')
-check('guardian block -> blocked', run({ proposed: { pool_id: '0xPOOL', amount: '100000', estimated_slippage_bps: 150 } }).action, 'blocked')
+check('no trigger exposes stable code', run({ triggerMet: false }).code, 'TRIGGER_NOT_MET')
+check('no trigger never claims execution', run({ triggerMet: false }).execution_claimed, false)
+check('wrong agent -> blocked', run({ expectedAgentId: AGENT, wrapper: { ...base.wrapper, agent: '0xOTHER' } }).action, 'blocked')
+check('wrong agent exposes stable code', run({ expectedAgentId: AGENT, wrapper: { ...base.wrapper, agent: '0xOTHER' } }).code, 'WRONG_AGENT')
+check('wrong pool -> blocked', run({ expectedPoolId: POOL, wrapper: { ...base.wrapper, pool_id: '0xBAD' } }).action, 'blocked')
+check('wrong pool exposes stable code', run({ expectedPoolId: POOL, wrapper: { ...base.wrapper, pool_id: '0xBAD' } }).code, 'WRONG_POOL')
+check('guardian block -> blocked', run({ proposed: { pool_id: POOL, amount: '100000', estimated_slippage_bps: 150 } }).action, 'blocked')
+check('guardian block exposes stable code', run({ proposed: { pool_id: POOL, amount: '100000', estimated_slippage_bps: 150 } }).code, 'OVER_SLIPPAGE')
 check('trigger+pass+enabled -> execute', run({}).action, 'execute')
 const disabled = run({ executionEnabled: false })
 check('trigger+pass+disabled -> blocked (gated)', disabled.action, 'blocked')

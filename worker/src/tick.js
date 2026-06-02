@@ -8,33 +8,81 @@ import { DEPLOYMENT } from './sui-tx.js'
 import { keypairFromWorkerEnv } from './secret-safe-signer.js'
 import { buildFundingReadiness } from './read-surfaces.js'
 
+export const EXECUTION_BLOCKER_LABELS = {
+  EXECUTION_DISABLED: 'Execution disabled',
+  INSUFFICIENT_DBUSDC: 'Insufficient DBUSDC',
+  INSUFFICIENT_DEEP: 'Insufficient DEEP',
+  INSUFFICIENT_GAS: 'Insufficient SUI gas',
+  TRIGGER_NOT_MET: 'Trigger not met',
+  POLICY_REVOKED: 'Policy revoked',
+  POLICY_EXPIRED: 'Policy expired',
+  OVER_BUDGET: 'Over budget',
+  OVER_SLIPPAGE: 'Over slippage',
+  WRONG_POOL: 'Wrong pool',
+  WRONG_AGENT: 'Wrong agent',
+  MANDATE_MISMATCH: 'Mandate/wrapper mismatch',
+  UNRESOLVED_TRANSACTION: 'Unresolved transaction',
+  INVALID_AUTHORIZATION: 'Invalid authorization',
+  FORCE_TRIGGER_DISABLED: 'Force trigger disabled',
+}
+
+function blockerLabel(code) {
+  return EXECUTION_BLOCKER_LABELS[code] ?? code
+}
+
+function readinessBlock({ action = 'blocked', code, detail, extra = {} }) {
+  return {
+    action,
+    code,
+    blocker_code: code,
+    blocker_label: blockerLabel(code),
+    blocker_codes: [code],
+    blocker_labels: [blockerLabel(code)],
+    readiness_state: action === 'no_op' ? 'monitoring' : 'blocked',
+    execution_claimed: false,
+    detail,
+    ...extra,
+  }
+}
+
 /**
  * Pure decision. No I/O.
  * @param {object} a
- * @param {{mandate_id:string,pool_id:string,budget_ceiling:string,spent_amount:string,max_slippage_bps:number}} a.wrapper
- * @param {{id:string,revoked:boolean,expires_at_ms:number|string}} a.mandate
+ * @param {{mandate_id:string,pool_id:string,budget_ceiling:string,spent_amount:string,max_slippage_bps:number,agent?:string}} a.wrapper
+ * @param {{id:string,revoked:boolean,expires_at_ms:number|string,agent?:string}} a.mandate
  * @param {boolean} a.triggerMet
  * @param {{pool_id:string,amount:string,estimated_slippage_bps:number}} a.proposed
  * @param {number} a.nowMs
  * @param {boolean} a.executionEnabled
+ * @param {string=} a.expectedAgentId
+ * @param {string=} a.expectedPoolId
  * @returns {{action:string, reason?:number, detail:string, guardian?:object}}
  */
-export function decideTick({ wrapper, mandate, triggerMet, proposed, nowMs, executionEnabled }) {
-  if (mandate.revoked) return { action: 'stopped_revoked', detail: 'Mandate revoked on-chain; halting.' }
-  if (nowMs >= Number(mandate.expires_at_ms)) return { action: 'stopped_expired', detail: 'Mandate expired; halting.' }
-  if (!triggerMet) return { action: 'no_op', detail: 'Trigger condition not met; monitoring.' }
+export function decideTick({ wrapper, mandate, triggerMet, proposed, nowMs, executionEnabled, expectedAgentId, expectedPoolId }) {
+  if (mandate.revoked) return readinessBlock({ action: 'stopped_revoked', code: 'POLICY_REVOKED', detail: 'Mandate revoked on-chain; halting.' })
+  if (nowMs >= Number(mandate.expires_at_ms)) return readinessBlock({ action: 'stopped_expired', code: 'POLICY_EXPIRED', detail: 'Mandate expired; halting.' })
+  if (expectedAgentId && (wrapper.agent !== expectedAgentId || mandate.agent !== expectedAgentId)) {
+    return readinessBlock({ code: 'WRONG_AGENT', detail: 'Execution blocked: policy agent does not match the configured RescueGrid agent.' })
+  }
+  if (expectedPoolId && wrapper.pool_id !== expectedPoolId) {
+    return readinessBlock({ code: 'WRONG_POOL', detail: 'Execution blocked: policy pool is outside the configured execution scope.' })
+  }
+  if (!triggerMet) return readinessBlock({ action: 'no_op', code: 'TRIGGER_NOT_MET', detail: 'Trigger condition not met; monitoring.' })
 
   const guardian = runGuardian({ mandate, wrapper, proposed, nowMs })
   if (guardian.decision === 'block') {
-    return { action: 'blocked', reason: guardian.reason, detail: `Guardian blocked: ${guardian.label} — ${guardian.detail}`, guardian }
+    return readinessBlock({
+      code: guardian.code ?? 'UNRESOLVED_TRANSACTION',
+      detail: `Guardian blocked: ${guardian.label} — ${guardian.detail}`,
+      extra: { reason: guardian.reason, guardian },
+    })
   }
   if (!executionEnabled) {
-    return {
-      action: 'blocked',
+    return readinessBlock({
       code: 'EXECUTION_DISABLED',
       detail: 'Execution blocked: EXECUTION_ENABLED is false or the agent key is unavailable; usable DBUSDC/DEEP funding must be verified before live execution.',
-      guardian,
-    }
+      extra: { guardian },
+    })
   }
   return { action: 'execute', detail: 'Trigger met + Guardian passed; executing rescue order.', guardian }
 }
@@ -99,9 +147,9 @@ export async function runTick(env, p) {
   const client = (await import('./sui-tx.js')).getClient()
   const nowMs = p.nowMs ?? Date.now()
   const wrapper = await readWrapper(client, p.wrapperId)
-  if (!wrapper) return { action: 'error', detail: 'Wrapper not found on-chain.' }
+  if (!wrapper) return { action: 'error', code: 'WRAPPER_NOT_FOUND', detail: 'Wrapper not found on-chain.', execution_claimed: false }
   const mandate = await readMandate(client, wrapper.mandate_id)
-  if (!mandate) return { action: 'error', detail: 'Mandate not found on-chain.' }
+  if (!mandate) return { action: 'error', code: 'MANDATE_NOT_FOUND', detail: 'Mandate not found on-chain.', execution_claimed: false }
 
   // Trigger: force_trigger (demo) or a real price-drop evaluation supplied by the caller.
   const triggerMet = !!p.forceTrigger || !!(p.market && p.market.triggerMet)
@@ -113,7 +161,8 @@ export async function runTick(env, p) {
   }
   const executionEnabled = env?.EXECUTION_ENABLED === 'true' && !!env?.AGENT_KEY
 
-  const decision = decideTick({ wrapper, mandate, triggerMet, proposed, nowMs, executionEnabled: true })
+  const expectedPoolId = DEPLOYMENT.deepbook.pools[DEPLOYMENT.deepbook.default_pool]?.pool_id
+  const decision = decideTick({ wrapper, mandate, triggerMet, proposed, nowMs, executionEnabled: true, expectedAgentId: DEPLOYMENT.agent.address, expectedPoolId })
   if (decision.action !== 'execute') return { ...decision, wrapper_id: p.wrapperId, mandate_id: wrapper.mandate_id }
 
   const fundingBlock = await checkFunding(client, proposed, executionEnabled)
