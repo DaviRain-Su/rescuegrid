@@ -18,7 +18,7 @@ Comparable products fall into six buckets.
 | Automation / risk managers | DeFi Saver | Liquidation protection, stop-loss, take-profit and leverage automation are proven user needs. | Bring this to Sui + agent policy objects + strategy templates. |
 | Yield aggregators / vaults | Beefy, Yearn, Sommelier | Users accept automated strategy vaults when yield, risk and fees are easy to inspect. | Let users own the policy instead of blindly depositing into a vault. |
 | On-chain asset management | Enzyme, Morpho Vaults | Configurable vault policies, caps, asset/protocol allow-lists and curator controls matter. | Convert these controls into RescueGrid mandates and Guardian rules. |
-| Perps / funding / basis products | Bluefin, Sudo Perps, DipCoin Perps, funding-arb vault patterns | Delta-neutral and funding/basis strategies are a major demand area. | Strategy builder + net exposure proof + funding flip guard + Sui venue caps. |
+| Perps / funding / basis products | Bluefin Pro, Sudo Perps, DipCoin Perps, funding-arb vault patterns | Delta-neutral and funding/basis strategies are a major demand area. | Strategy builder + net exposure proof + funding flip guard + Sui venue caps. |
 | Sui DeFi primitives | DeepBook, Cetus, Bluefin Spot, Turbos, Momentum, NAVI, Suilend, Scallop, AlphaLend, Bucket, SpringSui, Haedal, Volo, AlphaFi, Ondo, KAIO, MatrixDock, Ember, Bluefin Pro | Sui has enough spot, LP, lending, CDP, LST, vault, RWA and perps components for a focused agent layer. | Cover the liquid Sui protocol set in monitoring, but only enable execution for vetted, high-liquidity adapters. |
 
 ### Sui-native protocol integration map
@@ -200,6 +200,8 @@ Required controls:
 - emergency stop mode;
 - human approval required for high-risk actions.
 
+Implementation status: `src/components/NewStrategy.jsx` now has the first Builder v2 pass. It keeps the existing intent -> review -> policy -> deploy flow, adds multi-leg venue controls for Sui funding/spread templates, shows capital, slippage, leverage, liquidation/LTV and approval constraints, and surfaces Worker adapter readiness before signer selection. The deploy button is disabled for read-only or missing adapters; DeepBook-only templates remain policy-preview capable while Cetus, lending and Bluefin Pro templates are explicitly read-only until execution adapters and wrapper target constraints are implemented.
+
 ### E. Active Strategy Detail
 
 Purpose: show the user what the agent is doing now.
@@ -216,6 +218,8 @@ Required modules:
 - pending approvals;
 - active Guardian limits;
 - action buttons: pause, resume, rebalance now, revoke, export activity.
+
+Implementation status: `src/components/Active.jsx` implements the first Active Strategy Detail v2 shell. It renders live legs, jittered marks/PnL, net exposure, open orders, recent policy activity, next tick, pending approval controls, Guardian limit bars, pause/resume/rebalance/revoke/export actions and a Sui venue inventory map. The inventory node drawer is Sui-only and no longer references an undefined CEX flag.
 
 ### F. Risk Center
 

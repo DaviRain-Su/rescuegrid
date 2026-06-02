@@ -9,6 +9,8 @@ import { RG } from '../data.js'
 import { Icon, Sparkline, fmtUsd } from './primitives.jsx'
 import { Slider, Button } from '@heroui/react'
 import { WORKER_CONFIGURED, parseIntent as parseWorkerIntent, getSuiPriceHistory } from '../api.js'
+import { okAdapterSurface, useDexReadAdapters, useLendingReadAdapters } from '../queries/adapter-surfaces.js'
+import { readinessBlockReason, summarizeReadiness } from '../queries/strategy-readiness.js'
 import { parseIntent as parseLocalIntent } from '../../core/strategy.js'
 import { runBacktest } from '../../core/backtest.js'
 import deployment from '../../core/deployment.js'
@@ -60,15 +62,15 @@ function GuardianRow({ g }) {
 
 /* visual multi-leg builder — add/remove legs, live net-delta, liquidation preview */
 const VENUE_OPTS = {
-  'funding-arb': ['DeepBook', 'Bluefin'],
+  'funding-arb': ['DeepBook', 'Bluefin Pro'],
   spot: ['DeepBook', 'Cetus', 'Bluefin Spot'],
 }
 const MARK_PX = { 'funding-arb': 4.182, spot: 4.182 }
 
 function defaultLegsFor(scenario) {
   if (scenario === 'spot') return [{ venue: 'DeepBook', side: 'long', pct: 50 }, { venue: 'Cetus', side: 'short', pct: 50 }]
-  if (scenario === 'funding-arb') return [{ venue: 'DeepBook', side: 'long', pct: 50 }, { venue: 'Bluefin', side: 'short', pct: 50 }]
-  return [{ venue: 'DeepBook', side: 'long', pct: 50 }, { venue: 'Bluefin', side: 'short', pct: 50 }]
+  if (scenario === 'funding-arb') return [{ venue: 'DeepBook', side: 'long', pct: 50 }, { venue: 'Bluefin Pro', side: 'short', pct: 50 }]
+  return [{ venue: 'DeepBook', side: 'long', pct: 50 }, { venue: 'Bluefin Pro', side: 'short', pct: 50 }]
 }
 
 function sliderNumber(value) {
@@ -79,6 +81,103 @@ function shortValue(value) {
   if (!value) return '—'
   const s = String(value)
   return s.length > 18 ? `${s.slice(0, 8)}…${s.slice(-6)}` : s
+}
+
+const BUILDER_TEMPLATE_IDS = {
+  safe: 'risk-grid',
+  dca: 'dca',
+  hedge: 'tpsl',
+  'funding-arb': 'sui-perp-hedge',
+  lp: 'lp-range',
+  lend: 'lend-optimizer',
+  spot: 'sui-spot-spread',
+}
+
+function builderTemplateForScenario(scenario) {
+  const id = BUILDER_TEMPLATE_IDS[scenario]
+  return RG.catalog.find((s) => s.id === id) || RG.catalog.find((s) => s.id === 'risk-grid')
+}
+
+function readinessBadgeClass(row) {
+  if (!row.execution_adapter_registered) return 'badge-sui'
+  if (row.autonomous_execution_allowed === false) return 'badge-warn'
+  return 'badge-safe'
+}
+
+function BuilderReadinessPanel({ template, readiness, legs }) {
+  const reason = readinessBlockReason(readiness)
+  const deployable = readiness.canPreviewPolicy
+  const selectedVenues = [...new Set((legs || []).map((l) => l.venue).filter(Boolean))]
+  const blockerLabel = readiness.blockers.length > 0 ? readiness.blockers.join(', ') : reason
+
+  return (
+    <div className="card" style={{ padding: 18, borderColor: deployable ? 'var(--border)' : 'rgba(255,194,75,0.42)' }}>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, marginBottom: 12 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          <span style={{ color: deployable ? 'var(--accent)' : 'var(--warn)' }}><Icon name={deployable ? 'bolt' : 'eye'} size={16} /></span>
+          <div>
+            <div className="card-title">Adapter readiness</div>
+            <div className="mono" style={{ fontSize: 10.5, color: 'var(--t2)', marginTop: 2 }}>{template.name} · Sui-only policy boundary</div>
+          </div>
+        </div>
+        <span className={`badge ${deployable ? 'badge-safe' : 'badge-warn'}`} style={{ fontSize: 9.5 }}>
+          <span className="dot"></span>{deployable ? 'policy preview allowed' : 'read-only boundary'}
+        </span>
+      </div>
+
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 9 }}>
+        {!readiness.surfacesKnown && (
+          <div style={{ display: 'flex', gap: 9, padding: '10px 12px', borderRadius: 'var(--r-sm)', background: 'var(--glass)', border: '1px solid var(--border)' }}>
+            <span style={{ color: 'var(--t2)', marginTop: 1 }}><Icon name="alert" size={14} /></span>
+            <div style={{ fontSize: 12, color: 'var(--t1)', lineHeight: 1.45 }}>
+              Worker adapter surfaces are offline. DeepBook-only templates can still preview the policy shape; multi-venue templates stay read-only until the Worker reports their adapter state.
+            </div>
+          </div>
+        )}
+        {readiness.rows.map((row) => (
+          <div key={`${row.catalog_adapter}:${row.id}`} style={{ display: 'flex', alignItems: 'flex-start', gap: 10, padding: '10px 12px', borderRadius: 'var(--r-sm)', background: 'var(--glass)', border: '1px solid var(--border)' }}>
+            <span style={{ color: row.execution_adapter_registered ? 'var(--accent)' : 'var(--sui)', marginTop: 1 }}><Icon name={row.execution_adapter_registered ? 'link' : 'eye'} size={14} /></span>
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 7, flexWrap: 'wrap' }}>
+                <span style={{ fontSize: 12.5, fontWeight: 600 }}>{row.protocol_name}</span>
+                <span className={`badge ${readinessBadgeClass(row)}`} style={{ fontSize: 9 }}>
+                  {row.execution_adapter_registered ? 'registered' : 'read-only'}
+                  <span className="mono" style={{ marginLeft: 5 }}>{row.execution_blocker_code || row.adapter_kind}</span>
+                </span>
+              </div>
+              <div style={{ fontSize: 11, color: 'var(--t2)', marginTop: 3, lineHeight: 1.45 }}>
+                {row.quote_model || row.health_model || row.sdk_status || row.adapter_kind}
+              </div>
+            </div>
+          </div>
+        ))}
+        {readiness.staticDeepBookOnly && (
+          <div style={{ display: 'flex', alignItems: 'center', gap: 9, padding: '10px 12px', borderRadius: 'var(--r-sm)', background: 'var(--glass)', border: '1px solid var(--border)' }}>
+            <span style={{ color: 'var(--accent)' }}><Icon name="bolt" size={14} /></span>
+            <div style={{ fontSize: 12, color: 'var(--t1)' }}>DeepBook-only template. Worker read surface is optional for this policy preview, but live execution remains gated by DBUSDC/DEEP funding.</div>
+          </div>
+        )}
+        {readiness.missing.map((adapter) => (
+          <div key={adapter} style={{ display: 'flex', alignItems: 'center', gap: 9, padding: '10px 12px', borderRadius: 'var(--r-sm)', background: 'var(--glass)', border: '1px solid var(--border)' }}>
+            <span style={{ color: 'var(--t2)' }}><Icon name="clock" size={14} /></span>
+            <div style={{ flex: 1 }}>
+              <div style={{ fontSize: 12.5, fontWeight: 600 }}>{adapter}</div>
+              <div style={{ fontSize: 11, color: 'var(--t2)', marginTop: 2 }}>No deployable adapter in the current Sui Worker surface.</div>
+            </div>
+            <span className="badge badge-neutral" style={{ fontSize: 9 }}>future</span>
+          </div>
+        ))}
+      </div>
+
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', marginTop: 12, paddingTop: 12, borderTop: '1px solid var(--border)' }}>
+        {selectedVenues.map((venue) => (
+          <span key={venue} className="badge badge-neutral" style={{ fontSize: 9.5 }}>{venue}</span>
+        ))}
+        <div style={{ flex: 1 }} />
+        {blockerLabel && <span className="mono" style={{ fontSize: 10.5, color: deployable ? 'var(--t2)' : 'var(--warn)' }}>{blockerLabel}</span>}
+      </div>
+    </div>
+  )
 }
 
 function LegBuilder({ scenario, budget, leverage, legs, setLegs }) {
@@ -184,6 +283,10 @@ export function NewStrategy({ onDone, mode, setMode, seed }) {
   const [livePreview, setLivePreview] = useState(null)
   const [livePreviewSource, setLivePreviewSource] = useState(null)
   const [liveBacktest, setLiveBacktest] = useState(null)
+  const dexReadQuery = useDexReadAdapters()
+  const lendingReadQuery = useLendingReadAdapters()
+  const dexSurface = okAdapterSurface(dexReadQuery)
+  const lendingSurface = okAdapterSurface(lendingReadQuery)
   const account = useCurrentAccount()
   const workerPreview = WORKER_CONFIGURED
   const live = !!account || workerPreview
@@ -284,6 +387,10 @@ export function NewStrategy({ onDone, mode, setMode, seed }) {
           const parsing = parseIntentMutation.isPending
           const P = PARSED[scenario] || RG.parsed
           const meta = P.meta || RG.parsed.meta
+          const template = builderTemplateForScenario(scenario)
+          const readiness = summarizeReadiness(template, dexSurface, lendingSurface)
+          const deployBlockedByAdapters = !readiness.canPreviewPolicy
+          const deployBlockReason = readinessBlockReason(readiness)
           const adv = {
             leverage: ['funding-arb', 'hedge'].includes(scenario),
             twoLeg: ['funding-arb', 'spot'].includes(scenario),
@@ -506,7 +613,9 @@ export function NewStrategy({ onDone, mode, setMode, seed }) {
             <Button className="rg-btn-2" onPress={() => setStep(0)} startContent={<Icon name="chevL" size={15} />}>Edit intent</Button>
             {blocked
               ? <Button isDisabled className="opacity-50"><Icon name="x" size={15} /> Blocked by Guardian</Button>
-              : <Button className="bg-accent text-accent-foreground font-semibold" onPress={() => setStep(2)}>Configure policy <Icon name="chevR" size={15} /></Button>}
+              : <Button className={deployBlockedByAdapters ? 'rg-btn-2 font-semibold' : 'bg-accent text-accent-foreground font-semibold'} onPress={() => setStep(2)}>
+                  {deployBlockedByAdapters ? 'Review read-only boundary' : 'Configure policy'} <Icon name="chevR" size={15} />
+                </Button>}
           </div>
         </div>
       )}
@@ -523,6 +632,8 @@ export function NewStrategy({ onDone, mode, setMode, seed }) {
           </p>
 
           <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
+            <BuilderReadinessPanel template={template} readiness={readiness} legs={adv.twoLeg ? legs : [{ venue: (template.adapters || ['DeepBook'])[0] }]} />
+
             <div>
               <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 8 }}>
                 <label style={{ fontSize: 13, fontWeight: 600 }}>Budget ceiling</label>
@@ -646,7 +757,9 @@ export function NewStrategy({ onDone, mode, setMode, seed }) {
 
           <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 26 }}>
             <Button className="rg-btn-2" onPress={() => setStep(1)} startContent={<Icon name="chevL" size={15} />}>Back</Button>
-            <Button className="bg-accent text-accent-foreground font-semibold" onPress={() => setStep(3)}>Choose run mode <Icon name="chevR" size={15} /></Button>
+            <Button className={deployBlockedByAdapters ? 'rg-btn-2 font-semibold' : 'bg-accent text-accent-foreground font-semibold'} onPress={() => setStep(3)}>
+              {deployBlockedByAdapters ? 'Review signer boundary' : 'Choose run mode'} <Icon name="chevR" size={15} />
+            </Button>
           </div>
         </div>
       )}
@@ -691,9 +804,11 @@ export function NewStrategy({ onDone, mode, setMode, seed }) {
                 <Icon name={requireApproval ? 'eye' : 'link'} size={18} />
               </div>
               <div>
-                <div style={{ fontWeight: 600, fontSize: 13.5 }}>{readOnlyPreview ? 'Read-only Worker preview' : requireApproval ? 'Supervised — you approve each execution' : 'One signature creates the Mandate + Wrapper'}</div>
+                <div style={{ fontWeight: 600, fontSize: 13.5 }}>{deployBlockedByAdapters ? 'Read-only adapter boundary' : readOnlyPreview ? 'Read-only Worker preview' : requireApproval ? 'Supervised — you approve each execution' : 'One signature creates the Mandate + Wrapper'}</div>
                 <div style={{ fontSize: 12, color: 'var(--t2)' }}>
-                  {readOnlyPreview
+                  {deployBlockedByAdapters
+                    ? `This template cannot deploy yet: ${deployBlockReason}. Keep it as a monitored read model until the adapter and wrapper target constraints are implemented.`
+                    : readOnlyPreview
                     ? 'The parsed intent, PTB preview and Guardian output came from the live Worker. Connect a Sui wallet only when you want to sign and deploy.'
                     : requireApproval
                       ? 'The agent stages orders; nothing executes without your sign-off.'
@@ -705,7 +820,13 @@ export function NewStrategy({ onDone, mode, setMode, seed }) {
 
           <div style={{ display: 'flex', justifyContent: 'space-between' }}>
             <Button className="rg-btn-2" onPress={() => setStep(2)} startContent={<Icon name="chevL" size={15} />}>Back</Button>
-            <Button className="bg-accent text-accent-foreground font-semibold" onPress={() => onDone({ ...meta, budget, slip, expiry, leverage: adv.leverage ? leverage : null, liqBuffer: (adv.leverage || adv.ltv) ? liqBuffer : null, requireApproval, legs: adv.twoLeg ? legs : null }, text)}><Icon name="shield" size={15} /> {readOnlyPreview ? 'Preview only · connect wallet' : 'Sign & deploy policy'}</Button>
+            <Button
+              className={deployBlockedByAdapters ? 'rg-btn-2 opacity-60' : 'bg-accent text-accent-foreground font-semibold'}
+              isDisabled={deployBlockedByAdapters}
+              onPress={() => onDone({ ...meta, budget, slip, expiry, leverage: adv.leverage ? leverage : null, liqBuffer: (adv.leverage || adv.ltv) ? liqBuffer : null, requireApproval, legs: adv.twoLeg ? legs : null }, text)}
+            >
+              <Icon name={deployBlockedByAdapters ? 'eye' : 'shield'} size={15} /> {deployBlockedByAdapters ? 'Read-only · cannot deploy yet' : readOnlyPreview ? 'Preview only · connect wallet' : 'Sign & deploy policy'}
+            </Button>
           </div>
         </div>
       )}

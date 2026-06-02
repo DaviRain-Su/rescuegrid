@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { RG } from '../data.js'
 import { Icon, TimeChart } from './primitives.jsx'
 import { okAdapterSurface, useDexReadAdapters, useLendingReadAdapters } from '../queries/adapter-surfaces.js'
+import { summarizeReadiness } from '../queries/strategy-readiness.js'
 
 const STATUS_META = {
   available: { cls: 'badge-safe',    label: 'available' },
@@ -30,54 +31,6 @@ function adapterColor(name) {
     'Sui venues': 'var(--t3)',
   });
   return m[name] || 'var(--t2)';
-}
-
-const ADAPTER_ALIASES = {
-  'AlphaLend': ['AlphaLend', 'alphalend'],
-  'Bluefin Spot': ['Bluefin Spot', 'bluefin-spot'],
-  Cetus: ['Cetus CLMM', 'Cetus', 'cetus-clmm'],
-  DeepBook: ['DeepBook V3', 'DeepBook'],
-  Momentum: ['Momentum', 'momentum'],
-  NAVI: ['NAVI Lending', 'NAVI', 'navi-lending'],
-  Scallop: ['Scallop Lend', 'Scallop', 'scallop-lend'],
-  Suilend: ['Suilend', 'suilend'],
-  Turbos: ['Turbos', 'turbos'],
-}
-
-function surfaceRowsForAdapter(name, surfaces) {
-  const aliases = new Set([name, ...(ADAPTER_ALIASES[name] || [])].map((x) => x.toLowerCase()))
-  return surfaces
-    .flatMap((surface) => surface?.adapters || [])
-    .filter((row) => aliases.has(String(row.protocol_name || '').toLowerCase()) || aliases.has(String(row.protocol_slug || '').toLowerCase()))
-}
-
-function summarizeReadiness(strategy, dexSurface, lendingSurface) {
-  const surfaces = [dexSurface, lendingSurface].filter(Boolean)
-  const surfacesKnown = surfaces.length > 0
-  const rows = []
-  const missing = []
-  for (const adapter of strategy.adapters || []) {
-    const matched = surfaceRowsForAdapter(adapter, surfaces)
-    if (matched.length === 0) missing.push(adapter)
-    else matched.forEach((row) => rows.push({ ...row, catalog_adapter: adapter }))
-  }
-
-  const blockers = [...new Set(rows.map((row) => row.execution_blocker_code).filter(Boolean))]
-  const onlyRegisteredExecutors = rows.length > 0 && rows.every((row) => row.execution_adapter_registered)
-  const readOnly = rows.some((row) => !row.execution_adapter_registered || row.autonomous_execution_allowed === false)
-  const hasDeepBookOnlyStatic = (strategy.adapters || []).length > 0 && strategy.adapters.every((adapter) => adapter === 'DeepBook')
-
-  return {
-    surfacesKnown,
-    rows,
-    missing,
-    blockers,
-    readOnly,
-    staticDeepBookOnly: !surfacesKnown && hasDeepBookOnlyStatic,
-    canPreviewPolicy: strategy.status !== 'soon' && Boolean(strategy.scenario) && (
-      !surfacesKnown ? hasDeepBookOnlyStatic : rows.length > 0 && missing.length === 0 && onlyRegisteredExecutors
-    ),
-  }
 }
 
 function ReadinessBadge({ row }) {

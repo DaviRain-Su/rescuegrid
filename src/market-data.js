@@ -335,7 +335,7 @@ export function attachMarketData(RG) {
 
   RG.perpVenues = {
     deepbook: { name: 'DeepBook spot', kind: 'dex', tag: 'Sui', c: '#2EE6CE' },
-    bluefin: { name: 'Bluefin', kind: 'dex', tag: 'Sui', c: '#3E7BFF' },
+    bluefin: { name: 'Bluefin Pro', kind: 'perps', tag: 'Sui', c: '#3E7BFF' },
     sudo: { name: 'Sudo Perps', kind: 'dex', tag: 'Sui', c: '#6366F1' },
     dipcoin: { name: 'DipCoin Perps', kind: 'dex', tag: 'Sui', c: '#F59E0B' },
   }
@@ -363,7 +363,7 @@ export function attachMarketData(RG) {
   RG.venueLimits = [
     { venue: 'DeepBook', kind: 'dex', exposure: 2750, cap: 4000 },
     { venue: 'Cetus', kind: 'dex', exposure: 1000, cap: 3000 },
-    { venue: 'Bluefin', kind: 'dex', exposure: 980, cap: 2500 },
+    { venue: 'Bluefin Spot', kind: 'dex', exposure: 980, cap: 2500 },
     { venue: 'Scallop', kind: 'lend', exposure: 1750, cap: 3000 },
     { venue: 'NAVI', kind: 'lend', exposure: 1200, cap: 3000 },
     { venue: 'Suilend', kind: 'lend', exposure: 1150, cap: 3000 },
@@ -373,8 +373,8 @@ export function attachMarketData(RG) {
     { venue: 'AlphaLend', kind: 'lend', exposure: 680, cap: 2000 },
   ]
   RG.liquidations = [
-    { policy: 'Sui Perp Hedge', venue: 'Bluefin', side: 'Short', liqPx: 5.21, markPx: 4.18, buffer: 24.6, health: 'safe' },
-    { policy: 'WAL Downside Hedge', venue: 'Bluefin', side: 'Short', liqPx: 0.71, markPx: 0.63, buffer: 12.7, health: 'warn' },
+    { policy: 'Sui Perp Hedge', venue: 'Bluefin Pro', side: 'Short', liqPx: 5.21, markPx: 4.18, buffer: 24.6, health: 'safe' },
+    { policy: 'WAL Downside Hedge', venue: 'Bluefin Pro', side: 'Short', liqPx: 0.71, markPx: 0.63, buffer: 12.7, health: 'warn' },
   ]
   RG.oracles = [
     { feed: 'Pyth / SUI/USD', status: 'ok', age: '0.4s', dev: '0.02%' },
@@ -415,8 +415,8 @@ export function attachMarketData(RG) {
     { id: 'clmm', scope: 'sui', group: 'On-chain', name: 'Sui CLMM pool adapters', provider: 'Cetus / Turbos / Momentum', endpoint: 'Sui RPC + public pool APIs', type: 'REST / RPC', access: 'mixed', cadence: '15s', powers: 'LP range and same-chain DEX spread monitors', test: null },
     { id: 'lst', scope: 'sui', group: 'On-chain', name: 'Sui LST and vault feeds', provider: 'SpringSui / Haedal / Volo / AlphaFi', endpoint: 'Sui RPC + protocol APIs', type: 'REST / RPC', access: 'mixed', cadence: '60s', powers: 'Liquid staking, vault and idle-yield monitors', test: null },
     { id: 'cdp-rwa', scope: 'sui', group: 'On-chain', name: 'Sui CDP and RWA feeds', provider: 'Bucket / Ondo / KAIO / Ember', endpoint: 'Sui RPC + protocol APIs', type: 'REST / RPC', access: 'mixed', cadence: '60s', powers: 'CDP, peg-risk, RWA and capital allocator monitors', test: null },
-    { id: 'bluefin', scope: 'sui', group: 'Derivatives', name: 'Bluefin funding rates', provider: 'Bluefin', endpoint: 'public Sui funding endpoint', type: 'REST / WS', access: 'mixed', cadence: '5s', powers: 'Sui perp hedge monitor', test: null },
-    { id: 'perps-extra', scope: 'sui', group: 'Derivatives', name: 'Sui-native perps watch feeds', provider: 'Bluefin / Sudo / DipCoin', endpoint: 'public perps endpoints', type: 'REST / WS', access: 'mixed', cadence: '5s', powers: 'Funding, liquidation and venue-risk watchtower', test: null },
+    { id: 'bluefin', scope: 'sui', group: 'Derivatives', name: 'Bluefin Pro funding rates', provider: 'Bluefin Pro', endpoint: 'public Sui funding endpoint', type: 'REST / WS', access: 'mixed', cadence: '5s', powers: 'Sui perp hedge monitor', test: null },
+    { id: 'perps-extra', scope: 'sui', group: 'Derivatives', name: 'Sui-native perps watch feeds', provider: 'Bluefin Pro / Sudo / DipCoin', endpoint: 'public perps endpoints', type: 'REST / WS', access: 'mixed', cadence: '5s', powers: 'Funding, liquidation and venue-risk watchtower', test: null },
     { id: 'signer', scope: 'sui', group: 'Execution', name: 'Sui agent signer / executor', provider: 'Wallet + Cloudflare agent key', endpoint: 'durable object + Sui signer', type: 'internal', access: 'proxy', cadence: 'on demand', powers: 'Policy tx building, execution and readiness gates', test: null },
   ]
 
@@ -482,7 +482,7 @@ export function attachMarketData(RG) {
   RG.guardianRules = [
     { id: 'slip', label: 'Max slippage', kind: 'pct', val: 1.2, min: 0.2, max: 3, step: 0.1, on: true, desc: 'Abort an order if expected slippage exceeds this.' },
     { id: 'liq', label: 'Min pool liquidity', kind: 'usd', val: 250000, min: 50000, max: 1000000, step: 50000, on: true, desc: 'Skip Sui venues thinner than this depth.' },
-    { id: 'lev', label: 'Max leverage', kind: 'x', val: 4, min: 1, max: 10, step: 0.5, on: true, desc: 'Cap notional on the Bluefin hedge leg.' },
+    { id: 'lev', label: 'Max leverage', kind: 'x', val: 4, min: 1, max: 10, step: 0.5, on: true, desc: 'Cap notional on the Bluefin Pro hedge leg.' },
     { id: 'buffer', label: 'Min liq. buffer', kind: 'pct', val: 15, min: 5, max: 50, step: 1, on: true, desc: 'Deleverage before margin gets this close to liquidation.' },
     { id: 'depeg', label: 'Pause on stable depeg', kind: 'pct', val: 0.5, min: 0.1, max: 3, step: 0.1, on: true, desc: 'Halt if a stablecoin drifts past this from $1.' },
     { id: 'oracle', label: 'Max oracle staleness', kind: 'sec', val: 10, min: 2, max: 60, step: 1, on: false, desc: 'Block execution if the price feed is older than this.' },

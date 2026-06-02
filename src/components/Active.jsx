@@ -7,7 +7,7 @@ const STRAT_LIVE = {
   'funding-arb': (p, sc, used, cap) => ({
     legs: [
       { venue: 'DeepBook', side: 'Long', asset: sc, size: '$' + fmtUsd(used, 0), sub: 'spot inventory' },
-      { venue: 'Bluefin', side: 'Short', asset: sc, size: '$' + fmtUsd(used, 0), sub: 'perp hedge · funding watched' },
+      { venue: 'Bluefin Pro', side: 'Short', asset: sc, size: '$' + fmtUsd(used, 0), sub: 'perp hedge · funding watched' },
     ],
     delta: { v: '+0.18%', neutral: true },
     pnlU: '+$12.40', pnlR: '+$148.20', carry: '+$172', cost: '−$24',
@@ -93,7 +93,7 @@ const STRAT_LIVE = {
     ],
   }),
   hedge: (p, sc, used, cap) => ({
-    legs: [{ venue: 'Bluefin', side: 'Short', asset: sc, size: '$' + fmtUsd(used, 0), sub: 'offsets spot exposure' }],
+    legs: [{ venue: 'Bluefin Pro', side: 'Short', asset: sc, size: '$' + fmtUsd(used, 0), sub: 'offsets spot exposure' }],
     delta: { v: '−0.4×', neutral: false },
     pnlU: '+$15.30', pnlR: '+$58.00', carry: '—', cost: '−$5',
     orders: [],
@@ -130,7 +130,7 @@ const INVENTORY = {
   'funding-arb': {
     nodes: [
       { id: 'spot', label: 'DeepBook', sub: 'spot leg', amt: 1000, c: '#2EE6CE' },
-      { id: 'perp', label: 'Bluefin', sub: 'perp hedge', amt: 920, c: '#3E7BFF' },
+      { id: 'perp', label: 'Bluefin Pro', sub: 'perp hedge', amt: 920, c: '#3E7BFF' },
       { id: 'free', label: 'Sui wallet', sub: 'free buffer', amt: 480, c: '#2EE6CE' },
     ],
     flows: [{ from: 'free', to: 'perp', amt: 80, via: 'Sui PTB', status: 'scheduled', eta: 'next tick' }],
@@ -212,6 +212,7 @@ function InventoryFlow({ strategy, policy }) {
         const n = inv.nodes.find(x => x.id === openNode);
         if (!n) return null;
         const isWallet = /wallet/i.test(n.label) || n.id === 'free';
+        const isCex = !isWallet && /cex|binance|okx|bybit/i.test(n.label);
         const holdings = isWallet
           ? [['USDC', '100%', 'idle buffer']]
           : isCex
