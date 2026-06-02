@@ -109,6 +109,8 @@ Happy path:
 - 不提交 Deepbook transaction。
 - 不创建 MoveGate ActionReceipt。
 - 不改变 `spent_amount`。
+- `npm run safety:negative` 必须通过 live Worker + Sui Testnet fixture policy 证明 over-budget、over-slippage、wrong pool、wrong agent、mandate-wrapper mismatch、expired 和 revoked plans 全部通过 `/api/execution/validate-plan` 在提交前 blocked，且 wrapper spend、API spend、execution-success activity 和 `AgentTradeExecuted` chain activity 均不增加。
+- `npm run safety:negative -- --help` 不得输出 `AGENT_KEY`、owner key、`INTERNAL_AGENT_TICK_TOKEN`、WaaP permission token 或任何 secret value。
 
 ## 3. Worker API Tests
 
@@ -567,6 +569,7 @@ Passing criteria:
 
 - At least one real Sui Testnet transaction is visible.
 - At least one real Deepbook-related execution is visible, or a documented Testnet blocker is explicitly shown by `npm run demo:loop` with fallback approved before demo.
+- `npm run safety:negative` provides the safety-negative acceptance proof for the fallback path: every known Guardian / wrapper / mandate blocker must be pre-submission and non-mutating.
 - Once DBUSDC/DEEP funding is available, `npm run demo:execute` or `node worker/scripts/validate-demo-loop.mjs --require-execution` must replace the fallback path. Strict mode must preflight runtime signer status, BalanceManager DBUSDC/DEEP and agent SUI gas before policy creation, fail without creating a test policy when the known gate is not ready, and fail after creation unless the forced tick proves `AgentTradeExecuted`, `execution_claimed=true` and on-chain spend increase.
 - Revocation is visible both in UI and chain state.
 - No step requires exposing a user private key to the Agent.

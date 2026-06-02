@@ -18,8 +18,10 @@ const safetyHelp = spawnSync(process.execPath, ['scripts/validate-safety-negativ
 })
 
 assert.equal(safetyHelp.status, 0, safetyHelp.stderr)
+assert.match(safetyHelp.stdout, /npm run safety:negative/)
 assert.match(safetyHelp.stdout, /over-budget/i)
 assert.match(safetyHelp.stdout, /mandate-wrapper mismatch/i)
+assert.match(safetyHelp.stdout, /revokes the active policy/i)
 assert.match(safetyHelp.stdout, /no raw secrets/i)
 assert.equal(safetyHelp.stdout.includes('AGENT_KEY='), false, 'safety help output must not print secret values')
 

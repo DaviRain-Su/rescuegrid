@@ -88,8 +88,11 @@
 | G3 | Commit | 2h | README quickstart | 新用户能按步骤跑起演示 |
 | G4 | Commit | 3h | Final docs + QA pass | 子验收 1：PRD/架构/规格与实际实现保持一致；子验收 2：用浏览器、Worker 日志和链上查询验证完整闭环 |
 | G5 | Commit | 1h | External funding handoff | `npm run funding:request` 输出 public BalanceManager、DBUSDC/DEEP coin type、缺口数量和后续验证命令，不泄漏任何 secret |
+| G6 | Commit | 1h | Live safety negative-path validator | `npm run safety:negative` 用 live Worker + Sui Testnet fixture policy 证明 over-budget、over-slippage、wrong pool/agent、mandate mismatch、expired、revoked 全部通过 `/api/execution/validate-plan` 在提交前被挡住，且 wrapper spend / execution success activity 不变 |
 
 Current G5 implementation status: `worker/scripts/funding-handoff.mjs`, `worker/scripts/funding-watch.mjs`, root `npm run funding:request` and `npm run funding:watch` reuse `buildExecutionReadiness` to produce a read-only external funding request/watch. The output includes public agent / BalanceManager ids, DeepBook pool, DBUSDC/DEEP coin types, observed/required/missing amounts, signer readiness, blocker codes and the next `npm run daemon -- status --json` / `npm run funding:watch -- --json` / `npm run demo:execute` verification commands. It does not create policies, submit PTBs or print secrets while blocked.
+
+Current G6 implementation status: `worker/scripts/validate-safety-negative-paths.mjs` is exposed at root as `npm run safety:negative`. It is intentionally live-Testnet and secret-safe: it creates a current-run active policy and a short-lived expired policy using the scripted agent-key owner path, validates the safety blockers through the non-mutating Worker `/api/execution/validate-plan` endpoint, revokes the active policy, and verifies no spend or execution-success activity was created.
 
 ## Phase H - Post-MVP Composability
 

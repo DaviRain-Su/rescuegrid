@@ -29,13 +29,16 @@ if (args.has('--help') || process.argv.includes('-h')) {
   console.log(`Validate live Testnet Guardian/safety negative paths.
 
 Usage:
+  npm run safety:negative -- [--worker-url http://localhost:8787]
   node worker/scripts/validate-safety-negative-paths.mjs [--worker-url http://localhost:8787]
 
 Creates a current-run active policy and short-lived expired policy with the
 scripted agent-key owner path, validates over-budget, over-slippage, wrong pool,
 wrong agent, mandate-wrapper mismatch, expired, and revoked negative paths via
-the non-mutating Worker validate-plan API, then verifies no spend or execution
-success activity was created. No raw secrets are printed.`)
+the non-mutating Worker validate-plan API, revokes the active policy, then
+verifies no spend or execution-success activity was created. It requires a live
+local Worker and the scripted Testnet agent key configuration. No raw secrets
+are printed.`)
   process.exit(0)
 }
 

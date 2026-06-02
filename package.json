@@ -21,6 +21,7 @@
     "chain-data:status": "node worker/scripts/chain-data-status.mjs",
     "demo:loop": "node worker/scripts/validate-demo-loop.mjs",
     "demo:execute": "node worker/scripts/validate-demo-loop.mjs --require-execution",
+    "safety:negative": "node worker/scripts/validate-safety-negative-paths.mjs",
     "baseline:smoke": "node scripts/baseline-smoke.mjs"
   },
   "dependencies": {

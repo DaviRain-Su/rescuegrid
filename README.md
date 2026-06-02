@@ -49,6 +49,7 @@ npm run config                      # sanitized Testnet deployment IDs
 npm run funding:request             # secret-safe external DBUSDC/DEEP funding handoff
 npm run funding:watch -- --json     # secret-safe readiness watch; no policy while blocked
 npm run chain-data:status -- --json # secret-safe ChainDataProvider status; add --probe for bounded live read
+npm run safety:negative             # live Testnet validate-plan safety proof; creates/revokes test policies
 npm run demo:loop                   # create -> activate/tick -> revoke live demo evidence
 npm run demo:execute                # strict mode: preflight funding/signer, then require AgentTradeExecuted
 RESCUEGRID_FRONTEND_URL=http://localhost:5175 RESCUEGRID_WORKER_URL=http://localhost:8787 npm run baseline:smoke
@@ -114,6 +115,7 @@ Observed final mission evidence is Testnet-only:
 - `RESCUEGRID_FRONTEND_URL=http://localhost:5173 RESCUEGRID_WORKER_URL=http://localhost:8787 npm run baseline:smoke` passed against local Worker/frontend services and Sui Testnet reads, including `/api/runtime/status`, `/api/chain-data/status`, signer/agent/data-provider checks and secret-leak assertions.
 - Browser/API surfaces were verified on `http://localhost:5175` with live Worker reads to `http://localhost:8787`.
 - Scripted agent-key Testnet validation created, listed, surfaced in UI/API, and revoked a current-run policy; chain and Worker reads stayed consistent post-revoke.
+- `npm run safety:negative` is the live safety-negative validator: with a local Worker and scripted Testnet agent key config, it creates active/expiring test policies, checks over-budget, over-slippage, wrong pool, wrong agent, mandate-wrapper mismatch, expired and revoked plans through the non-mutating `/api/execution/validate-plan` path, then verifies wrapper spend and execution-success activity stay unchanged.
 - `npm run demo:loop` is the G2 live demo validator: create -> activate/monitor -> force tick -> revoke -> post-revoke tick. In the current funding state it should report the documented execution gate, not a fake fill. `npm run demo:execute` is the strict variant: it preflights execution readiness before policy creation, then requires `AgentTradeExecuted`, `execution_claimed=true` and an on-chain spend increase.
 - Funding/readiness, tick auth, trigger-not-met, Guardian safety, revoked/failed/unresolved paths all remained non-success with unchanged spend and no execution-success activity; transaction-bearing runtime activity is idempotent by digest, and chain success evidence wins over duplicate runtime success rows.
 - Live policy lists reconcile Durable Object runtime state with chain state; terminal chain state wins and stale runtime rows surface as `runtime_state_stale`.
