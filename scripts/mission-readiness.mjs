@@ -3,8 +3,8 @@
 //
 // This is an audit/reporting script. It does not create policies, submit PTBs,
 // run demo:execute, or mutate local daemon state.
-import { existsSync, readFileSync } from 'node:fs'
-import { resolve } from 'node:path'
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
+import { dirname, resolve } from 'node:path'
 import { pathToFileURL } from 'node:url'
 import packageJson from '../package.json' with { type: 'json' }
 import { buildExecutionReadiness } from '../worker/src/execution-readiness.js'
@@ -19,6 +19,7 @@ import { verifyWalletEvidenceArtifact } from './wallet-clickthrough-evidence.mjs
 const DEFAULT_WALLET_ARTIFACT = '.rescuegrid/wallet-clickthrough-evidence.md'
 const DEFAULT_EXECUTION_REPORT = '.rescuegrid/demo-execute-report.json'
 const DEFAULT_SAFETY_REPORT = '.rescuegrid/safety-negative-report.json'
+const DEFAULT_MISSION_REPORT = '.rescuegrid/mission-readiness-report.json'
 const REQUIRED_SCRIPTS = [
   'build',
   'test:wallet-flow',
@@ -29,6 +30,7 @@ const REQUIRED_SCRIPTS = [
   'wallet:evidence',
   'wallet:evidence:verify',
   'mission:readiness',
+  'mission:readiness:report',
   'funding:request',
   'funding:watch',
   'demo:loop',
@@ -365,20 +367,30 @@ function loadJsonReport(path) {
   return JSON.parse(readFileSync(path, 'utf8'))
 }
 
+export function writeMissionReadinessArtifact(report, outPath = DEFAULT_MISSION_REPORT) {
+  const resolved = resolve(String(outPath))
+  mkdirSync(dirname(resolved), { recursive: true })
+  writeFileSync(resolved, `${JSON.stringify(report, null, 2)}\n`, 'utf8')
+  return resolved
+}
+
 function help() {
   console.log(`Audit RescueGrid PRD mission readiness.
 
 Usage:
   npm run mission:readiness
+  npm run mission:readiness:report
   npm run mission:readiness -- --wallet-artifact .rescuegrid/wallet-clickthrough-evidence.md
   npm run mission:readiness -- --safety-report .rescuegrid/safety-negative-report.json
   npm run mission:readiness -- --execution-report .rescuegrid/demo-execute-report.json
+  npm run mission:readiness -- --out .rescuegrid/mission-readiness-report.json
   npm run mission:readiness -- --skip-live-funding
 
 This is read-only. It checks validation command registration, wallet click-through
 evidence, live safety-negative evidence, execution funding readiness and strict
 AgentTradeExecuted evidence. It does not create policies, submit PTBs, run
-demo:execute or print secrets.`)
+demo:execute or print secrets. --out writes the same report as a gitignored
+artifact even when status is blocked.`)
 }
 
 export async function main(argv = process.argv.slice(2), env = process.env, options = {}) {
@@ -390,6 +402,7 @@ export async function main(argv = process.argv.slice(2), env = process.env, opti
   const walletArtifact = resolve(String(flags.get('--wallet-artifact') || DEFAULT_WALLET_ARTIFACT))
   const safetyReportPath = resolve(String(flags.get('--safety-report') || DEFAULT_SAFETY_REPORT))
   const executionReportPath = resolve(String(flags.get('--execution-report') || DEFAULT_EXECUTION_REPORT))
+  const reportOutPath = flags.get('--out') || flags.get('--report-out') || flags.get('--output') || null
   let walletReport = null
   try {
     walletReport = await loadWalletReport({
@@ -428,6 +441,9 @@ export async function main(argv = process.argv.slice(2), env = process.env, opti
     executionReport,
     safetyReport,
   })
+  if (reportOutPath) {
+    writeMissionReadinessArtifact(report, reportOutPath)
+  }
   console.log(JSON.stringify(report, null, 2))
   return report.full_prd_ready ? 0 : 1
 }

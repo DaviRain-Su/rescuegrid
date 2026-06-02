@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import { spawnSync } from 'node:child_process'
-import { mkdtempSync, rmSync, writeFileSync } from 'node:fs'
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import {
@@ -18,6 +18,7 @@ const requiredScripts = {
   'wallet:evidence': 'node scripts/wallet-clickthrough-evidence.mjs',
   'wallet:evidence:verify': 'node scripts/wallet-clickthrough-evidence.mjs --verify',
   'mission:readiness': 'node scripts/mission-readiness.mjs',
+  'mission:readiness:report': 'node scripts/mission-readiness.mjs --out .rescuegrid/mission-readiness-report.json',
   'funding:request': 'node worker/scripts/funding-handoff.mjs',
   'funding:watch': 'node worker/scripts/funding-watch.mjs',
   'demo:loop': 'node worker/scripts/validate-demo-loop.mjs',
@@ -234,6 +235,8 @@ function strictExecutionReport(overrides = {}) {
       '--skip-live-funding',
       '--wallet-artifact',
       '.rescuegrid/mission-readiness-test-missing-wallet.md',
+      '--safety-report',
+      '.rescuegrid/mission-readiness-test-missing-safety.json',
       '--execution-report',
       '.rescuegrid/mission-readiness-test-missing-execution.json',
     ], {}, { fundingReadiness: null })
@@ -267,6 +270,38 @@ function strictExecutionReport(overrides = {}) {
 }
 
 {
+  const tempDir = mkdtempSync(join(tmpdir(), 'rescuegrid-mission-readiness-out-'))
+  const outPath = join(tempDir, 'nested', 'mission-readiness-report.json')
+  const originalLog = console.log
+  let output = ''
+  console.log = (value) => {
+    output += `${value}\n`
+  }
+  try {
+    const code = await main([
+      '--wallet-artifact',
+      join(tempDir, 'missing-wallet.md'),
+      '--execution-report',
+      join(tempDir, 'missing-execution.json'),
+      '--out',
+      outPath,
+    ], {}, {
+      fundingReadiness: blockedFunding(),
+      safetyReport: safetyNegativeReport(),
+    })
+    assert.equal(code, 1)
+  } finally {
+    console.log = originalLog
+  }
+  const stdoutReport = JSON.parse(output)
+  const artifactReport = JSON.parse(readFileSync(outPath, 'utf8'))
+  assert.equal(stdoutReport.status, 'blocked')
+  assert.deepEqual(artifactReport, stdoutReport)
+  assert.equal(artifactReport.blocker_codes.includes('WALLET_EVIDENCE_MISSING'), true)
+  rmSync(tempDir, { recursive: true, force: true })
+}
+
+{
   const help = spawnSync(process.execPath, ['scripts/mission-readiness.mjs', '--help'], {
     cwd: process.cwd(),
     encoding: 'utf8',
@@ -274,6 +309,7 @@ function strictExecutionReport(overrides = {}) {
   assert.equal(help.status, 0)
   assert.match(help.stdout, /mission readiness/i)
   assert.match(help.stdout, /safety-report/)
+  assert.match(help.stdout, /--out/)
   assert.equal(help.stdout.includes('AGENT_KEY='), false)
   assert.equal(help.stdout.includes('INTERNAL_AGENT_TICK_TOKEN='), false)
   assert.equal(help.stdout.includes('WAAP_PERMISSION_TOKEN='), false)

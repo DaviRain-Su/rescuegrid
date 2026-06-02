@@ -23,6 +23,7 @@
     "wallet:evidence": "node scripts/wallet-clickthrough-evidence.mjs",
     "wallet:evidence:verify": "node scripts/wallet-clickthrough-evidence.mjs --verify",
     "mission:readiness": "node scripts/mission-readiness.mjs",
+    "mission:readiness:report": "node scripts/mission-readiness.mjs --out .rescuegrid/mission-readiness-report.json",
     "funding:request": "node worker/scripts/funding-handoff.mjs",
     "funding:watch": "node worker/scripts/funding-watch.mjs",
     "chain-data:status": "node worker/scripts/chain-data-status.mjs",
