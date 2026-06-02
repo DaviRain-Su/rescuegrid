@@ -159,6 +159,8 @@ Phase K is based on [`docs/09-market-product-and-frontend-roadmap.md`](09-market
 | K7 | Commit | 3h | Risk Center | Show global budget, venue caps, liquidation watch list, oracle/source health, signer status, stale-data warnings and emergency-stop controls |
 | K8 | Commit | 3h | Agent Ledger v2 | Add strategy/venue/status filters plus expandable rows for reason, input snapshot, execution plan, Guardian result, tx/order id and budget impact |
 
+Current K3 implementation status: Market Monitor now consumes Worker adapter surfaces through `src/queries/adapter-surfaces.js`. The Sui DEX Spreads tab shows `/api/adapters/dex-reads` counts, spread rows and execution blockers; the Yield Monitor shows `/api/adapters/lending-reads` counts, health rows and lending execution blockers. Data Sources also shows both Worker adapter surfaces alongside the feed list. These UI surfaces are read-only and must not imply non-DeepBook execution.
+
 ## Hackathon Critical Path
 
 MVP 任务清单约 76h（含 B8 feasibility note 和 E9 adapter registry），Phase H 约 18h 且不进入 hackathon critical path。单人 hackathon 应优先跑最小可演示闭环。Critical path 只保留证明 Sub-track 2 的必要任务：

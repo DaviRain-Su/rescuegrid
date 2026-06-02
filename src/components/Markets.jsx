@@ -3,6 +3,7 @@ import { flexRender, getCoreRowModel, useReactTable } from '@tanstack/react-tabl
 import { RG } from '../data.js'
 import { Icon, Token, Sparkline, ProtoGlyph, fmtUsd, fmtTvlM } from './primitives.jsx'
 import { PoolDrawer } from './MarketDrawers.jsx'
+import { okAdapterSurface, useDexReadAdapters, useLendingReadAdapters } from '../queries/adapter-surfaces.js'
 import { demoYieldOpportunities, isSuiYieldRow, mapYieldPoolToOpportunity, useDefiLlamaYieldPools } from '../queries/markets.js'
 
 const RISK_META = {
@@ -37,6 +38,34 @@ function ChainChip({ ch, active, onClick }) {
   );
 }
 
+function AdapterSurfaceSummary({ icon, title, data, metrics, rows, blockerKey = 'execution_blocker_code' }) {
+  if (!data) return null;
+  return (
+    <div className="card" style={{ padding: '13px 16px', display: 'flex', alignItems: 'center', gap: 14, flexWrap: 'wrap' }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 9, minWidth: 210 }}>
+        <span style={{ color: 'var(--accent)' }}><Icon name={icon} size={17} /></span>
+        <div>
+          <div className="card-title" style={{ fontSize: 13 }}>{title}</div>
+          <div className="mono" style={{ fontSize: 10.5, color: 'var(--t2)', marginTop: 2 }}>Worker · read-only surface</div>
+        </div>
+      </div>
+      <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+        {metrics.map(([k, v]) => (
+          <span key={k} className="badge badge-neutral" style={{ fontSize: 9.5 }}>{k}: <span className="mono" style={{ marginLeft: 4 }}>{v}</span></span>
+        ))}
+      </div>
+      <div style={{ flex: 1 }} />
+      <div style={{ display: 'flex', gap: 7, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
+        {rows.slice(0, 6).map((row) => (
+          <span key={row.id} className={`badge ${row.execution_enabled ? 'badge-safe' : 'badge-warn'}`} style={{ fontSize: 9.5 }}>
+            {row.protocol_name}<span style={{ marginLeft: 5 }}>{row.execution_enabled ? 'exec' : row[blockerKey]}</span>
+          </span>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 /* ---------------- Yields tab ---------------- */
 const TYPE_SCENARIO = { LP: 'lp', Vault: 'lp', CLOB: 'lp', Farm: 'lp', Lending: 'lend', LST: 'lend', RWA: 'lend', CDP: 'lend' };
 function YieldMonitor({ onDeploy, onInspect, chain, live, onToast }) {
@@ -44,6 +73,8 @@ function YieldMonitor({ onDeploy, onInspect, chain, live, onToast }) {
   const [sort, setSort] = useState('apy');
   const types = ['all', 'Lending', 'LP', 'LST', 'Vault', 'RWA', 'CDP', 'Farm', 'CLOB'];
   const livePoolsQuery = useDefiLlamaYieldPools({ enabled: live });
+  const lendingReadQuery = useLendingReadAdapters();
+  const lendingReadSurface = okAdapterSurface(lendingReadQuery);
   const liveRows = livePoolsQuery.data ? livePoolsQuery.data.filter(isSuiYieldRow) : null;
   const liveState = !live ? 'idle' : livePoolsQuery.isPending ? 'loading' : livePoolsQuery.isError ? 'err' : 'ok';
 
@@ -183,6 +214,18 @@ function YieldMonitor({ onDeploy, onInspect, chain, live, onToast }) {
           ))}
         </div>
       </div>
+
+      <AdapterSurfaceSummary
+        icon="percent"
+        title="Lending read boundary"
+        data={lendingReadSurface}
+        metrics={[
+          ['adapters', lendingReadSurface?.counts?.total_adapters ?? 0],
+          ['markets', lendingReadSurface?.counts?.total_supported_markets ?? 0],
+          ['health', lendingReadSurface?.counts?.total_health_rows ?? 0],
+        ]}
+        rows={lendingReadSurface?.adapters || []}
+      />
 
       {/* table */}
       <div className="card" style={{ overflow: 'hidden' }}>
@@ -339,6 +382,8 @@ function SpotArb({ onDeploy }) {
   const insts = RG.spots.map(s => ({ ...s, ...spotArbOf(s) })).sort((a, b) => b.spread - a.spread);
   const best = insts[0];
   const fmtPx = (p) => p < 1 ? p.toFixed(4) : fmtUsd(p, p > 1000 ? 0 : 3);
+  const dexReadQuery = useDexReadAdapters();
+  const dexReadSurface = okAdapterSurface(dexReadQuery);
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
@@ -369,6 +414,18 @@ function SpotArb({ onDeploy }) {
           <Icon name="bolt" size={14} /> Preview spread
         </button>
       </div>
+
+      <AdapterSurfaceSummary
+        icon="scale"
+        title="Sui DEX read boundary"
+        data={dexReadSurface}
+        metrics={[
+          ['adapters', dexReadSurface?.counts?.total_adapters ?? 0],
+          ['markets', dexReadSurface?.counts?.total_supported_markets ?? 0],
+          ['spread rows', dexReadSurface?.counts?.total_spread_pairs ?? 0],
+        ]}
+        rows={dexReadSurface?.adapters || []}
+      />
 
       {/* per-instrument grid */}
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>

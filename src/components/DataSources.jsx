@@ -1,6 +1,13 @@
 import { RG } from '../data.js'
 import { Icon } from './primitives.jsx'
 import { useFeedTestMutation } from '../queries/feeds.js'
+import {
+  ADAPTER_SURFACE_WORKER_CONFIGURED,
+  adapterSurfaceUnavailable,
+  okAdapterSurface,
+  useDexReadAdapters,
+  useLendingReadAdapters,
+} from '../queries/adapter-surfaces.js'
 
 const ACCESS_META = {
   live:  { c: 'var(--safe)',   label: 'Live · direct', note: 'Public, CORS-open — the browser fetches it directly.' },
@@ -8,6 +15,54 @@ const ACCESS_META = {
   proxy: { c: 'var(--warn)',   label: 'Backend proxy', note: 'Needs a server: API keys, signing or a non-CORS venue.' },
 };
 const GROUP_ICON = { 'Market data': 'percent', 'On-chain': 'layers', 'Derivatives': 'swap', 'Execution': 'bolt' };
+
+function SurfacePill({ children, tone = 'neutral' }) {
+  const cls = tone === 'safe' ? 'badge-safe' : tone === 'warn' ? 'badge-warn' : 'badge-neutral';
+  return <span className={`badge ${cls}`} style={{ fontSize: 9.5, whiteSpace: 'nowrap' }}>{children}</span>;
+}
+
+function WorkerSurfaceCard({ title, icon, data, query, metricRows, adapterRows }) {
+  const unavailable = adapterSurfaceUnavailable(query);
+  const loading = ADAPTER_SURFACE_WORKER_CONFIGURED && query.isPending;
+  return (
+    <div className="card" style={{ padding: '15px 17px', display: 'flex', flexDirection: 'column', gap: 12, minWidth: 0 }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 9 }}>
+        <span style={{ color: data ? 'var(--accent)' : 'var(--t2)' }}><Icon name={icon} size={16} /></span>
+        <div className="card-title" style={{ fontSize: 13 }}>{title}</div>
+        <div style={{ flex: 1 }} />
+        {data ? <SurfacePill tone="safe">worker</SurfacePill>
+          : loading ? <SurfacePill>loading</SurfacePill>
+          : <SurfacePill tone="warn">{unavailable || 'unavailable'}</SurfacePill>}
+      </div>
+      {data ? (
+        <>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: 8 }}>
+            {metricRows.map(([k, v]) => (
+              <div key={k} style={{ padding: '9px 10px', borderRadius: 8, background: 'var(--glass)', border: '1px solid var(--border)' }}>
+                <div className="eyebrow" style={{ fontSize: 8.5 }}>{k}</div>
+                <div className="mono display" style={{ fontSize: 17, fontWeight: 600, marginTop: 4 }}>{v}</div>
+              </div>
+            ))}
+          </div>
+          <div style={{ display: 'flex', gap: 7, flexWrap: 'wrap' }}>
+            {adapterRows.map((row) => (
+              <span key={row.id} className="badge badge-neutral" style={{ fontSize: 9.5 }}>
+                {row.protocol_name}
+                <span style={{ color: row.execution_enabled ? 'var(--safe)' : 'var(--warn)', marginLeft: 5 }}>
+                  {row.execution_enabled ? 'exec' : row.execution_blocker_code}
+                </span>
+              </span>
+            ))}
+          </div>
+        </>
+      ) : (
+        <div style={{ fontSize: 11.5, color: 'var(--t2)', lineHeight: 1.45 }}>
+          Worker read surfaces appear here when `VITE_WORKER_URL` points at the RescueGrid Worker.
+        </div>
+      )}
+    </div>
+  );
+}
 
 function FeedTestButton({ feed }) {
   const testFeedMutation = useFeedTestMutation();
@@ -45,6 +100,10 @@ export function DataSources({ onToast, live, setLive }) {
   const groups = [...new Set(feeds.map(f => f.group))];
   const liveCount = feeds.filter(f => f.access !== 'proxy').length;
   const proxyCount = feeds.filter(f => f.access === 'proxy').length;
+  const dexQuery = useDexReadAdapters();
+  const lendingQuery = useLendingReadAdapters();
+  const dexSurface = okAdapterSurface(dexQuery);
+  const lendingSurface = okAdapterSurface(lendingQuery);
 
   return (
     <div style={{ maxWidth: 1000, margin: '0 auto', display: 'flex', flexDirection: 'column', gap: 18 }}>
@@ -79,6 +138,38 @@ export function DataSources({ onToast, live, setLive }) {
             <div className="mono display" style={{ fontSize: 22, fontWeight: 600, marginTop: 6, color: c }}>{v}</div>
           </div>
         ))}
+      </div>
+
+      <div>
+        <div className="eyebrow" style={{ marginBottom: 10, marginLeft: 2, display: 'flex', alignItems: 'center', gap: 7 }}>
+          <Icon name="shield" size={12} /> Worker adapter surfaces
+        </div>
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
+          <WorkerSurfaceCard
+            title="Sui DEX read adapters"
+            icon="scale"
+            data={dexSurface}
+            query={dexQuery}
+            metricRows={[
+              ['Adapters', dexSurface?.counts?.total_adapters ?? '—'],
+              ['Markets', dexSurface?.counts?.total_supported_markets ?? '—'],
+              ['Spread rows', dexSurface?.counts?.total_spread_pairs ?? '—'],
+            ]}
+            adapterRows={dexSurface?.adapters || []}
+          />
+          <WorkerSurfaceCard
+            title="Sui lending health reads"
+            icon="percent"
+            data={lendingSurface}
+            query={lendingQuery}
+            metricRows={[
+              ['Adapters', lendingSurface?.counts?.total_adapters ?? '—'],
+              ['Markets', lendingSurface?.counts?.total_supported_markets ?? '—'],
+              ['Health rows', lendingSurface?.counts?.total_health_rows ?? '—'],
+            ]}
+            adapterRows={lendingSurface?.adapters || []}
+          />
+        </div>
       </div>
 
       {/* feed groups */}
