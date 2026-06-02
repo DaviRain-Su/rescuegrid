@@ -195,6 +195,8 @@ function frontendPreflightPassed(frontendState = {}) {
 
 function summarizeRuntimeStatus(result) {
   const body = result?.body || {}
+  const selectedCapability = (body.signer_capabilities || []).find((row) => row.selected) || null
+  const externalSigner = body.external_signer || null
   return {
     status: result?.status || 'unavailable',
     http_status: result?.http_status || 0,
@@ -207,6 +209,26 @@ function summarizeRuntimeStatus(result) {
     signer_matches_expected: body.signer?.signer_matches_expected ?? null,
     execution_enabled: body.execution?.enabled ?? null,
     execution_blocker_code: body.execution?.blocker_code || null,
+    known_signer_kinds: body.signer?.known_signer_kinds || [],
+    signer_capability_kinds: (body.signer_capabilities || []).map((row) => row.kind).filter(Boolean),
+    selected_signer_capability: selectedCapability ? {
+      kind: selectedCapability.kind || null,
+      runtime_scope: selectedCapability.runtime_scope || null,
+      custody_model: selectedCapability.custody_model || null,
+      execution_enabled: selectedCapability.execution_enabled ?? null,
+      runner_configured: selectedCapability.runner_configured ?? null,
+      unavailable_code: selectedCapability.unavailable_code || null,
+    } : null,
+    external_signer: externalSigner ? {
+      kind: externalSigner.kind || null,
+      selected: externalSigner.selected ?? null,
+      status: externalSigner.status || null,
+      available: externalSigner.available ?? null,
+      submission_runner_configured: externalSigner.submission_runner_configured ?? null,
+      permission_token_configured: externalSigner.permission_token_configured ?? null,
+      unavailable_code: externalSigner.unavailable_code || null,
+      secrets_returned: externalSigner.secrets_returned === true,
+    } : null,
     chain_data_provider: body.chain_data_provider?.kind || null,
     monitoring_provider: body.monitoring_provider?.kind || null,
   }
@@ -214,12 +236,37 @@ function summarizeRuntimeStatus(result) {
 
 function summarizeReadiness(result) {
   const body = result?.body || {}
+  const selectedCapability = (body.signer_capabilities || []).find((row) => row.selected) || null
+  const externalSigner = body.external_signer || null
   return {
     status: result?.status || 'unavailable',
     http_status: result?.http_status || 0,
     error: result?.error || null,
     chain: body.chain || null,
     scope: body.scope || null,
+    signer_kind: body.signer?.kind || null,
+    signer_available: body.signer?.available ?? null,
+    signer_execution_enabled: body.signer?.execution_enabled ?? body.execution?.enabled ?? null,
+    signer_unavailable_code: body.signer?.unavailable_code || body.execution?.blocker_code || null,
+    signer_capability_kinds: (body.signer_capabilities || []).map((row) => row.kind).filter(Boolean),
+    selected_signer_capability: selectedCapability ? {
+      kind: selectedCapability.kind || null,
+      runtime_scope: selectedCapability.runtime_scope || null,
+      custody_model: selectedCapability.custody_model || null,
+      execution_enabled: selectedCapability.execution_enabled ?? null,
+      runner_configured: selectedCapability.runner_configured ?? null,
+      unavailable_code: selectedCapability.unavailable_code || null,
+    } : null,
+    external_signer: externalSigner ? {
+      kind: externalSigner.kind || null,
+      selected: externalSigner.selected ?? null,
+      status: externalSigner.status || null,
+      available: externalSigner.available ?? null,
+      submission_runner_configured: externalSigner.submission_runner_configured ?? null,
+      permission_token_configured: externalSigner.permission_token_configured ?? null,
+      unavailable_code: externalSigner.unavailable_code || null,
+      secrets_returned: externalSigner.secrets_returned === true,
+    } : null,
     execution_ready: body.execution_ready ?? null,
     funding_ready: body.funding_ready ?? null,
     execution_claimed: body.execution_claimed ?? false,
@@ -398,6 +445,28 @@ function valueOrTodo(value) {
   return value == null || value === '' ? 'TODO' : String(value)
 }
 
+function signerPostureLine(posture) {
+  if (!posture) return 'n/a'
+  return [
+    posture.kind || 'signer',
+    posture.runtime_scope,
+    posture.custody_model,
+    posture.runner_configured === false ? 'runner missing' : null,
+    posture.unavailable_code,
+  ].filter(Boolean).join(' · ')
+}
+
+function externalSignerPostureLine(posture) {
+  if (!posture) return 'n/a'
+  return [
+    posture.kind || 'external',
+    posture.status || (posture.available ? 'available' : 'unavailable'),
+    posture.submission_runner_configured === false ? 'runner missing' : null,
+    posture.permission_token_configured === true ? 'permission token configured' : posture.permission_token_configured === false ? 'permission token not configured' : null,
+    posture.unavailable_code,
+  ].filter(Boolean).join(' · ')
+}
+
 function markdown(evidence) {
   const state = evidence.worker.public_state || {}
   const blockers = [...new Set([
@@ -453,8 +522,13 @@ function markdown(evidence) {
     `Signer kind: ${state.runtime_status?.signer_kind || 'n/a'}`,
     `Signer available: ${valueOrTodo(state.runtime_status?.signer_available)}`,
     `Execution enabled: ${valueOrTodo(state.runtime_status?.execution_enabled)}`,
+    `Known signer kinds: ${(state.runtime_status?.known_signer_kinds || state.runtime_status?.signer_capability_kinds || []).join(', ') || 'n/a'}`,
+    `Runtime signer posture: ${signerPostureLine(state.runtime_status?.selected_signer_capability)}`,
+    `Runtime external signer: ${externalSignerPostureLine(state.runtime_status?.external_signer)}`,
     `Execution readiness: ${valueOrTodo(state.execution_readiness?.execution_ready)}`,
     `Funding readiness: ${valueOrTodo(state.execution_readiness?.funding_ready)}`,
+    `Readiness signer posture: ${signerPostureLine(state.execution_readiness?.selected_signer_capability)}`,
+    `Readiness external signer: ${externalSignerPostureLine(state.execution_readiness?.external_signer)}`,
     `Blockers: ${blockers.join(', ') || 'none'}`,
     `Chain data provider: ${state.chain_data_status?.provider_kind || 'n/a'} (${state.chain_data_status?.provider_status || state.chain_data_status?.status || 'n/a'})`,
     '',

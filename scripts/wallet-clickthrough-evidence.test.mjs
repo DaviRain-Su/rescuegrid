@@ -77,6 +77,36 @@ const workerState = await collectWorkerPublicState('http://worker.test', {
               available: true,
               expected_address: deployment.agent.address,
               signer_matches_expected: true,
+              known_signer_kinds: ['worker-secret', 'waap'],
+            },
+            signer_capabilities: [
+              {
+                kind: 'worker-secret',
+                selected: true,
+                runtime_scope: 'cloud-worker',
+                custody_model: 'worker-held-agent-key',
+                execution_enabled: false,
+                runner_configured: null,
+              },
+              {
+                kind: 'waap',
+                selected: false,
+                runtime_scope: 'external-signer',
+                custody_model: 'external-policy-signer',
+                execution_enabled: false,
+                runner_configured: false,
+                unavailable_code: 'UNSUPPORTED_SIGNER',
+              },
+            ],
+            external_signer: {
+              kind: 'waap',
+              selected: false,
+              status: 'not_selected',
+              available: false,
+              submission_runner_configured: false,
+              permission_token_configured: false,
+              unavailable_code: 'UNSUPPORTED_SIGNER',
+              secrets_returned: false,
             },
             execution: { enabled: false, blocker_code: 'EXECUTION_DISABLED' },
             chain_data_provider: { kind: 'json-rpc' },
@@ -99,6 +129,40 @@ const workerState = await collectWorkerPublicState('http://worker.test', {
             execution_claimed: false,
             blocker_codes: ['EXECUTION_DISABLED'],
             funding_blocker_codes: ['INSUFFICIENT_DBUSDC', 'INSUFFICIENT_DEEP'],
+            signer: {
+              kind: 'worker-secret',
+              available: true,
+              execution_enabled: false,
+            },
+            signer_capabilities: [
+              {
+                kind: 'worker-secret',
+                selected: true,
+                runtime_scope: 'cloud-worker',
+                custody_model: 'worker-held-agent-key',
+                execution_enabled: false,
+                runner_configured: null,
+              },
+              {
+                kind: 'waap',
+                selected: false,
+                runtime_scope: 'external-signer',
+                custody_model: 'external-policy-signer',
+                execution_enabled: false,
+                runner_configured: false,
+                unavailable_code: 'UNSUPPORTED_SIGNER',
+              },
+            ],
+            external_signer: {
+              kind: 'waap',
+              selected: false,
+              status: 'not_selected',
+              available: false,
+              submission_runner_configured: false,
+              permission_token_configured: false,
+              unavailable_code: 'UNSUPPORTED_SIGNER',
+              secrets_returned: false,
+            },
             agent: { balance_manager_id: deployment.agent.balance_manager_id },
             balance_manager: { balances: { DBUSDC: '0', DEEP: '0' } },
           })
@@ -133,7 +197,12 @@ const workerState = await collectWorkerPublicState('http://worker.test', {
 
 assert.equal(workerState.root.status, 'ok')
 assert.equal(workerState.runtime_status.signer_kind, 'worker-secret')
+assert.equal(workerState.runtime_status.known_signer_kinds.includes('waap'), true)
+assert.equal(workerState.runtime_status.selected_signer_capability.kind, 'worker-secret')
+assert.equal(workerState.runtime_status.external_signer.kind, 'waap')
 assert.deepEqual(workerState.execution_readiness.funding_blocker_codes, ['INSUFFICIENT_DBUSDC', 'INSUFFICIENT_DEEP'])
+assert.equal(workerState.execution_readiness.selected_signer_capability.kind, 'worker-secret')
+assert.equal(workerState.execution_readiness.external_signer.secrets_returned, false)
 assert.equal(workerState.chain_data_status.worker_first, true)
 
 const evidence = buildWalletEvidence({
@@ -173,6 +242,10 @@ assert.match(markdown, /wrapper_id: TODO/)
 assert.match(markdown, /Execution claimed: false/)
 assert.match(markdown, /Frontend preflight: true/)
 assert.match(markdown, /Wallet auto-connect disabled: true/)
+assert.match(markdown, /Known signer kinds: worker-secret, waap/)
+assert.match(markdown, /Runtime external signer: waap/)
+assert.match(markdown, /Readiness signer posture: worker-secret/)
+assert.match(markdown, /Readiness external signer: waap/)
 assert.equal(markdown.includes('permission-secret'), false)
 assert.equal(markdown.includes('AGENT_KEY='), false)
 assert.equal(markdown.includes('INTERNAL_AGENT_TICK_TOKEN='), false)
