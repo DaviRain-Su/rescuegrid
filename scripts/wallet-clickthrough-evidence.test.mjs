@@ -5,6 +5,8 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import {
   buildWalletEvidence,
+  collectFrontendPreflight,
+  collectFrontendSourceGuardrails,
   collectWorkerPublicState,
   parseWalletEvidenceArtifact,
   parseArgs,
@@ -16,6 +18,48 @@ import deployment from '../core/deployment.js'
 
 assert.equal(parseArgs(['--format', 'markdown']).get('--format'), 'markdown')
 assert.equal(parseArgs(['--owner=0xabc']).get('--owner'), '0xabc')
+
+const sourceFiles = new Map([
+  ['src/providers.jsx', '<WalletProvider autoConnect={false}><RegisterEnoki /></WalletProvider>'],
+  ['src/components/ZkLogin.jsx', "Connect a Sui wallet. The agent never touches your keys. <Button onPress={() => onAuth('demo')}>Explore the demo (no wallet)</Button><Button onPress={() => onAuth('readonly')}>Open Worker read-only</Button>"],
+  ['src/api.js', "const BASE = import.meta.env.VITE_WORKER_URL || ''; function workerMissing(){ return { code: 'WORKER_NOT_CONFIGURED' } } if (!WORKER_CONFIGURED) return workerMissing()"],
+])
+const readFileImpl = (path) => {
+  if (!sourceFiles.has(path)) throw new Error(`unexpected source read ${path}`)
+  return sourceFiles.get(path)
+}
+
+const sourceGuardrails = collectFrontendSourceGuardrails({ readFileImpl })
+assert.equal(sourceGuardrails.all_passed, true)
+assert.equal(sourceGuardrails.wallet_auto_connect_disabled, true)
+assert.equal(sourceGuardrails.explicit_worker_read_only_entry, true)
+
+const frontendState = await collectFrontendPreflight('http://frontend.test', {
+  readFileImpl,
+  fetchImpl: async (url) => {
+    if (url.endsWith('/src/api.js')) {
+      return {
+        ok: true,
+        status: 200,
+        async text() {
+          return "const BASE = import.meta.env.VITE_WORKER_URL || ''; function workerMissing(){ return { code: 'WORKER_NOT_CONFIGURED' } }"
+        },
+      }
+    }
+    return {
+      ok: true,
+      status: 200,
+      async text() {
+        return '<!doctype html><html><head><title>RescueGrid</title></head><body><div id="root"></div><script type="module" src="/src/main.jsx"></script></body></html>'
+      },
+    }
+  },
+})
+assert.equal(frontendState.root.status, 'ok')
+assert.equal(frontendState.root.contains_rescuegrid, true)
+assert.equal(frontendState.root.has_vite_dev_entry, true)
+assert.equal(frontendState.api_module.has_worker_url_binding, true)
+assert.equal(frontendState.source_guardrails.all_passed, true)
 
 const workerState = await collectWorkerPublicState('http://worker.test', {
   fetchImpl: async (url) => {
@@ -97,6 +141,7 @@ const evidence = buildWalletEvidence({
   frontendUrl: 'http://localhost:5175/',
   workerUrl: 'http://localhost:8787/',
   ownerAddress: '0x1111111111111111111111111111111111111111111111111111111111111111',
+  frontendState,
   workerState,
 })
 assert.equal(evidence.status, 'ok')
@@ -105,6 +150,7 @@ assert.equal(evidence.read_only, true)
 assert.equal(evidence.actual_clickthrough_completed, false)
 assert.equal(evidence.execution_claimed, false)
 assert.equal(evidence.frontend.url, 'http://localhost:5175')
+assert.equal(evidence.frontend.preflight_passed, true)
 assert.equal(evidence.worker.url, 'http://localhost:8787')
 assert.equal(evidence.worker.public_state_available, true)
 assert.equal(evidence.deployment.agent_address, deployment.agent.address)
@@ -125,6 +171,8 @@ assert.match(markdown, /owner_address:/)
 assert.match(markdown, /create_tx_digest: TODO/)
 assert.match(markdown, /wrapper_id: TODO/)
 assert.match(markdown, /Execution claimed: false/)
+assert.match(markdown, /Frontend preflight: true/)
+assert.match(markdown, /Wallet auto-connect disabled: true/)
 assert.equal(markdown.includes('permission-secret'), false)
 assert.equal(markdown.includes('AGENT_KEY='), false)
 assert.equal(markdown.includes('INTERNAL_AGENT_TICK_TOKEN='), false)
@@ -152,6 +200,12 @@ const unavailable = await collectWorkerPublicState('http://worker.test', {
 })
 assert.equal(unavailable.root.status, 'unavailable')
 assert.equal(buildWalletEvidence({ workerState: unavailable }).worker.public_state_available, false)
+assert.equal(buildWalletEvidence({
+  frontendState: {
+    root: { status: 'ok', contains_rescuegrid: true, has_vite_dev_entry: true },
+    source_guardrails: { all_passed: false },
+  },
+}).frontend.preflight_passed, false)
 
 const filledArtifact = `# RescueGrid Wallet Click-Through Evidence
 
@@ -280,6 +334,7 @@ assert.equal(help.status, 0, help.stderr)
 assert.match(help.stdout, /wallet click-through evidence/i)
 assert.match(help.stdout, /--verify/)
 assert.match(help.stdout, /--out/)
+assert.match(help.stdout, /--require-frontend/)
 assert.equal(help.stdout.includes('AGENT_KEY='), false)
 assert.equal(help.stdout.includes('INTERNAL_AGENT_TICK_TOKEN='), false)
 

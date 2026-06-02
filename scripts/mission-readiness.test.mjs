@@ -16,6 +16,7 @@ const requiredScripts = {
   'test:demo-execution-report': 'npm --prefix worker run test:demo-execution-report',
   'test:safety-negative-report': 'npm --prefix worker run test:safety-negative-report',
   'wallet:evidence': 'node scripts/wallet-clickthrough-evidence.mjs',
+  'wallet:evidence:preflight': 'node scripts/wallet-clickthrough-evidence.mjs --require-frontend --require-worker',
   'wallet:evidence:verify': 'node scripts/wallet-clickthrough-evidence.mjs --verify',
   'mission:readiness': 'node scripts/mission-readiness.mjs',
   'mission:readiness:report': 'node scripts/mission-readiness.mjs --out .rescuegrid/mission-readiness-report.json',

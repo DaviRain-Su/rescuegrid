@@ -91,6 +91,108 @@ async function fetchJson(url, { fetchImpl = globalThis.fetch, timeoutMs = DEFAUL
   }
 }
 
+async function fetchText(url, { fetchImpl = globalThis.fetch, timeoutMs = DEFAULT_TIMEOUT_MS } = {}) {
+  if (typeof fetchImpl !== 'function') {
+    return { status: 'unavailable', http_status: 0, text: '', error: 'fetch_unavailable' }
+  }
+  const controller = new AbortController()
+  const timer = setTimeout(() => controller.abort(), timeoutMs)
+  try {
+    const res = await fetchImpl(url, { signal: controller.signal })
+    const text = await res.text()
+    return {
+      status: res.ok ? 'ok' : 'unavailable',
+      http_status: res.status,
+      text,
+      error: res.ok ? null : `http_${res.status}`,
+    }
+  } catch (e) {
+    return {
+      status: 'unavailable',
+      http_status: 0,
+      text: '',
+      error: String(e?.name === 'AbortError' ? 'timeout' : e?.message || e),
+    }
+  } finally {
+    clearTimeout(timer)
+  }
+}
+
+function summarizeFrontendRoot(result) {
+  const text = result?.text || ''
+  return {
+    status: result?.status || 'unavailable',
+    http_status: result?.http_status || 0,
+    error: result?.error || null,
+    contains_rescuegrid: text.includes('RescueGrid'),
+    has_vite_dev_entry: text.includes('/src/main.jsx'),
+    has_built_asset_entry: /\/assets\/[^"']+\.js/.test(text),
+    html_bytes: Buffer.byteLength(text),
+  }
+}
+
+function summarizeFrontendApiModule(result) {
+  const text = result?.text || ''
+  return {
+    status: result?.status || 'unavailable',
+    http_status: result?.http_status || 0,
+    error: result?.error || null,
+    has_worker_url_binding: text.includes('VITE_WORKER_URL'),
+    writes_require_worker: text.includes('WORKER_NOT_CONFIGURED') && text.includes('workerMissing'),
+    module_bytes: Buffer.byteLength(text),
+  }
+}
+
+function readSource(path, { readFileImpl = readFileSync } = {}) {
+  try {
+    return String(readFileImpl(path, 'utf8'))
+  } catch (e) {
+    return ''
+  }
+}
+
+export function collectFrontendSourceGuardrails(options = {}) {
+  const providers = readSource('src/providers.jsx', options)
+  const signIn = readSource('src/components/ZkLogin.jsx', options)
+  const api = readSource('src/api.js', options)
+  const checks = {
+    wallet_auto_connect_disabled: /<WalletProvider\s+autoConnect=\{false\}/.test(providers),
+    explicit_worker_read_only_entry: signIn.includes('Open Worker read-only') && signIn.includes("onAuth('readonly')"),
+    explicit_no_wallet_demo_entry: signIn.includes('Explore the demo (no wallet)') && signIn.includes("onAuth('demo')"),
+    signer_copy_keeps_keys_out: signIn.includes('never your keys') || signIn.includes('never touches your keys'),
+    writes_require_worker_config: api.includes('WORKER_NOT_CONFIGURED') && api.includes('workerMissing'),
+  }
+  return {
+    ...checks,
+    all_passed: Object.values(checks).every(Boolean),
+  }
+}
+
+export async function collectFrontendPreflight(frontendUrl, options = {}) {
+  const base = normalizeUrl(frontendUrl)
+  const [root, apiModule] = await Promise.all([
+    fetchText(`${base}/`, options),
+    fetchText(`${base}/src/api.js`, options),
+  ])
+  const rootSummary = summarizeFrontendRoot(root)
+  const apiSummary = summarizeFrontendApiModule(apiModule)
+  const sourceGuardrails = collectFrontendSourceGuardrails(options)
+  return {
+    root: rootSummary,
+    api_module: apiSummary,
+    source_guardrails: sourceGuardrails,
+  }
+}
+
+function frontendPreflightPassed(frontendState = {}) {
+  const root = frontendState.root || {}
+  const source = frontendState.source_guardrails || {}
+  return root.status === 'ok' &&
+    root.contains_rescuegrid === true &&
+    (root.has_vite_dev_entry === true || root.has_built_asset_entry === true) &&
+    source.all_passed === true
+}
+
 function summarizeRuntimeStatus(result) {
   const body = result?.body || {}
   return {
@@ -185,8 +287,10 @@ export function buildWalletEvidence({
   workerUrl = DEFAULT_WORKER_URL,
   ownerAddress = null,
   walletName = 'Slush or standard Sui wallet',
+  frontendState = {},
   workerState = {},
 } = {}) {
+  const frontendPreflightOk = frontendPreflightPassed(frontendState)
   return {
     status: 'ok',
     purpose: 'browser_wallet_clickthrough_evidence',
@@ -199,6 +303,8 @@ export function buildWalletEvidence({
     frontend: {
       url: normalizeUrl(frontendUrl),
       expected_route: 'Landing -> Sign in -> Dashboard -> New strategy',
+      preflight_passed: frontendPreflightOk,
+      public_state: frontendState,
     },
     worker: {
       url: normalizeUrl(workerUrl),
@@ -283,6 +389,7 @@ export function buildWalletEvidence({
       auth_wallet_test: 'npm run test:auth-wallets',
       session_boundary_test: 'npm run test:session-mode',
       live_smoke_after_clickthrough: 'RESCUEGRID_FRONTEND_URL=http://localhost:5175 RESCUEGRID_WORKER_URL=http://localhost:8787 npm run baseline:smoke',
+      preflight: 'npm run wallet:evidence:preflight',
     },
   }
 }
@@ -293,10 +400,10 @@ function valueOrTodo(value) {
 
 function markdown(evidence) {
   const state = evidence.worker.public_state || {}
-  const blockers = [
+  const blockers = [...new Set([
     ...(state.execution_readiness?.blocker_codes || []),
     ...(state.execution_readiness?.funding_blocker_codes || []),
-  ]
+  ])]
   const fieldLines = Object.entries(evidence.evidence_fields).map(([key, value]) => (
     `- ${key}: ${valueOrTodo(value)}`
   ))
@@ -318,6 +425,17 @@ function markdown(evidence) {
     `Read-only artifact generation: ${evidence.read_only}`,
     `Actual click-through completed: ${evidence.actual_clickthrough_completed}`,
     `Execution claimed: ${evidence.execution_claimed}`,
+    `Frontend preflight: ${evidence.frontend.preflight_passed}`,
+    '',
+    '## Frontend Preflight',
+    '',
+    `Root reachable: ${evidence.frontend.public_state?.root?.status || 'unavailable'}`,
+    `Root contains RescueGrid: ${valueOrTodo(evidence.frontend.public_state?.root?.contains_rescuegrid)}`,
+    `App entry present: ${valueOrTodo(Boolean(evidence.frontend.public_state?.root?.has_vite_dev_entry || evidence.frontend.public_state?.root?.has_built_asset_entry))}`,
+    `Wallet auto-connect disabled: ${valueOrTodo(evidence.frontend.public_state?.source_guardrails?.wallet_auto_connect_disabled)}`,
+    `Worker read-only entry explicit: ${valueOrTodo(evidence.frontend.public_state?.source_guardrails?.explicit_worker_read_only_entry)}`,
+    `No-wallet demo entry explicit: ${valueOrTodo(evidence.frontend.public_state?.source_guardrails?.explicit_no_wallet_demo_entry)}`,
+    `Writes require Worker config: ${valueOrTodo(evidence.frontend.public_state?.source_guardrails?.writes_require_worker_config)}`,
     '',
     '## Deployment',
     '',
@@ -360,6 +478,7 @@ function markdown(evidence) {
     `- ${evidence.next_commands.mock_flow_test}`,
     `- ${evidence.next_commands.auth_wallet_test}`,
     `- ${evidence.next_commands.session_boundary_test}`,
+    `- ${evidence.next_commands.preflight}`,
     `- ${evidence.next_commands.live_smoke_after_clickthrough}`,
     '',
   ].join('\n')
@@ -698,6 +817,7 @@ function help() {
 
 Usage:
   npm run wallet:evidence
+  npm run wallet:evidence:preflight
   npm run wallet:evidence -- --format markdown
   npm run wallet:evidence -- --format markdown --out .rescuegrid/wallet-clickthrough-evidence.md
   npm run wallet:evidence -- --frontend-url http://localhost:5175 --worker-url http://localhost:8787 --owner 0x...
@@ -708,7 +828,9 @@ prints or writes a manual Slush / standard Sui wallet evidence checklist. It
 does not create policies, submit PTBs, run demo:execute or print signing
 secrets, Worker secrets, tick tokens or WaaP approval values. With --verify it
 checks a filled artifact against public Sui transaction events and optional
-Worker detail reads.`)
+Worker detail reads. With --require-frontend / --require-worker it fails before
+the manual click-through when the local services or login guardrails are not
+ready.`)
 }
 
 export async function main(argv = process.argv.slice(2), env = process.env, options = {}) {
@@ -754,10 +876,26 @@ export async function main(argv = process.argv.slice(2), env = process.env, opti
     return report.verified ? 0 : 1
   }
 
-  const workerState = await collectWorkerPublicState(workerUrl, {
-    fetchImpl: options.fetchImpl,
-    timeoutMs: Number.isFinite(timeoutMs) && timeoutMs > 0 ? timeoutMs : DEFAULT_TIMEOUT_MS,
-  })
+  const [frontendState, workerState] = await Promise.all([
+    collectFrontendPreflight(frontendUrl, {
+      fetchImpl: options.fetchImpl,
+      timeoutMs: Number.isFinite(timeoutMs) && timeoutMs > 0 ? timeoutMs : DEFAULT_TIMEOUT_MS,
+      readFileImpl: options.readFileImpl,
+    }),
+    collectWorkerPublicState(workerUrl, {
+      fetchImpl: options.fetchImpl,
+      timeoutMs: Number.isFinite(timeoutMs) && timeoutMs > 0 ? timeoutMs : DEFAULT_TIMEOUT_MS,
+    }),
+  ])
+  if (flags.has('--require-frontend') && !frontendPreflightPassed(frontendState)) {
+    console.error(JSON.stringify({
+      status: 'error',
+      code: 'FRONTEND_PREFLIGHT_FAILED',
+      frontend_url: frontendUrl,
+      frontend_state: frontendState,
+    }, null, 2))
+    return 1
+  }
   if (flags.has('--require-worker') && !workerStateAvailable(workerState)) {
     console.error(JSON.stringify({
       status: 'error',
@@ -773,6 +911,7 @@ export async function main(argv = process.argv.slice(2), env = process.env, opti
     workerUrl,
     ownerAddress: flags.get('--owner') || flags.get('--owner-address') || null,
     walletName: flags.get('--wallet') || flags.get('--wallet-name') || 'Slush or standard Sui wallet',
+    frontendState,
     workerState,
   })
   const format = String(flags.get('--format') || (flags.has('--markdown') ? 'markdown' : 'json')).toLowerCase()
@@ -784,6 +923,7 @@ export async function main(argv = process.argv.slice(2), env = process.env, opti
       purpose: evidence.purpose,
       artifact,
       chain: evidence.chain,
+      frontend_preflight_passed: evidence.frontend.preflight_passed,
       worker_public_state_available: evidence.worker.public_state_available,
       actual_clickthrough_completed: evidence.actual_clickthrough_completed,
       execution_claimed: evidence.execution_claimed,

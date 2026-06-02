@@ -28,6 +28,7 @@ const REQUIRED_SCRIPTS = [
   'test:demo-execution-report',
   'test:safety-negative-report',
   'wallet:evidence',
+  'wallet:evidence:preflight',
   'wallet:evidence:verify',
   'mission:readiness',
   'mission:readiness:report',
