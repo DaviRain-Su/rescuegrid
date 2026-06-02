@@ -26,6 +26,7 @@ import { ActivityView, PoliciesView } from './components/Views.jsx'
 import { Profile } from './components/Profile.jsx'
 import { PolicyInspect, TxDrawer } from './components/Detail.jsx'
 import { MarketsView } from './components/Markets.jsx'
+import { RiskCenter } from './components/Risk.jsx'
 import { AgentRuntimeDrawer } from './components/MarketDrawers.jsx'
 import { useTweaks, TweaksPanel, TweakSection, TweakColor, TweakRadio, TweakToggle } from './components/TweaksPanel.jsx'
 import { Button } from '@heroui/react'
@@ -374,6 +375,7 @@ export default function App({ onExit }) {
             <NavItem icon="activity" label="Agent activity" active={view === 'activity'} onClick={() => setView('activity')} badge={shownActivity.length} />
             <NavItem icon="radar" label="Markets monitor" active={view === 'markets'} onClick={() => setView('markets')} />
             <NavItem icon="shield" label="Policies" active={view === 'policies'} onClick={() => setView('policies')} />
+            <NavItem icon="alert" label="Risk center" active={view === 'risk'} onClick={() => setView('risk')} />
             <NavItem icon="wallet" label="Profile & wallet" active={view === 'profile'} onClick={() => setView('profile')} />
           </div>
           <Button className="mt-[18px] bg-accent text-accent-foreground font-semibold" fullWidth onPress={() => setView('new')}
@@ -553,6 +555,7 @@ export default function App({ onExit }) {
             {view === 'new' && <NewStrategy mode={mode} setMode={setMode} onDone={deployPolicy} />}
             {view === 'activity' && <ActivityView activity={shownActivity} onTx={setTxView} live={liveReadsEnabled} loading={liveReadsEnabled && liveLoading} />}
             {view === 'markets' && <MarketsView onDeploy={(s) => { setSeed(s); setView('new') }} live={liveFeed} onToast={showToast} />}
+            {view === 'risk' && <RiskCenter policies={policies} stopped={halted} onEmergencyStop={emergencyStop} onToast={showToast} />}
             {view === 'policies' && <PoliciesView policies={policies} onRevoke={handleRevoke} onInspect={setInspect} live={liveReadsEnabled} readOnly={readOnlyLiveMode} loading={liveReadsEnabled && liveLoading} />}
             {view === 'profile' && <Profile
               live={liveReadsEnabled}

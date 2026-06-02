@@ -106,6 +106,18 @@ export function ProtoGlyph({ proto, size = 30 }) {
   )
 }
 
+// adapter/venue name → brand color (protocols + known CEX/bridges)
+export function adapterColor(name) {
+  const m = {}
+  Object.values(RG.protocols || {}).forEach(p => { m[p.name] = p.c })
+  Object.assign(m, {
+    Hyperliquid: '#7CF5D0', Aevo: '#7B8BFF', Drift: '#9945FF',
+    Binance: '#F0B90B', OKX: '#AEB7C2', Bybit: '#F7A600',
+    deBridge: '#2EE6CE', Wormhole: '#5AA6FF', RescueGrid: '#2EE6CE', 'all venues': 'var(--t3)',
+  })
+  return m[name] || 'var(--t2)'
+}
+
 // open the agent runtime drawer from anywhere (App listens for this)
 export function openRuntime(mode) {
   window.dispatchEvent(new CustomEvent('rg:runtime', { detail: mode || null }))
