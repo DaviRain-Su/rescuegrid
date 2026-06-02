@@ -1,6 +1,23 @@
 import { useMemo } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { getBalances, getMarket, getSummary, listActivity, listPolicies } from '../api.js'
+import {
+  liveDashboardOwnerKey,
+  liveDashboardQueryKey,
+  liveDashboardQueryOptions,
+  liveDashboardResourceKey,
+  LIVE_REFETCH_INTERVAL,
+  LIVE_STALE_TIME,
+} from './live-config.js'
+
+export {
+  liveDashboardOwnerKey,
+  liveDashboardQueryKey,
+  liveDashboardQueryOptions,
+  liveDashboardResourceKey,
+  LIVE_REFETCH_INTERVAL,
+  LIVE_STALE_TIME,
+}
 
 export const EMPTY_SUMMARY = {
   active_policies: 0,
@@ -19,12 +36,6 @@ export const EMPTY_LIVE_DASHBOARD = {
   funding: null,
   meta: { source: null, error: null },
 }
-
-export const liveDashboardQueryKey = (owner, mode) => ['live-dashboard', owner, mode]
-export const liveDashboardOwnerKey = (owner) => ['live-dashboard', owner]
-const liveDashboardResourceKey = (owner, mode, resource) => ['live-dashboard', owner, mode, resource]
-const LIVE_STALE_TIME = 8_000
-const LIVE_REFETCH_INTERVAL = 15_000
 
 export function mapLivePolicy(p, spentUnits = 0, status = 'active', mode = 'cloud') {
   const chainStatus = p.status || status
@@ -98,14 +109,7 @@ export async function fetchLiveDashboard({ owner, mode }) {
 
 export function useLiveDashboard({ owner, mode, enabled }) {
   const active = Boolean(enabled && owner)
-  const queryOptions = (resource, queryFn) => ({
-    queryKey: liveDashboardResourceKey(owner, mode, resource),
-    queryFn,
-    enabled: active,
-    staleTime: LIVE_STALE_TIME,
-    refetchInterval: active ? LIVE_REFETCH_INTERVAL : false,
-    refetchOnWindowFocus: false,
-  })
+  const queryOptions = (resource, queryFn) => liveDashboardQueryOptions({ owner, mode, resource, queryFn, enabled })
 
   const policiesQuery = useQuery(queryOptions('policies', () => listPolicies(owner)))
   const activityQuery = useQuery(queryOptions('activity', () => listActivity(owner)))

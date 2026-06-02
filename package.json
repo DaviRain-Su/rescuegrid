@@ -9,6 +9,7 @@
     "build": "vite build",
     "preview": "vite preview",
     "config": "node scripts/demo-config.mjs",
+    "test:live-config": "node src/queries/live-config.test.mjs",
     "demo:loop": "node worker/scripts/validate-demo-loop.mjs",
     "baseline:smoke": "node scripts/baseline-smoke.mjs"
   },
