@@ -6,6 +6,7 @@ import { cors } from 'hono/cors'
 import { bodyLimit } from 'hono/body-limit'
 import { parseIntent } from './parse.js'
 import { strategyHash } from './strategy-core.js'
+import { getArchivalReplayContract } from './archival-replay.js'
 import { buildCreatePolicyTx, buildRevokeTx } from './sui-tx.js'
 import { getChainDataProviderStatus, requireChainDataProvider } from './chain-data-provider.js'
 import { DEPLOYMENT } from './sui-tx.js'
@@ -66,6 +67,11 @@ export interface Env {
   SUI_GRPC_URL?: string
   SUI_GRPC_ENDPOINT?: string
   GRPC_URL?: string
+  ARCHIVAL_REPLAY_PROVIDER?: string
+  RESCUEGRID_ARCHIVAL_REPLAY_PROVIDER?: string
+  SUI_ARCHIVAL_STORE_URL?: string
+  SUI_ARCHIVAL_URL?: string
+  ARCHIVAL_STORE_URL?: string
 }
 
 const app = new Hono<{ Bindings: Env }>()
@@ -141,6 +147,10 @@ app.get('/api/runtime/status', (c) => {
 
 app.get('/api/chain-data/status', async (c) => {
   return c.json(await getChainDataProviderStatus(c.env, { probe: c.req.query('probe') === 'true' }))
+})
+
+app.get('/api/archival/replay-contract', (c) => {
+  return c.json(getArchivalReplayContract(c.env))
 })
 
 app.get('/api/execution/readiness', async (c) => {

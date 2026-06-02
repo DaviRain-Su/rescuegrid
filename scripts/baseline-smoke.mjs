@@ -144,6 +144,15 @@ async function main() {
   assert('chain data status exposes read model', chainDataStatus.read_model && typeof chainDataStatus.read_model.policy_objects === 'string', chainDataStatus.read_model?.policy_objects || 'missing')
   assert('chain data status does not leak worker secrets', secretValues.every((value) => !chainDataText.includes(value)), 'secret values absent')
 
+  const archivalReplayResult = await checkJson(`${WORKER_URL}/api/archival/replay-contract`)
+  const archivalReplay = archivalReplayResult.json || {}
+  const archivalText = archivalReplayResult.text || ''
+  const replayContractIds = (archivalReplay.query_contracts || []).map((row) => row.id)
+  assert('worker archival replay contract reachable', archivalReplayResult.ok && archivalReplayResult.status === 200 && archivalReplay.status === 'ok', `${WORKER_URL}/api/archival/replay-contract status=${archivalReplayResult.status}`)
+  assert('archival replay is Worker-first replay-only', archivalReplay.provider?.worker_first === true && archivalReplay.provider?.replay_only === true, archivalReplay.provider?.kind || 'missing')
+  assert('archival replay exposes required contracts', ['historical_activity', 'performance_replay', 'judge_demo_replay'].every((id) => replayContractIds.includes(id)), replayContractIds.join(',') || 'missing')
+  assert('archival replay does not leak worker secrets', secretValues.every((value) => !archivalText.includes(value)), 'secret values absent')
+
   const executionReadinessStatus = await checkJson(`${WORKER_URL}/api/execution/readiness`)
   const executionReadiness = executionReadinessStatus.json || {}
   const readinessText = executionReadinessStatus.text || ''

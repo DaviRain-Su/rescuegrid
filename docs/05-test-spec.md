@@ -249,6 +249,21 @@ Security / boundary:
 - 响应不得包含 `AGENT_KEY`、owner key、GraphQL endpoint URL、WaaP session file、permission token 或任何 secret value。
 - Data Sources UI 必须把 provider kind、transport、probe status 和 read model 作为诊断状态展示；GraphQL `json-rpc-fallback` 字段必须显式可见，不能暗示所有读取都已迁到 GraphQL。
 
+### `GET /api/archival/replay-contract`
+
+Happy path:
+
+- 默认返回 `provider.kind=none`、`provider.provider_status=disabled`、`provider.blocker_code=ARCHIVAL_REPLAY_DISABLED`。
+- 返回 `query_contracts`，且 id 必须包含且仅包含 `historical_activity`、`performance_replay`、`judge_demo_replay`。
+- 每个 query contract 必须有 required inputs、required outputs、primary sources、current fallback、consumers 和 `must_not_claim_execution=true`。
+- `ARCHIVAL_REPLAY_PROVIDER=archival-store` 且配置 endpoint 时，返回 `provider.endpoint_configured=true`、`provider.provider_status=not_validated`，不能返回 ready。
+- Data Sources UI 必须显示 Archival replay contract 的 provider、contract count 和 blocker，不能暗示 long-range replay 已接管当前 activity。
+
+Security / boundary:
+
+- 响应不得包含 Archival Store endpoint URL、endpoint token、`AGENT_KEY`、owner key、WaaP token 或 Worker secret。
+- `execution_hot_path_unchanged` 和 `activity_hot_path_unchanged` 必须保持 true，直到真实 archival provider 和 reconciliation 测试落地。
+
 ### `npm run chain-data:status`
 
 Happy path:
@@ -458,6 +473,7 @@ MVP desktop viewport:
 - Profile / Accounts shows the live runtime signer kind, deployment agent, execution blocker, Worker data-provider status, known signer kinds and WaaP/local-daemon external signer boundary when `VITE_WORKER_URL` is configured.
 - Risk Center signer/executor health prefers live `/api/runtime/status` rows and raises signer warnings from those rows when available; static `RG.signers` is only the no-runtime fallback.
 - Data Sources shows Worker ChainDataProvider status from `/api/chain-data/status`, including provider kind, transport, probe status and read model.
+- Data Sources shows Archival replay contract status from `/api/archival/replay-contract`, including provider status, contract count and replay-only blocker.
 - Primary buttons have text labels and disabled/loading states.
 
 Post-MVP mobile viewport:

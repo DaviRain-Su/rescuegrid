@@ -11,6 +11,7 @@ import {
   useLendingReadAdapters,
 } from '../queries/adapter-surfaces.js'
 import { useChainDataStatus } from '../queries/chain-data-status.js'
+import { okArchivalReplayContract, useArchivalReplayContract } from '../queries/archival-replay.js'
 
 const ACCESS_META = {
   live:  { c: 'var(--safe)',   label: 'Live · direct', note: 'Public, CORS-open — the browser fetches it directly.' },
@@ -125,6 +126,56 @@ function ChainDataProviderCard({ data, query, onProbe }) {
   );
 }
 
+function ArchivalReplayCard({ data, query }) {
+  const unavailable = !WORKER_CONFIGURED ? 'worker not configured' : query.isError ? 'worker read failed' : data?.provider?.provider_status || 'loading';
+  const provider = data?.provider || {};
+  const ready = provider.provider_status === 'ready';
+  const warn = provider.provider_status && provider.provider_status !== 'ready';
+  const tone = ready ? 'safe' : warn ? 'warn' : 'neutral';
+  const contracts = data?.query_contracts || [];
+  return (
+    <div className="card" style={{ padding: '15px 17px', display: 'flex', flexDirection: 'column', gap: 12, minWidth: 0 }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 9 }}>
+        <span style={{ color: ready ? 'var(--accent)' : warn ? 'var(--warn)' : 'var(--t2)' }}><Icon name="clock" size={16} /></span>
+        <div className="card-title" style={{ fontSize: 13 }}>Archival replay contract</div>
+        <div style={{ flex: 1 }} />
+        <SurfacePill tone={tone}>{provider.provider_status || unavailable}</SurfacePill>
+      </div>
+      {data?.status === 'ok' ? (
+        <>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: 8 }}>
+            {[
+              ['Provider', provider.kind || 'none'],
+              ['Contracts', contracts.length],
+              ['Replay only', provider.replay_only ? 'yes' : '—'],
+            ].map(([k, v]) => (
+              <div key={k} style={{ padding: '9px 10px', borderRadius: 8, background: 'var(--glass)', border: '1px solid var(--border)' }}>
+                <div className="eyebrow" style={{ fontSize: 8.5 }}>{k}</div>
+                <div className="mono display" style={{ fontSize: 13, fontWeight: 600, marginTop: 4, overflow: 'hidden', textOverflow: 'ellipsis' }}>{v}</div>
+              </div>
+            ))}
+          </div>
+          <div style={{ display: 'flex', gap: 7, flexWrap: 'wrap' }}>
+            {contracts.map((row) => (
+              <span key={row.id} className="badge badge-neutral" style={{ fontSize: 9.5 }}>
+                {row.label}
+                <span style={{ color: 'var(--warn)', marginLeft: 5 }}>contract</span>
+              </span>
+            ))}
+          </div>
+          <div className="mono" style={{ fontSize: 10, color: 'var(--t2)', lineHeight: 1.45 }}>
+            {provider.blocker_code || 'REPLAY_CONTRACT_ONLY'} · existing activity hot path unchanged
+          </div>
+        </>
+      ) : (
+        <div style={{ fontSize: 11.5, color: 'var(--t2)', lineHeight: 1.45 }}>
+          Archival replay contracts appear here when `VITE_WORKER_URL` points at the RescueGrid Worker.
+        </div>
+      )}
+    </div>
+  );
+}
+
 function FeedTestButton({ feed }) {
   const testFeedMutation = useFeedTestMutation();
   const state = testFeedMutation.isPending ? 'testing' : testFeedMutation.isSuccess ? 'ok' : testFeedMutation.isError ? 'err' : 'idle';
@@ -165,7 +216,9 @@ export function DataSources({ onToast, live, setLive }) {
   const dexQuery = useDexReadAdapters();
   const lendingQuery = useLendingReadAdapters();
   const chainDataQuery = useChainDataStatus({ probe: probeChainData });
+  const archivalReplayQuery = useArchivalReplayContract();
   const chainDataStatus = chainDataQuery.data;
+  const archivalReplay = okArchivalReplayContract(archivalReplayQuery);
   const dexSurface = okAdapterSurface(dexQuery);
   const lendingSurface = okAdapterSurface(lendingQuery);
 
@@ -242,6 +295,7 @@ export function DataSources({ onToast, live, setLive }) {
             ]}
             adapterRows={lendingSurface?.adapters || []}
           />
+          <ArchivalReplayCard data={archivalReplay} query={archivalReplayQuery} />
         </div>
       </div>
 

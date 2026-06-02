@@ -151,6 +151,15 @@ export function getLendingReadAdapters() {
   }))
 }
 
+/** GET /api/archival/replay-contract — long-range replay query contract. */
+export function getArchivalReplayContract() {
+  return workerGet('/api/archival/replay-contract').catch((e) => ({
+    status: 'error',
+    code: WORKER_CONFIGURED ? 'WORKER_READ_FAILED' : 'WORKER_NOT_CONFIGURED',
+    message: String(e?.message || e),
+  }))
+}
+
 /** GET /api/protocols/watch-boundaries — watch-only protocol risk boundaries. */
 export function getProtocolWatchBoundaries() {
   return workerGet('/api/protocols/watch-boundaries').catch((e) => ({

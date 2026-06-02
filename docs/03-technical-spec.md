@@ -794,6 +794,46 @@ Rules:
 - A failed GraphQL schema/read probe returns `provider_status=probe_failed` and a sanitized `probe` error; the endpoint URL and secret values must not be included.
 - GraphQL remains Worker-first and read-only. Balance, gas and DeepBook market reads may still use the JSON-RPC fallback until their GraphQL query shapes are validated.
 
+### `GET /api/archival/replay-contract`
+
+Returns the Worker-first contract for future Archival Store-backed replay. This endpoint is read-only and does not replace current activity reads.
+
+Response:
+
+```json
+{
+  "status": "ok",
+  "chain": "sui:testnet",
+  "provider": {
+    "kind": "none",
+    "known_provider_kinds": ["none", "archival-store"],
+    "provider_status": "disabled",
+    "endpoint_configured": false,
+    "worker_first": true,
+    "replay_only": true,
+    "execution_hot_path_unchanged": true,
+    "activity_hot_path_unchanged": true,
+    "migration_ready": false,
+    "blocker_code": "ARCHIVAL_REPLAY_DISABLED"
+  },
+  "query_contracts": [
+    { "id": "historical_activity" },
+    { "id": "performance_replay" },
+    { "id": "judge_demo_replay" }
+  ]
+}
+```
+
+Rules:
+
+- Default provider is `none`; it must return `provider_status=disabled` and `blocker_code=ARCHIVAL_REPLAY_DISABLED`.
+- `ARCHIVAL_REPLAY_PROVIDER=archival-store` without an endpoint returns `provider_status=unavailable` and `ARCHIVAL_REPLAY_ENDPOINT_REQUIRED`.
+- `ARCHIVAL_REPLAY_PROVIDER=archival-store` with `SUI_ARCHIVAL_STORE_URL`, `SUI_ARCHIVAL_URL` or `ARCHIVAL_STORE_URL` returns `provider_status=not_validated`, not ready. Endpoint configured is a posture bit, not live replay proof.
+- The endpoint must define exactly three initial query contracts: `historical_activity`, `performance_replay` and `judge_demo_replay`.
+- Replay contracts are advisory/read-only and must keep `execution_hot_path_unchanged=true` and `activity_hot_path_unchanged=true` until an archival provider is implemented and validated.
+- Output must not include Archival Store endpoint URLs, access tokens, `AGENT_KEY`, owner keys, WaaP tokens or Worker secrets.
+- Chain events and object snapshots remain authoritative. Durable Object runtime rows can annotate replay output but cannot override terminal chain state or claim execution success.
+
 ### `npm run chain-data:status`
 
 Runs the same ChainDataProvider status logic from a local CLI so cloud Worker and local daemon migrations can be validated before changing production reads.
