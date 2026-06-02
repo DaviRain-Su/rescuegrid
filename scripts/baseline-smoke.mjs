@@ -10,8 +10,8 @@ import { decideTick } from '../worker/src/tick.js'
 import { readBalanceManagerBalance } from '../worker/src/chain.js'
 
 const REQUIRED_WORKER_KEYS = ['AGENT_KEY', 'INTERNAL_AGENT_TICK_TOKEN', 'RESCUEGRID_DEMO_MODE', 'EXECUTION_ENABLED']
-const FRONTEND_URL = 'http://localhost:5173'
-const WORKER_URL = 'http://localhost:8787'
+const FRONTEND_URL = normalizeUrl(process.env.RESCUEGRID_FRONTEND_URL || process.env.FRONTEND_URL || 'http://localhost:5175')
+const WORKER_URL = normalizeUrl(process.env.RESCUEGRID_WORKER_URL || process.env.WORKER_URL || 'http://localhost:8787')
 const INDEXER = 'https://deepbook-indexer.testnet.mystenlabs.com'
 
 let failures = 0
@@ -28,6 +28,10 @@ function fail(label, detail = '') {
 function assert(label, condition, detail = '') {
   if (condition) ok(label, detail)
   else fail(label, detail)
+}
+
+function normalizeUrl(url) {
+  return String(url || '').replace(/\/+$/, '')
 }
 
 function readEnvKeys(path) {
@@ -58,11 +62,25 @@ function getLabel(d, label) {
 }
 
 async function checkJson(url) {
-  const res = await fetch(url)
-  const text = await res.text()
-  let json = null
-  try { json = JSON.parse(text) } catch { /* not json */ }
-  return { status: res.status, text, json }
+  try {
+    const res = await fetch(url)
+    const text = await res.text()
+    let json = null
+    try { json = JSON.parse(text) } catch { /* not json */ }
+    return { ok: true, status: res.status, text, json }
+  } catch (e) {
+    return { ok: false, status: 0, text: '', json: null, error: String(e?.message || e) }
+  }
+}
+
+async function checkText(url) {
+  try {
+    const res = await fetch(url)
+    const text = await res.text()
+    return { ok: true, status: res.status, text }
+  } catch (e) {
+    return { ok: false, status: 0, text: '', error: String(e?.message || e) }
+  }
 }
 
 async function main() {
@@ -78,7 +96,7 @@ async function main() {
 
   const frontendEnv = readEnvKeys('.env.local')
   assert('frontend env file exists', frontendEnv.exists, '.env.local')
-  assert('frontend points to local Worker', frontendEnv.values.get('VITE_WORKER_URL') === WORKER_URL, 'VITE_WORKER_URL=http://localhost:8787')
+  assert('frontend points to configured Worker', normalizeUrl(frontendEnv.values.get('VITE_WORKER_URL')) === WORKER_URL, `VITE_WORKER_URL=${WORKER_URL}`)
 
   const workerEnv = readEnvKeys('worker/.dev.vars')
   assert('worker env file exists', workerEnv.exists, 'worker/.dev.vars')
@@ -88,15 +106,16 @@ async function main() {
   const executionEnabled = workerEnv.values.get('EXECUTION_ENABLED') === 'true'
   console.log(`INFO execution_enabled_true=${executionEnabled}`)
 
-  const frontend = await fetch(FRONTEND_URL)
-  const frontendHtml = await frontend.text()
-  assert('frontend service reachable on reserved port', frontend.status === 200 && frontendHtml.includes('RescueGrid') && frontendHtml.includes('/src/main.jsx'), `${FRONTEND_URL} status=${frontend.status}`)
-  const frontendApi = await fetch(`${FRONTEND_URL}/src/api.js`)
-  const frontendApiSource = await frontendApi.text()
-  assert('frontend Vite env exposes local Worker URL', frontendApiSource.includes('"VITE_WORKER_URL": "http://localhost:8787"'), 'Vite source sanitized')
+  console.log(`INFO frontend_url=${FRONTEND_URL}`)
+  console.log(`INFO worker_url=${WORKER_URL}`)
+
+  const frontend = await checkText(FRONTEND_URL)
+  assert('frontend service reachable on configured URL', frontend.ok && frontend.status === 200 && frontend.text.includes('RescueGrid') && frontend.text.includes('/src/main.jsx'), `${FRONTEND_URL} status=${frontend.status}${frontend.error ? ` error=${frontend.error}` : ''}`)
+  const frontendApi = await checkText(`${FRONTEND_URL}/src/api.js`)
+  assert('frontend Vite env exposes configured Worker URL', frontendApi.ok && frontendApi.text.includes('"VITE_WORKER_URL"') && frontendApi.text.includes(JSON.stringify(WORKER_URL)), `expected ${WORKER_URL}`)
 
   const workerRoot = await checkJson(`${WORKER_URL}/`)
-  assert('worker service reachable on reserved port', workerRoot.status === 200 && workerRoot.json?.service === 'rescuegrid-worker', `${WORKER_URL} status=${workerRoot.status}`)
+  assert('worker service reachable on configured URL', workerRoot.ok && workerRoot.status === 200 && workerRoot.json?.service === 'rescuegrid-worker', `${WORKER_URL} status=${workerRoot.status}${workerRoot.error ? ` error=${workerRoot.error}` : ''}`)
 
   const client = getClient()
   const checkpoint = await client.getLatestCheckpointSequenceNumber()

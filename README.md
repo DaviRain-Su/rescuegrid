@@ -43,9 +43,10 @@ npm --prefix worker run typecheck   # Worker TypeScript
 cd move/rescuegrid && sui move test # Move tests
 npm run config                      # sanitized Testnet deployment IDs
 npm run demo:loop                   # create -> activate/tick -> revoke live demo evidence
+RESCUEGRID_FRONTEND_URL=http://localhost:5175 RESCUEGRID_WORKER_URL=http://localhost:8787 npm run baseline:smoke
 ```
 
-The verified live Worker URL for this repo is the local Worker at `http://localhost:8787`, and the verified frontend port is `http://localhost:5175`. Sui objects are deployed on **Sui Testnet only** (see [`docs/STATUS.md`](docs/STATUS.md) / `npm run config`); do not treat this README as Mainnet or Cloudflare production-deploy evidence.
+The verified live Worker URL for this repo is the local Worker at `http://localhost:8787`, and the verified frontend port is `http://localhost:5175`. If Vite or Wrangler uses another port, pass `RESCUEGRID_FRONTEND_URL` / `RESCUEGRID_WORKER_URL` to `npm run baseline:smoke`. Sui objects are deployed on **Sui Testnet only** (see [`docs/STATUS.md`](docs/STATUS.md) / `npm run config`); do not treat this README as Mainnet or Cloudflare production-deploy evidence.
 
 Post-hackathon multivenue planning lives in [`docs/06-post-mvp-multivenue-roadmap.md`](docs/06-post-mvp-multivenue-roadmap.md). `pi-worker` integration notes live in [`docs/07-pi-worker-assessment.md`](docs/07-pi-worker-assessment.md). Sui GraphQL/gRPC/Archival Store, Seal/Walrus, WaaP, Sui Stack CRM, and Sui Agent Skills are assessed in [`docs/08-sui-data-agent-stack-assessment.md`](docs/08-sui-data-agent-stack-assessment.md). Market research, strategy-template expansion, and the next frontend design brief live in [`docs/09-market-product-and-frontend-roadmap.md`](docs/09-market-product-and-frontend-roadmap.md).
 
