@@ -44,6 +44,17 @@ Broadcast with the dedicated agent key (agent-as-owner for the test):
 
 So create / list / activity / revoke are real on testnet. In the browser, a connected Sui wallet drives the same Worker-first flow (no DBUSDC needed); read-only screens can fall back to direct Sui/DeepBook reads when `VITE_WORKER_URL` is absent.
 
+## Demo loop — verified live (2026-06-03)
+
+With Worker `http://localhost:8787` running, `npm run demo:loop -- --worker-url http://localhost:8787` passed against Sui Testnet:
+
+- Create tx `49dk3PCrukukRLkuKFEJc1s3QQwAj4cc2E1v8uxP1fSv` succeeded at checkpoint `343982470`.
+- Created wrapper `0x2a358220…948593e`, mandate `0xa0bd97b5…bcceb5`, strategy hash `0xc7f7b9813fbfb695f36908cd22b3f7a0c856faa36e200213517c0afb6f5f3f04`.
+- Runtime activation reached `Monitoring` with `executor_kind=deepbook`.
+- Forced tick hit the documented funding/execution gate: `action=blocked`, `code=EXECUTION_DISABLED`, `execution_claimed=false`, `spend_before=0`, `spend_after=0`, `tx_digest=null`.
+- Revoke tx `CuK54YNnw7vb5PxxQy2p66JdvKfSvzy8K8VXUPzYfCQg` succeeded at checkpoint `343982495`; Mandate readback had `mandate_revoked=true`.
+- Post-revoke tick returned `action=stopped_revoked`, `code=POLICY_REVOKED`, `execution_claimed=false`, final policy status `revoked`, final runtime state `Revoked`.
+
 ## Baseline smoke — verified locally (2026-06-03)
 
 With Worker `http://localhost:8787` and frontend `http://localhost:5173` running:
