@@ -298,7 +298,14 @@ export default function App({ onExit }) {
       const res = await suiClient.waitForTransaction({ digest: signed.digest, options: { showObjectChanges: true, showEvents: true } })
       const ev = (res.events || []).find(e => String(e.type).endsWith('::policy::PolicyCreated'))
       const wrapperId = ev?.parsedJson?.wrapper_id
-      if (wrapperId) await activatePolicy(wrapperId).catch(() => {})
+      if (wrapperId) {
+        try {
+          await activatePolicy(wrapperId)
+        } catch (e) {
+          showToast(`Policy on-chain but runtime activation failed: ${String(e?.message || e).slice(0, 80)}`, 'var(--warn)')
+          pushNotif('guardian', 'Policy created but agent runtime not activated')
+        }
+      }
       showToast('Policy created on-chain — agent authorized within limits', 'var(--accent)')
       pushNotif('policy', `Policy deployed on-chain · ${meta.name}`)
       go('/policies')
@@ -329,7 +336,14 @@ export default function App({ onExit }) {
     go('/policies')
   }
 
-  const logout = () => { if (account) disconnect(); setAuthed(false); onExit && onExit() }
+  const logout = () => {
+    if (account) disconnect()
+    // autoConnect would otherwise silently re-connect the wallet on next launch,
+    // making logout appear to do nothing — clear dapp-kit's stored connection too.
+    try { Object.keys(localStorage).forEach(k => { if (/dapp-kit/i.test(k)) localStorage.removeItem(k) }) } catch { /* ignore */ }
+    setAuthed(false)
+    onExit && onExit()
+  }
 
   const shownActivity = liveReadsEnabled ? liveActivity : activity
   const state = { risk, suiPrice, suiSpark, crashState, mode, agentOn, activity: shownActivity }
