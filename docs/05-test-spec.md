@@ -246,6 +246,21 @@ Security / boundary:
 - 响应不得包含 `AGENT_KEY`、owner key、GraphQL endpoint URL、WaaP session file、permission token 或任何 secret value。
 - Data Sources UI 必须把 provider kind、transport、probe status 和 read model 作为诊断状态展示；GraphQL `json-rpc-fallback` 字段必须显式可见，不能暗示所有读取都已迁到 GraphQL。
 
+### `npm run chain-data:status`
+
+Happy path:
+
+- 默认 `npm run chain-data:status -- --json` 输出 `chain_data_provider.provider_kind`、`provider_status`、`transport`、`read_model` 和 `probe.status=skipped`。
+- `--probe` 使用和 `/api/chain-data/status?probe=true` 相同的 bounded probe。
+- `--provider graphql --owner <0x...> --wrapper-id <0x...> --json` 对比 GraphQL provider 与 JSON-RPC baseline 的 owner policy list 和 wrapper activity，并输出 `comparisons[].status=match`。
+
+Error / boundary:
+
+- `--provider graphql` 但 endpoint 缺失时退出码必须为 1。
+- GraphQL probe 失败、owner policy list mismatch、wrapper activity mismatch 或 compare error 时退出码必须为 1。
+- 输出不得包含 GraphQL endpoint URL、`AGENT_KEY`、owner key、`INTERNAL_AGENT_TICK_TOKEN`、WaaP permission token 或 WaaP session value。
+- 测试必须覆盖参数解析、endpoint 脱敏、policy list match/mismatch、activity match/mismatch 和 exit-code 判定。
+
 ### `GET /api/execution/readiness`
 
 Happy path:

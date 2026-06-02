@@ -778,6 +778,28 @@ Rules:
 - A failed GraphQL schema/read probe returns `provider_status=probe_failed` and a sanitized `probe` error; the endpoint URL and secret values must not be included.
 - GraphQL remains Worker-first and read-only. Balance, gas and DeepBook market reads may still use the JSON-RPC fallback until their GraphQL query shapes are validated.
 
+### `npm run chain-data:status`
+
+Runs the same ChainDataProvider status logic from a local CLI so cloud Worker and local daemon migrations can be validated before changing production reads.
+
+Usage:
+
+```bash
+npm run chain-data:status -- --json
+npm run chain-data:status -- --probe --json
+npm run chain-data:status -- --provider graphql --endpoint <url> --probe --json
+npm run chain-data:status -- --provider graphql --owner <0x...> --wrapper-id <0x...> --json
+```
+
+Rules:
+
+- The script is read-only. It must not create policies, submit PTBs, mutate daemon watch config or write activity logs.
+- Without `--probe`, it reports selected provider kind, transport, read model and endpoint-configured boolean only.
+- With `--probe`, it uses the same bounded provider probe as `/api/chain-data/status?probe=true`.
+- With `--owner` or `--wrapper-id`, a non-JSON-RPC selected provider must compare owner policy lists and wrapper activity against a JSON-RPC baseline.
+- `--provider graphql` without a configured endpoint exits non-zero. A probe failure or provider-vs-JSON-RPC mismatch also exits non-zero.
+- Human and JSON output must redact endpoint URLs, `AGENT_KEY`, owner keys, WaaP permission tokens and internal tick tokens.
+
 ### `GET /api/execution/readiness`
 
 Returns the combined execution preflight for cloud agent, local daemon and UI surfaces. This endpoint is read-only and must not submit a transaction or claim execution success.
