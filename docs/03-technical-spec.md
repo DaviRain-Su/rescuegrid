@@ -733,7 +733,10 @@ Rules:
 - `worker-secret` is allowed only for Testnet Worker validation and is execution-ready only when `EXECUTION_ENABLED=true`, `AGENT_KEY` is present, the secret is a valid Sui private key, and the derived public address equals `expected_address`.
 - `local-daemon` is available only when `RESCUEGRID_DAEMON_MODE=true`, a local `AGENT_KEY` is present, the secret is valid, and the derived public address equals `expected_address`.
 - Invalid secrets return `INVALID_SIGNER_SECRET`; valid secrets for the wrong address return `SIGNER_ADDRESS_MISMATCH`. Both keep `execution.enabled=false`.
-- `waap`, `hardware` and `remote-signer` are explicit external signer modes but must return `UNSUPPORTED_SIGNER` until their adapter spike is validated.
+- `waap` is disabled by default and must return `UNSUPPORTED_SIGNER` unless the runtime is a local daemon with `RESCUEGRID_DAEMON_MODE=true`, `RESCUEGRID_WAAP_CLI_ENABLED=true`, and `RESCUEGRID_WAAP_SUI_ADDRESS` matching `expected_address`.
+- `waap` status may expose only public signer metadata: address, chain, CLI enabled flag and whether a permission token is configured. It must never expose a WaaP session file, permission token value or raw CLI stderr/stdout.
+- `waap` signing uses a local daemon injected runner that calls `waap-cli send-tx --tx-json <serialized RescueGrid PTB> --chain sui:testnet --json`; the Cloud Worker runtime must not shell out to `waap-cli`.
+- `hardware` and `remote-signer` are explicit external signer modes but must return `UNSUPPORTED_SIGNER` until their adapter spike is validated.
 - Production Mainnet must not use `worker-secret`; it must use an external/user-controlled signer mode.
 - The frontend must treat this endpoint as status evidence only. It cannot infer that execution is allowed unless `execution.enabled=true`.
 

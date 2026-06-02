@@ -142,7 +142,7 @@ Post-MVP adapter backlog：
 职责：
 
 - 以 `rescuegrid daemon run` 形式长期运行本地 agent。
-- 管理本地 agent key 或外部 signer 引用，私钥不进入 Cloud Worker。
+- 管理本地 agent key 或外部 signer 引用，私钥不进入 Cloud Worker。`waap` 外部 signer 首个实现是 local-daemon-only CLI spike：daemon 只保存 public WaaP Sui address / CLI posture，permission token 只从 env 读取且不落盘。
 - 轮询或订阅 Policy 状态，执行与 Cloud Agent 相同的 Runtime Core。
 - 使用同一 ExecutorAdapter registry 构建 PTB。
 - 提供 `status`、`policies list`、`watch list/add/remove/sync`、`tick`、`logs`、`stop` 等操作入口；`status --json` 复用 `worker/src/execution-readiness.js`，与 Worker `/api/execution/readiness` 保持同一套 signer/funding blocker 语义；`policies list --owner <0x...>` 通过同一 ChainDataProvider 读取 owner 的链上 policy 列表，并标记哪些 wrapper 已在本地 watched set 中；`watch sync --owner <0x...>` 只把 active 且 agent 匹配的 wrapper 持久化进本地 daemon config。
@@ -225,7 +225,7 @@ Cloud Agent 和未来 Local Agent 必须共享同一组接口边界：
 - `MarketReader`：读取 adapter 需要的协议状态、价格和预计滑点；MVP 来源是 Deepbook pool。
 - `Guardian`：基于 Mandate、Wrapper、market snapshot 和 proposed trade 返回 allow/block。
 - `ExecutorAdapter`：生成协议执行计划、构建 PTB 片段并解析执行结果。
-- `Signer`：以被授权 agent address 签名；Cloud Mode 使用 Worker secret，Local Mode 使用 CLI daemon key 或外部 signer。
+- `Signer`：以被授权 agent address 签名；Cloud Mode 使用 Worker secret，Local Mode 使用 CLI daemon key 或外部 signer。WaaP signer 只能在 local daemon/external signer service 边界调用 `waap-cli send-tx`，Cloud Worker 不 shell out。
 - `ActivityWriter`：写 runtime log。MVP 不为 Guardian block 写链上事件。
 
 MVP 只实现 Cloud Agent 和 `deepbook` adapter。Local Agent 后续复用这些接口，不改变 MoveGate + Wrapper 合约 surface。

@@ -149,7 +149,7 @@ export async function runTick(env, p) {
   // Trigger: force_trigger (demo) or a real price-drop evaluation supplied by the caller.
   const triggerMet = !!p.forceTrigger || !!(p.market && p.market.triggerMet)
   const proposed = buildProposedTrade({ wrapper, market: p.market })
-  const signerAdapter = resolveSignerAdapter(env, { client })
+  const signerAdapter = resolveSignerAdapter(env, { client, ...(p.signerOptions || {}) })
   const executionEnabled = signerExecutionEnabled(env, signerAdapter)
 
   const executorKind = p.executorKind || EXECUTOR_KIND_DEEPBOOK

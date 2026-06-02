@@ -93,6 +93,24 @@ function readyRuntimeStatus() {
 }
 
 {
+  const readiness = await buildExecutionReadiness({
+    env: {
+      SIGNER_KIND: SIGNER_KIND_WAAP,
+      RESCUEGRID_DAEMON_MODE: 'true',
+      RESCUEGRID_WAAP_CLI_ENABLED: 'true',
+      RESCUEGRID_WAAP_SUI_ADDRESS: DEPLOYMENT.agent.address,
+      EXECUTION_ENABLED: 'true',
+    },
+    chainData: chainData(),
+  })
+  assert.equal(readiness.signer.kind, SIGNER_KIND_WAAP)
+  assert.equal(readiness.signer.available, true)
+  assert.equal(readiness.funding_ready, true)
+  assert.equal(readiness.execution_ready, true)
+  assert.equal(readiness.execution_claimed, false)
+}
+
+{
   const thresholds = resolveExecutionReadinessThresholds(
     { REQUIRED_DBUSDC_BALANCE: '500', REQUIRED_DEEP_BALANCE: '5', REQUIRED_AGENT_SUI_GAS_MIST: '2000' },
     { dbusdc_threshold: '1', deep_threshold: '1', sui_gas_threshold: '1' },

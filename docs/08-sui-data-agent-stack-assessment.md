@@ -116,7 +116,7 @@ RescueGrid position:
 
 Do not put WaaP into the MVP hot path now. The current Testnet Worker is deterministic and small; introducing external signer orchestration would add moving parts before live DeepBook funding is solved. The immediate use is a design target, not a replacement for the current Testnet `worker-secret` path.
 
-Current implementation status: the repo now models `waap` as an explicit `SignerAdapter` kind and surfaces it through `/api/runtime/status`, but it intentionally returns `UNSUPPORTED_SIGNER`. This lets the UI and docs represent WaaP readiness without falsely claiming that WaaP is wired into live RescueGrid execution.
+Current implementation status: the repo now models `waap` as an explicit `SignerAdapter` kind and surfaces it through `/api/runtime/status`. It stays `UNSUPPORTED_SIGNER` by default and in Cloud Worker mode. The first local-daemon-only CLI adapter spike becomes available only when `RESCUEGRID_DAEMON_MODE=true`, `RESCUEGRID_WAAP_CLI_ENABLED=true`, and `RESCUEGRID_WAAP_SUI_ADDRESS` matches the deployed RescueGrid agent. It serializes the RescueGrid-generated Sui PTB to `tx_json`, sets sender to the agent address, and hands it to an injected `waap-cli send-tx --tx-json ... --chain sui:testnet --json` runner. This gives RescueGrid a test-covered external signer boundary without claiming production WaaP execution.
 
 Cloud vs local placement:
 
@@ -147,9 +147,10 @@ Mainnet hardening path:
 
 1. Keep `worker-secret` for Testnet.
 2. Keep the implemented `local-daemon` signer constrained to `RESCUEGRID_DAEMON_MODE=true` and local `AGENT_KEY`.
-3. Add a `waap` design spike that signs a RescueGrid-generated Sui Testnet `tx_json` through `waap-cli send-tx --tx-json ... --chain sui:testnet`.
-4. If the spike works, make WaaP one implementation of `SignerAdapter`, not a special runtime branch.
-5. Require a security review before any signer adapter can submit production trades.
+3. Add a local-daemon `waap` CLI adapter spike that composes a RescueGrid-generated Sui Testnet `tx_json` request and parses a returned digest without logging session files or permission tokens. This is implemented at the signer boundary and unit-tested with an injected runner.
+4. Validate the same adapter against a live WaaP session and approval/privilege flow before enabling any real submission evidence.
+5. If the live spike works, keep WaaP as one implementation of `SignerAdapter`, not a special runtime branch.
+6. Require a security review before any external signer adapter can submit production trades.
 
 ## 5. Sui Agent Skills
 

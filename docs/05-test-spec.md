@@ -221,7 +221,12 @@ Happy path:
 Security / boundary:
 
 - 响应不得包含 `AGENT_KEY`、owner key、WaaP session file、permission token 或任何 secret value。
-- `SIGNER_KIND=waap` 在 adapter spike 通过前必须返回 `UNSUPPORTED_SIGNER`，不能因为文档支持 Sui 就自动打开执行。
+- `SIGNER_KIND=waap` 默认必须返回 `UNSUPPORTED_SIGNER`，不能因为文档支持 Sui 就自动打开执行。
+- `SIGNER_KIND=waap` 只有在 `RESCUEGRID_DAEMON_MODE=true`、`RESCUEGRID_WAAP_CLI_ENABLED=true`、`RESCUEGRID_WAAP_SUI_ADDRESS=<deployment agent>` 同时满足时才可报告 `available=true`。
+- `SIGNER_KIND=waap` 在 Cloud Worker runtime 中必须保持 unavailable；`waap-cli` 只能通过 local daemon 注入 runner 调用。
+- `SIGNER_KIND=waap` 地址缺失必须返回 `WAAP_ADDRESS_MISSING`；地址不匹配必须返回 `SIGNER_ADDRESS_MISMATCH`。
+- WaaP submit 测试必须证明 adapter 先把 RescueGrid PTB serialize 成 `tx_json`，把 sender 固定为部署 agent address，再交给 runner；不得调用 Sui SDK keypair signer。
+- WaaP permission token 可以从 env 传入 runner，但 status、logs、errors 和 config file 不得包含 token 值。
 - `execution.enabled` 只有在 signer available 且 `EXECUTION_ENABLED=true` 时才为 true。
 - Profile / Accounts UI 必须把 status 作为可见状态展示，不能把 `execution_configured=true` 当成可执行。
 

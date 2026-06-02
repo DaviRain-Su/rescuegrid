@@ -66,4 +66,22 @@ import { DEPLOYMENT } from '../src/sui-tx.js'
   assert.equal(status.chain_data_provider.graphql_configured, true)
 }
 
+{
+  const status = getRuntimeStatus({
+    SIGNER_KIND: SIGNER_KIND_WAAP,
+    RESCUEGRID_DAEMON_MODE: 'true',
+    RESCUEGRID_WAAP_CLI_ENABLED: 'true',
+    RESCUEGRID_WAAP_SUI_ADDRESS: DEPLOYMENT.agent.address,
+    RESCUEGRID_WAAP_PERMISSION_TOKEN: 'permission-secret',
+    EXECUTION_ENABLED: 'true',
+  })
+  assert.equal(status.signer.kind, SIGNER_KIND_WAAP)
+  assert.equal(status.signer.available, true)
+  assert.equal(status.signer.address, DEPLOYMENT.agent.address)
+  assert.equal(status.signer.signer_matches_expected, true)
+  assert.equal(status.execution.enabled, true)
+  assert.equal(status.execution.blocker_code, null)
+  assert.equal(JSON.stringify(status).includes('permission-secret'), false)
+}
+
 console.log('\nALL RUNTIME STATUS TESTS PASS')

@@ -16,6 +16,7 @@ import {
   resolveDaemonConfig,
   validateDaemonConfig,
 } from '../scripts/daemon.mjs'
+import { waapSendTxArgs } from '../scripts/waap-cli-runner.mjs'
 import { DEPLOYMENT } from '../src/sui-tx.js'
 
 const temp = mkdtempSync(join(tmpdir(), 'rescuegrid-daemon-test-'))
@@ -36,6 +37,23 @@ try {
   assert.equal(parsed.command, 'status')
   assert.equal(parsed.flags.get('--config'), configPath)
   assert.equal(parsed.flags.get('--json'), 'true')
+  assert.deepEqual(waapSendTxArgs({
+    txJson: '{"version":1}',
+    chain: 'sui:testnet',
+    rpc: 'https://sui-testnet.example',
+    permissionToken: 'permission-secret',
+  }), [
+    'send-tx',
+    '--tx-json',
+    '{"version":1}',
+    '--chain',
+    'sui:testnet',
+    '--json',
+    '--rpc',
+    'https://sui-testnet.example',
+    '--permission-token',
+    'permission-secret',
+  ])
 
   const config = resolveDaemonConfig({ flags: parsed.flags, env: {} })
   assert.equal(config.chain, 'sui:testnet')
@@ -54,6 +72,8 @@ try {
   assert.equal(Object.hasOwn(status.runtime_core.boundaries, 'policy_reader'), true)
   assert.equal(status.runtime_core.registered_adapters[0].kind, 'deepbook')
   assert.equal(status.known_signer_kinds.includes('waap'), true)
+  assert.equal(status.external_signer.waap_cli_enabled, false)
+  assert.equal(status.external_signer.permission_token_configured, false)
 
   const executionReadiness = await daemonExecutionReadiness({ ...config, signer_kind: 'waap', execution_enabled: true }, {
     chainData: {
@@ -74,6 +94,46 @@ try {
   const statusWithReadiness = daemonStatus(config, { executionReadiness })
   assert.equal(statusWithReadiness.execution_readiness.signer.kind, 'waap')
   assert.equal(statusWithReadiness.execution_readiness.execution_claimed, false)
+
+  const waapConfig = resolveDaemonConfig({
+    flags: new Map([
+      ['--config', configPath],
+      ['--signer-kind', 'waap'],
+      ['--waap-cli-enabled', 'true'],
+      ['--waap-sui-address', DEPLOYMENT.agent.address],
+      ['--waap-cli-path', '/usr/local/bin/waap-cli'],
+      ['--waap-chain', 'sui:testnet'],
+      ['--waap-rpc', 'https://sui-testnet.example'],
+    ]),
+    env: { RESCUEGRID_WAAP_PERMISSION_TOKEN: 'permission-secret' },
+  })
+  assert.equal(waapConfig.signer_kind, 'waap')
+  assert.equal(waapConfig.waap_cli_enabled, true)
+  assert.equal(waapConfig.waap_sui_address, DEPLOYMENT.agent.address)
+  assert.equal(validateDaemonConfig(waapConfig).ok, true)
+  const waapStatus = daemonStatus(waapConfig)
+  assert.equal(waapStatus.external_signer.waap_cli_enabled, true)
+  assert.equal(waapStatus.external_signer.waap_sui_address, DEPLOYMENT.agent.address)
+  assert.equal(waapStatus.external_signer.waap_rpc_configured, true)
+  assert.equal(waapStatus.external_signer.permission_token_configured, true)
+  assert.equal(JSON.stringify(waapStatus).includes('permission-secret'), false)
+  const waapReady = await daemonExecutionReadiness({ ...waapConfig, execution_enabled: true }, {
+    chainData: {
+      async readBalanceManagerBalance(coinType) {
+        if (coinType === DEPLOYMENT.deepbook.dbusdc_coin_type) return 1000n
+        if (coinType === DEPLOYMENT.deepbook.deep_coin_type) return 10n
+        throw new Error(`unexpected coin type ${coinType}`)
+      },
+      async getAgentSuiGasBalance(owner) {
+        assert.equal(owner, DEPLOYMENT.agent.address)
+        return { totalBalance: '1000000' }
+      },
+    },
+  })
+  assert.equal(waapReady.signer.kind, 'waap')
+  assert.equal(waapReady.signer.available, true)
+  assert.equal(waapReady.execution_ready, true)
+  assert.equal(waapReady.execution_claimed, false)
 
   const policyList = await daemonPolicyList(config, {
     chainData: {
@@ -201,6 +261,17 @@ try {
   const wrongAgentValidation = validateDaemonConfig(wrongAgent)
   assert.equal(wrongAgentValidation.code, 'LOCAL_AGENT_MISMATCH')
   assert.equal(wrongAgentValidation.expected_agent, DEPLOYMENT.agent.address)
+
+  const badWaapAddress = resolveDaemonConfig({
+    flags: new Map([
+      ['--config', configPath],
+      ['--signer-kind', 'waap'],
+      ['--waap-cli-enabled', 'true'],
+      ['--waap-sui-address', 'not-an-address'],
+    ]),
+    env: {},
+  })
+  assert.equal(validateDaemonConfig(badWaapAddress).code, 'BAD_WAAP_ADDRESS')
 
   assert.equal(validateDaemonConfig({ ...config, watched_policies: [] }, { requirePolicies: true }).code, 'NO_WATCHED_POLICIES')
   assert.equal(validateDaemonConfig({ ...config, watched_policies: ['not-an-id'] }, { requirePolicies: true }).code, 'BAD_WRAPPER_ID')

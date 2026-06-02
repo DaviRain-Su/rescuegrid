@@ -15,9 +15,11 @@ import { requireChainDataProvider } from '../src/chain-data-provider.js'
 import { buildExecutionReadiness } from '../src/execution-readiness.js'
 import {
   KNOWN_SIGNER_KINDS,
+  SIGNER_KIND_WAAP,
   SIGNER_KIND_WORKER_SECRET,
 } from '../src/signer-adapters.js'
 import { readWorkerDevVar } from './agent-key-loader.mjs'
+import { runWaapCliSendTx } from './waap-cli-runner.mjs'
 
 const DEFAULT_CONFIG_PATH = '.rescuegrid/daemon.json'
 const DEFAULT_LOG_PATH = '.rescuegrid/daemon/activity.jsonl'
@@ -110,7 +112,17 @@ export function resolveDaemonConfig({ flags = new Map(), env = process.env } = {
     max_ticks: integerFlag(flags, '--max-ticks', Number(fileConfig.max_ticks || 0)),
     log_path: resolve(String(flags.get('--log') || env.RESCUEGRID_DAEMON_LOG || fileConfig.log_path || DEFAULT_LOG_PATH)),
     watched_policies: [...new Set(watchedPolicies)],
+    waap_cli_enabled: boolFlag(flags, '--waap-cli-enabled', env.RESCUEGRID_WAAP_CLI_ENABLED === 'true' || env.WAAP_CLI_ENABLED === 'true' || fileConfig.waap_cli_enabled === true),
+    waap_sui_address: String(flags.get('--waap-sui-address') || env.RESCUEGRID_WAAP_SUI_ADDRESS || env.WAAP_SUI_ADDRESS || fileConfig.waap_sui_address || ''),
+    waap_cli_path: String(flags.get('--waap-cli-path') || env.RESCUEGRID_WAAP_CLI_PATH || env.WAAP_CLI_PATH || fileConfig.waap_cli_path || 'waap-cli'),
+    waap_chain: String(flags.get('--waap-chain') || env.RESCUEGRID_WAAP_CHAIN || env.WAAP_CHAIN || fileConfig.waap_chain || configChain(flags, env, fileConfig)),
+    waap_rpc: String(flags.get('--waap-rpc') || env.RESCUEGRID_WAAP_RPC || env.WAAP_RPC || fileConfig.waap_rpc || ''),
+    waap_permission_token_configured: Boolean(env.RESCUEGRID_WAAP_PERMISSION_TOKEN || env.WAAP_PERMISSION_TOKEN),
   }
+}
+
+function configChain(flags, env, fileConfig) {
+  return String(flags.get('--chain') || env.RESCUEGRID_CHAIN || fileConfig.chain || 'sui:testnet')
 }
 
 function validSuiAddress(value) {
@@ -158,6 +170,9 @@ export function validateDaemonConfig(config, { requirePolicies = false } = {}) {
   if (config.owner_address && !validSuiAddress(config.owner_address)) {
     return { ok: false, code: 'BAD_OWNER_ADDRESS', message: `Invalid owner address: ${config.owner_address}` }
   }
+  if (config.signer_kind === SIGNER_KIND_WAAP && config.waap_sui_address && !validSuiAddress(config.waap_sui_address)) {
+    return { ok: false, code: 'BAD_WAAP_ADDRESS', message: `Invalid waap Sui address: ${config.waap_sui_address}` }
+  }
   if (config.force_trigger && !config.demo_mode) {
     return { ok: false, code: 'FORCE_TRIGGER_DISABLED', message: 'force_trigger requires --demo-mode or RESCUEGRID_DEMO_MODE=true.' }
   }
@@ -183,6 +198,11 @@ function daemonConfigFileShape(config, watchedPolicies = config.watched_policies
     tick_interval_ms: config.tick_interval_ms,
     watched_policies: [...new Set(watchedPolicies)],
     log_path: config.log_path,
+    waap_cli_enabled: config.waap_cli_enabled || undefined,
+    waap_sui_address: config.waap_sui_address || undefined,
+    waap_cli_path: config.waap_cli_path === 'waap-cli' ? undefined : config.waap_cli_path,
+    waap_chain: config.waap_chain || undefined,
+    waap_rpc: config.waap_rpc || undefined,
   }
 }
 
@@ -202,6 +222,14 @@ export function daemonStatus(config, { executionReadiness = null } = {}) {
     watched_policies: config.watched_policies,
     tick_interval_ms: config.tick_interval_ms,
     log_path: config.log_path,
+    external_signer: {
+      waap_cli_enabled: Boolean(config.waap_cli_enabled),
+      waap_sui_address: config.waap_sui_address || null,
+      waap_chain: config.waap_chain || config.chain,
+      waap_cli_path: config.waap_cli_path || 'waap-cli',
+      waap_rpc_configured: Boolean(config.waap_rpc),
+      permission_token_configured: Boolean(config.waap_permission_token_configured || process.env.RESCUEGRID_WAAP_PERMISSION_TOKEN || process.env.WAAP_PERMISSION_TOKEN),
+    },
   }
   if (executionReadiness) status.execution_readiness = executionReadiness
   return status
@@ -214,6 +242,12 @@ function runtimeEnv(config) {
     RESCUEGRID_DAEMON_MODE: 'true',
     SIGNER_KIND: config.signer_kind,
     AGENT_KEY: readLocalAgentKey() || undefined,
+    RESCUEGRID_WAAP_CLI_ENABLED: config.waap_cli_enabled ? 'true' : 'false',
+    RESCUEGRID_WAAP_SUI_ADDRESS: config.waap_sui_address || undefined,
+    RESCUEGRID_WAAP_CLI_PATH: config.waap_cli_path || undefined,
+    RESCUEGRID_WAAP_CHAIN: config.waap_chain || config.chain,
+    RESCUEGRID_WAAP_RPC: config.waap_rpc || undefined,
+    RESCUEGRID_WAAP_PERMISSION_TOKEN: process.env.RESCUEGRID_WAAP_PERMISSION_TOKEN || process.env.WAAP_PERMISSION_TOKEN || undefined,
   }
 }
 
@@ -391,6 +425,7 @@ export async function tickWatchedPolicy(config, wrapperId) {
   const result = await runTick(runtimeEnv(config), {
     wrapperId,
     forceTrigger: config.force_trigger,
+    signerOptions: { waapCliRunner: runWaapCliSendTx },
   })
   const entry = publicTickResult(result, wrapperId)
   appendDaemonLog(config.log_path, entry)
@@ -472,6 +507,13 @@ Usage:
   node worker/scripts/daemon.mjs run --wrapper-id <0x...>[,<0x...>] [--max-ticks <n>] [--interval-ms 60000]
   node worker/scripts/daemon.mjs logs [--limit 20] [--json]
 
+WaaP signer spike flags:
+  --signer-kind waap --waap-cli-enabled --waap-sui-address <0x...>
+  [--waap-cli-path waap-cli] [--waap-chain sui:testnet] [--waap-rpc <url>]
+
+WaaP permission tokens are only read from RESCUEGRID_WAAP_PERMISSION_TOKEN /
+WAAP_PERMISSION_TOKEN. They are never persisted into the daemon config.
+
 run streams one JSON object per tick and runs until stopped unless --max-ticks is set.
 
 Config file:
@@ -479,7 +521,8 @@ Config file:
 
 Supported fields:
   chain, owner_address, agent_address, signer_kind, execution_enabled, demo_mode,
-  tick_interval_ms, watched_policies, log_path`)
+  tick_interval_ms, watched_policies, log_path, waap_cli_enabled,
+  waap_sui_address, waap_cli_path, waap_chain, waap_rpc`)
 }
 
 export async function main(argv = process.argv.slice(2)) {
