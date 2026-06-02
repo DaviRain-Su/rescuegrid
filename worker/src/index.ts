@@ -7,7 +7,7 @@ import { bodyLimit } from 'hono/body-limit'
 import { parseIntent } from './parse.js'
 import { strategyHash } from './strategy-core.js'
 import { buildCreatePolicyTx, buildRevokeTx } from './sui-tx.js'
-import { countActivePoliciesByDeployment, getActivity, listPoliciesByOwner, listActivityByOwner, getOwnerSummary, getMarket, getBalances, readWrapper, readBalanceManagerBalance, policyEventsToFeedItems } from './chain.js'
+import { countActivePoliciesByDeployment, getActivity, listPoliciesByOwner, listActivityByOwner, getOwnerSummary, getMarket, getBalances, readMandate, readWrapper, readBalanceManagerBalance, policyEventsToFeedItems } from './chain.js'
 import { getClient, DEPLOYMENT } from './sui-tx.js'
 import { runTick, validateExecutionPlan } from './tick.js'
 import { validateForceTrigger, validateTickAuthorization } from './tick-auth.js'
@@ -22,6 +22,7 @@ import {
 } from './runtime-activity.js'
 import { AGENT_ADDRESS, DEFAULT_TICK_INTERVAL_SECONDS, MAX_ACTIVE_POLICIES_PER_DEPLOYMENT } from './config.js'
 import { getExecutorAdapter, unsupportedExecutor, unsupportedExecutorTarget } from './executor-adapters.js'
+import { revokePolicyPreflight } from './policy-api.js'
 import type { ParseDefaults, Strategy } from './types.js'
 
 export interface Env {
@@ -335,13 +336,14 @@ app.post('/api/policies/:wrapper_id/revoke', async (c) => {
   try { body = await c.req.json() } catch { return c.json({ status: 'error', code: 'BAD_REQUEST', message: 'Invalid JSON.' }, 400) }
   if (!body.confirmed) return c.json({ status: 'error', code: 'CONFIRM_REQUIRED', message: 'confirmed must be true.' }, 400)
   try {
-    const wrapper = await readWrapper(getClient(), wrapperId)
-    if (!wrapper) return c.json({ status: 'error', code: 'NOT_FOUND', message: 'Wrapper not found.' }, 404)
-    if (body.owner && wrapper.owner !== body.owner) {
-      return c.json({ status: 'error', code: 'OWNER_MISMATCH', message: 'Only the policy owner can revoke.' }, 403)
-    }
-    const tx = buildRevokeTx({ wrapperId, mandateId: wrapper.mandate_id, ownerAddress: wrapper.owner })
-    return c.json({ status: 'ok', tx_json: tx.serialize(), wrapper_id: wrapperId, mandate_id: wrapper.mandate_id, sign_with: 'owner signer (frontend wallet or scripted Testnet validation key)' })
+    const client = getClient()
+    const wrapper = await readWrapper(client, wrapperId)
+    const mandate = wrapper ? await readMandate(client, wrapper.mandate_id) : null
+    const preflight = revokePolicyPreflight({ wrapper, mandate, owner: body.owner })
+    if (!preflight.ok) return c.json(preflight.body, preflight.status as 400)
+    const liveWrapper = wrapper!
+    const tx = buildRevokeTx({ wrapperId, mandateId: liveWrapper.mandate_id, ownerAddress: liveWrapper.owner })
+    return c.json({ status: 'ok', tx_json: tx.serialize(), wrapper_id: wrapperId, mandate_id: liveWrapper.mandate_id, sign_with: 'owner signer (frontend wallet or scripted Testnet validation key)' })
   } catch (e) {
     return c.json({ status: 'error', code: 'CHAIN_READ_FAILED', message: String((e as Error).message) }, 502)
   }
