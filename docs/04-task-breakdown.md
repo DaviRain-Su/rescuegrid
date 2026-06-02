@@ -102,6 +102,8 @@
 
 Current H3 implementation status: `/api/protocols` exposes the Sui protocol coverage registry, and `/api/protocols/watchlist` exposes 31 Sui-only market rows with protocol, venue, market, risk, adapter and data-source metadata. DeepBook is represented as the only configured executor path, but market watch rows keep `execution_enabled=false` and `execution_blocker_code=FUNDING_GATED` until live DBUSDC/DEEP funding is available.
 
+Current H4/H5 implementation status: `/api/adapters/candidates` exposes the Sui-only adapter constraint registry. Cetus, Turbos and Momentum are represented as CLMM candidates with `clmm_pool_id` / tick-range / position semantics; Bluefin Spot is represented as a route-constrained spot aggregator candidate, not a broad signer target. Suilend and Scallop have SDK-confirmed lending schemas with lending market, reserve, obligation and owner-cap/key constraints. NAVI and AlphaLend remain `research_pending` until SDK/package-address and position semantics are verified. All rows keep `registered_executor=false` and `execution_enabled=false`.
+
 ## Phase I - Post-MVP Multivenue Expansion
 
 Phase I is a product expansion track, not a hackathon dependency. Planning baseline: [`docs/06-post-mvp-multivenue-roadmap.md`](06-post-mvp-multivenue-roadmap.md).

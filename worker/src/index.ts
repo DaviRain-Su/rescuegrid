@@ -9,6 +9,7 @@ import { strategyHash } from './strategy-core.js'
 import { buildCreatePolicyTx, buildRevokeTx } from './sui-tx.js'
 import { requireChainDataProvider } from './chain-data-provider.js'
 import { DEPLOYMENT } from './sui-tx.js'
+import { getSuiAdapterCandidateData } from './sui-adapter-candidates.js'
 import { getSuiProtocolCoverage } from './sui-protocol-registry.js'
 import { getSuiWatchData } from './sui-watch-registry.js'
 import { runTick, validateExecutionPlan } from './tick.js'
@@ -259,6 +260,11 @@ app.get('/api/protocols', (c) => {
 app.get('/api/protocols/watchlist', (c) => {
   const includeDisplayOnly = c.req.query('include_display_only') !== 'false'
   return c.json(getSuiWatchData({ includeDisplayOnly }))
+})
+
+app.get('/api/adapters/candidates', (c) => {
+  const includeResearchPending = c.req.query('include_research_pending') !== 'false'
+  return c.json(getSuiAdapterCandidateData({ includeResearchPending }))
 })
 
 app.get('/api/balances', async (c) => {

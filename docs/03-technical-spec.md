@@ -88,6 +88,7 @@ Adapter inclusion gates:
 - Monitoring coverage tracks the DefiLlama Sui non-CEX Top 25/26, plus explicit volume exceptions.
 - Execution adapters require sustained liquidity/volume, stable read APIs, explicit target ids, deterministic plan previews and Guardian-readable risk fields.
 - CEX entries, RWA issuer products and perps venues are excluded from autonomous execution until their custody, settlement, margin and liquidation semantics are specified.
+- H4/H5 candidate metadata is exposed at `/api/adapters/candidates`. This is a design/constraint registry, not an executor registry: every row must remain `registered_executor=false`, `execution_enabled=false` and `autonomous_execution_allowed=false` until a real adapter has conformance tests, target gates and wrapper-level fields.
 
 Candidate adapter classes:
 
@@ -99,6 +100,13 @@ Candidate adapter classes:
 - `sui-perps-watch`: Bluefin Pro, Sudo Perps and DipCoin Perps funding, liquidation and venue-risk monitoring before any tiny/paper execution.
 
 These adapters are not allowed to reuse the Deepbook-specific `pool_id` constraint unless their target semantics are equivalent. If they need position ids, vault ids, lending market ids or bin ranges, add adapter-specific wrapper fields or a new wrapper version.
+
+Current target schema findings:
+
+- CLMM adapters (`cetus-clmm`, `turbos`, `momentum`) require `clmm_pool_id`, coin types, tick spacing, fee tier, optional tick range and optional LP `position_id`. Guardian must be able to read quoted output, price impact, pool liquidity, tick range, position ownership and sustained volume before any PTB is built.
+- Bluefin Spot is represented as a `sui-spot-aggregator` candidate. Aggregator routes are not acceptable as broad signing authority; the route must be decomposed into allowed Sui venues and concrete target ids before execution can be considered.
+- Lending adapters require lending market id/type, reserve id or reserve coin type, obligation id, and owner proof (`obligation_owner_cap_id` for Suilend-like flows or `obligation_key_id` for Scallop-like flows). Guardian must read fresh reserve and obligation state, health factor, LTV, withdrawal liquidity and oracle freshness before any repay/withdraw/borrow PTB is built.
+- NAVI and AlphaLend remain research-pending in code until package addresses, SDK APIs and position semantics are verified.
 
 ## 4. Move Package Surface
 
