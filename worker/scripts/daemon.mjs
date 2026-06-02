@@ -10,7 +10,7 @@ import { pathToFileURL } from 'node:url'
 import { setTimeout as delay } from 'node:timers/promises'
 import { DEPLOYMENT } from '../src/sui-tx.js'
 import { runTick } from '../src/tick.js'
-import { REGISTERED_EXECUTOR_KINDS } from '../src/executor-adapters.js'
+import { runtimeCoreStatus } from '../src/runtime-core.js'
 import {
   KNOWN_SIGNER_KINDS,
   SIGNER_KIND_WORKER_SECRET,
@@ -143,6 +143,7 @@ export function validateDaemonConfig(config, { requirePolicies = false } = {}) {
 }
 
 export function daemonStatus(config) {
+  const runtimeCore = runtimeCoreStatus()
   return {
     status: 'ok',
     chain: config.chain,
@@ -150,7 +151,8 @@ export function daemonStatus(config) {
     signer_kind: config.signer_kind,
     execution_enabled: config.execution_enabled,
     demo_mode: config.demo_mode,
-    registered_adapters: REGISTERED_EXECUTOR_KINDS,
+    registered_adapters: runtimeCore.registered_adapters.map((adapter) => adapter.kind),
+    runtime_core: runtimeCore,
     known_signer_kinds: KNOWN_SIGNER_KINDS,
     watched_policies: config.watched_policies,
     tick_interval_ms: config.tick_interval_ms,

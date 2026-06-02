@@ -42,6 +42,8 @@ try {
   assert.equal(status.status, 'ok')
   assert.equal(status.agent_address, DEPLOYMENT.agent.address)
   assert.deepEqual(status.registered_adapters, ['deepbook'])
+  assert.equal(Object.hasOwn(status.runtime_core.boundaries, 'policy_reader'), true)
+  assert.equal(status.runtime_core.registered_adapters[0].kind, 'deepbook')
   assert.equal(status.known_signer_kinds.includes('waap'), true)
 
   assert.deepEqual(validateDaemonConfig(config, { requirePolicies: true }), { ok: true })
