@@ -697,7 +697,9 @@ Response:
   },
   "signer": {
     "kind": "worker-secret",
-    "address": "0x...",
+    "address": null,
+    "expected_address": "0x...",
+    "signer_matches_expected": false,
     "available": false,
     "execution_configured": false,
     "execution_enabled": false,
@@ -727,8 +729,10 @@ Response:
 Rules:
 
 - `signer.kind` is selected from `SIGNER_KIND` / `RESCUEGRID_SIGNER_KIND`, defaulting to `worker-secret`.
-- `worker-secret` is allowed only for Testnet Worker validation and is execution-ready only when `EXECUTION_ENABLED=true` and `AGENT_KEY` is present.
-- `local-daemon` is available only when `RESCUEGRID_DAEMON_MODE=true` and a local `AGENT_KEY` is present.
+- `signer.address` is the public address derived from the configured secret, or `null` when the secret is missing/invalid; `signer.expected_address` is the deployed RescueGrid agent address.
+- `worker-secret` is allowed only for Testnet Worker validation and is execution-ready only when `EXECUTION_ENABLED=true`, `AGENT_KEY` is present, the secret is a valid Sui private key, and the derived public address equals `expected_address`.
+- `local-daemon` is available only when `RESCUEGRID_DAEMON_MODE=true`, a local `AGENT_KEY` is present, the secret is valid, and the derived public address equals `expected_address`.
+- Invalid secrets return `INVALID_SIGNER_SECRET`; valid secrets for the wrong address return `SIGNER_ADDRESS_MISMATCH`. Both keep `execution.enabled=false`.
 - `waap`, `hardware` and `remote-signer` are explicit external signer modes but must return `UNSUPPORTED_SIGNER` until their adapter spike is validated.
 - Production Mainnet must not use `worker-secret`; it must use an external/user-controlled signer mode.
 - The frontend must treat this endpoint as status evidence only. It cannot infer that execution is allowed unless `execution.enabled=true`.

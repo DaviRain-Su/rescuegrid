@@ -213,6 +213,8 @@ Happy path:
 
 - 返回 `chain=sui:testnet`、部署 agent address、BalanceManager id 和 AgentPassport id。
 - 默认 signer 为 `worker-secret`；未配置 `AGENT_KEY` 时 `available=false`、`execution_enabled=false`、`blocker_code=EXECUTION_DISABLED`。
+- `AGENT_KEY` 不是有效 Sui private key 时，`signer.available=false`、`signer.address=null`、`unavailable_code=INVALID_SIGNER_SECRET`，响应仍不得泄漏原始 secret。
+- `AGENT_KEY` 可解析但派生地址不等于部署 agent address 时，`signer.available=false`、`signer.address=<derived public address>`、`signer.expected_address=<deployment agent>`、`unavailable_code=SIGNER_ADDRESS_MISMATCH`。
 - `CHAIN_DATA_PROVIDER=graphql` 且配置 `SUI_GRAPHQL_URL` / `SUI_GRAPHQL_ENDPOINT` 时，返回 `chain_data_provider.kind=graphql` 和 `graphql_configured=true`。
 - `known_signer_kinds` 包含 `worker-secret`、`local-daemon`、`waap`、`hardware` 和 `remote-signer`。
 

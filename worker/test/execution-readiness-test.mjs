@@ -20,6 +20,30 @@ function chainData({ dbusdc = '1000', deep = '10', suiMist = '1000000' } = {}) {
   }
 }
 
+function readyRuntimeStatus() {
+  return {
+    status: 'ok',
+    chain: 'sui:testnet',
+    signer: {
+      kind: 'worker-secret',
+      address: DEPLOYMENT.agent.address,
+      expected_address: DEPLOYMENT.agent.address,
+      signer_matches_expected: true,
+      available: true,
+      execution_configured: true,
+      execution_enabled: true,
+      unavailable_code: null,
+      unavailable_detail: null,
+    },
+    execution: {
+      configured: true,
+      enabled: true,
+      mode: 'worker-secret',
+      blocker_code: null,
+    },
+  }
+}
+
 {
   const readiness = await buildExecutionReadiness({
     env: { AGENT_KEY: 'configured-for-status-only', EXECUTION_ENABLED: 'true' },
@@ -29,6 +53,24 @@ function chainData({ dbusdc = '1000', deep = '10', suiMist = '1000000' } = {}) {
   assert.equal(readiness.status, 'ok')
   assert.equal(readiness.chain, 'sui:testnet')
   assert.equal(readiness.scope.executor_kind, 'deepbook')
+  assert.equal(readiness.ready, false)
+  assert.equal(readiness.execution_ready, false)
+  assert.equal(readiness.funding_ready, true)
+  assert.deepEqual(readiness.blocker_codes, ['INVALID_SIGNER_SECRET'])
+  assert.equal(readiness.execution_claimed, false, 'readiness never claims a transaction execution')
+  assert.equal(readiness.signer.kind, 'worker-secret')
+  assert.equal(readiness.signer.address, null)
+  assert.equal(readiness.signer.expected_address, DEPLOYMENT.agent.address)
+  assert.equal(readiness.execution.enabled, false)
+}
+
+{
+  const readiness = await buildExecutionReadiness({
+    env: {},
+    chainData: chainData(),
+    requested: { dbusdc_threshold: '100', deep_threshold: '1', sui_gas_threshold: '1000' },
+    runtimeStatus: readyRuntimeStatus(),
+  })
   assert.equal(readiness.ready, true)
   assert.equal(readiness.execution_ready, true)
   assert.equal(readiness.funding_ready, true)
@@ -60,9 +102,10 @@ function chainData({ dbusdc = '1000', deep = '10', suiMist = '1000000' } = {}) {
   assert.equal(thresholds.SUI_MIST.required, '2000')
 
   const readiness = await buildExecutionReadiness({
-    env: { AGENT_KEY: 'configured-for-status-only', EXECUTION_ENABLED: 'true', REQUIRED_DBUSDC_BALANCE: '500' },
+    env: { REQUIRED_DBUSDC_BALANCE: '500' },
     chainData: chainData({ dbusdc: '499' }),
     requested: { dbusdc_threshold: '1' },
+    runtimeStatus: readyRuntimeStatus(),
   })
   assert.equal(readiness.funding_ready, false)
   assert.equal(readiness.execution_ready, false)

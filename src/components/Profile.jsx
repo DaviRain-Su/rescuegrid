@@ -120,6 +120,14 @@ function RuntimeAuthorityStatus({ runtimeStatus }) {
       <MetaRow icon="key" iconColor="var(--accent)" label="Signer">
         <span className="mono" style={{ fontSize: 12.5, fontWeight: 600 }}>{signer.kind}</span>
       </MetaRow>
+      <MetaRow icon="wallet" iconColor={signer.signer_matches_expected ? 'var(--safe)' : 'var(--warn)'} label="Key address">
+        <div style={{ display: 'flex', alignItems: 'center', gap: 7, justifyContent: 'flex-end', flexWrap: 'wrap' }}>
+          {signer.address ? <CopyChip text={shortId(signer.address)} full={signer.address} /> : <span className="mono" style={{ fontSize: 11.5, color: 'var(--t2)' }}>not configured</span>}
+          {signer.expected_address && signer.signer_matches_expected === false && (
+            <span className="badge badge-warn" style={{ fontSize: 8.5 }}>mismatch</span>
+          )}
+        </div>
+      </MetaRow>
       <MetaRow icon="shield" iconColor="var(--sui)" label="Agent">
         <CopyChip text={shortId(agent.address) || 'agent'} full={agent.address || ''} />
       </MetaRow>
