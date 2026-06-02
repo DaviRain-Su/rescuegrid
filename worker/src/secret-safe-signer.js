@@ -20,3 +20,7 @@ export function keypairFromAgentSecret(secret, sourceLabel = 'AGENT_KEY') {
 export function keypairFromWorkerEnv(env) {
   return keypairFromAgentSecret(env?.AGENT_KEY, 'worker AGENT_KEY')
 }
+
+export function keypairFromLocalDaemonEnv(env) {
+  return keypairFromAgentSecret(env?.AGENT_KEY, 'local daemon AGENT_KEY')
+}

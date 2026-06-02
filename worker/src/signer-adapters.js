@@ -1,5 +1,5 @@
 import { DEPLOYMENT } from './sui-tx.js'
-import { keypairFromWorkerEnv } from './secret-safe-signer.js'
+import { keypairFromLocalDaemonEnv, keypairFromWorkerEnv } from './secret-safe-signer.js'
 
 export const SIGNER_KIND_WORKER_SECRET = 'worker-secret'
 export const SIGNER_KIND_LOCAL_DAEMON = 'local-daemon'
@@ -46,9 +46,28 @@ function workerSecretSignerAdapter(env, client) {
   }
 }
 
+function localDaemonSignerAdapter(env, client) {
+  const daemonMode = env?.RESCUEGRID_DAEMON_MODE === 'true'
+  return {
+    kind: SIGNER_KIND_LOCAL_DAEMON,
+    address: DEPLOYMENT.agent.address,
+    available: daemonMode && typeof env?.AGENT_KEY === 'string' && env.AGENT_KEY.trim() !== '',
+    unavailable_code: daemonMode ? 'EXECUTION_DISABLED' : 'UNSUPPORTED_SIGNER',
+    unavailable_detail: daemonMode
+      ? 'local daemon AGENT_KEY is unavailable'
+      : 'local-daemon signer requires RESCUEGRID_DAEMON_MODE=true and is not available in the cloud Worker runtime',
+    async signAndSubmit(transaction, options = { showEffects: true, showEvents: true }) {
+      if (!daemonMode) throw new Error('local-daemon signer is not available outside RESCUEGRID_DAEMON_MODE=true')
+      const signer = keypairFromLocalDaemonEnv(env)
+      return client.signAndExecuteTransaction({ signer, transaction, options })
+    },
+  }
+}
+
 export function resolveSignerAdapter(env, { client } = {}) {
   const kind = signerKindFromEnv(env)
   if (kind === SIGNER_KIND_WORKER_SECRET) return workerSecretSignerAdapter(env, client)
+  if (kind === SIGNER_KIND_LOCAL_DAEMON) return localDaemonSignerAdapter(env, client)
   return unsupportedSignerAdapter(kind)
 }
 

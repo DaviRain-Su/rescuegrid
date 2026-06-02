@@ -142,7 +142,7 @@ WaaP adapter requirements:
 Mainnet hardening path:
 
 1. Keep `worker-secret` for Testnet.
-2. Implement `local-daemon` for user-controlled keys.
+2. Keep the implemented `local-daemon` signer constrained to `RESCUEGRID_DAEMON_MODE=true` and local `AGENT_KEY`.
 3. Add a `waap` design spike that signs a RescueGrid-generated Sui Testnet `tx_json` through `waap-cli send-tx --tx-json ... --chain sui:testnet`.
 4. If the spike works, make WaaP one implementation of `SignerAdapter`, not a special runtime branch.
 5. Require a security review before any signer adapter can submit production trades.

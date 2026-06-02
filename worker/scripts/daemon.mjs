@@ -164,6 +164,7 @@ function runtimeEnv(config) {
   return {
     EXECUTION_ENABLED: config.execution_enabled ? 'true' : 'false',
     RESCUEGRID_DEMO_MODE: config.demo_mode ? 'true' : 'false',
+    RESCUEGRID_DAEMON_MODE: 'true',
     SIGNER_KIND: config.signer_kind,
     AGENT_KEY: readLocalAgentKey() || undefined,
   }
