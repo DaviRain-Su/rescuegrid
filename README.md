@@ -88,6 +88,7 @@ With a connected wallet + Worker URL, **New strategy → Sign & deploy** parses 
 Observed final mission evidence is Testnet-only:
 
 - Validators passed: `npm run build`, `npm --prefix worker test`, `npm --prefix worker run typecheck`, `cd move/rescuegrid && sui move test`, and `npm run config`.
+- `RESCUEGRID_FRONTEND_URL=http://localhost:5175 RESCUEGRID_WORKER_URL=http://localhost:8787 npm run baseline:smoke` passed against local Worker/frontend services and Sui Testnet reads.
 - Browser/API surfaces were verified on `http://localhost:5175` with live Worker reads to `http://localhost:8787`.
 - Scripted agent-key Testnet validation created, listed, surfaced in UI/API, and revoked a current-run policy; chain and Worker reads stayed consistent post-revoke.
 - `npm run demo:loop` is the G2 live demo validator: create -> activate/monitor -> force tick -> revoke -> post-revoke tick. In the current funding state it should report the documented execution gate, not a fake fill.

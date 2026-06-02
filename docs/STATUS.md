@@ -41,6 +41,14 @@ Broadcast with the dedicated agent key (agent-as-owner for the test):
 
 So create / list / activity / revoke are real on testnet. In the browser, a connected Sui wallet drives the same Worker-first flow (no DBUSDC needed); read-only screens can fall back to direct Sui/DeepBook reads when `VITE_WORKER_URL` is absent.
 
+## Baseline smoke — verified locally (2026-06-02)
+
+With Worker `http://localhost:8787` and frontend `http://localhost:5175` running:
+
+- `RESCUEGRID_FRONTEND_URL=http://localhost:5175 RESCUEGRID_WORKER_URL=http://localhost:8787 npm run baseline:smoke` passed.
+- Evidence covered deployment id consistency, `.env.local` Worker URL, Worker service root, frontend Vite env, Sui Testnet fullnode, RescueGrid package, agent passport, BalanceManager, DeepBook `SUI_DBUSDC` pool and Testnet indexer.
+- Funding gate stayed explicit: BalanceManager `DBUSDC_raw=0`, `DEEP_raw=0`, `EXECUTION_ENABLED=false`, and the smoke asserted `EXECUTION_DISABLED` with no execution tx submitted.
+
 ## Known gaps / next
 
 1. **DBUSDC funding** — the only true remaining gap, and **self-funding is confirmed impossible** on this testnet: DBUSDC `mint` is TreasuryCap-gated (cap not public), DEEP `mint` returns `FunctionNotFound` on the current package, and a SUI→DBUSDC swap needs DEEP for taker fees (a zero-DEEP swap fills 0 even with a live bid). Needs an **external DBUSDC source** (DeepBook-team faucet, or an address that already holds DBUSDC/DEEP). Once the agent BalanceManager holds DBUSDC: flip `EXECUTION_ENABLED=true` and rerun `npm run demo:loop`; the tick path will replay the execution PTB through `worker/src/executor-adapters.js`.
