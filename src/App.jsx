@@ -22,6 +22,7 @@ import {
 } from './api.js'
 import { EMPTY_LIVE_DASHBOARD, liveDashboardOwnerKey, useLiveDashboard } from './queries/live.js'
 import { apiFailure, createPolicyWithWallet, revokePolicyWithWallet } from './queries/wallet-flow.js'
+import { sessionCapabilities } from './session-mode.js'
 import { Icon, Logo, Token, hexToRgba } from './components/primitives.jsx'
 import { ZkLogin } from './components/ZkLogin.jsx'
 import { Dashboard } from './components/Dashboard.jsx'
@@ -240,9 +241,11 @@ export default function App({ onExit }) {
   const { mutateAsync: signPersonalMessage } = useSignPersonalMessage()
   const { mutate: disconnect } = useDisconnectWallet()
   const queryClient = useQueryClient()
-  const liveMode = sessionMode === 'wallet' && !!account
-  const readOnlyLiveMode = sessionMode === 'readonly' && WORKER_CONFIGURED
-  const liveReadsEnabled = liveMode || readOnlyLiveMode
+  const { liveMode, readOnlyLiveMode, liveReadsEnabled, demoControlsEnabled } = sessionCapabilities({
+    sessionMode,
+    workerConfigured: WORKER_CONFIGURED,
+    account,
+  })
   const owner = liveMode ? account.address : (readOnlyLiveMode ? deployment.agent.address : RG.user.addr)
   const ownerShort = liveMode
     ? owner.slice(0, 6) + '…' + owner.slice(-4)
@@ -282,6 +285,8 @@ export default function App({ onExit }) {
   const refreshRiskControls = () => queryClient.invalidateQueries({ queryKey: ['risk', 'controls', owner] })
   const liveRiskControls = riskControlsQuery.data?.status === 'ok' ? riskControlsQuery.data : null
   const liveGlobalStopped = Boolean(liveRiskControls?.global_stopped)
+  const globalStopActive = liveReadsEnabled ? liveGlobalStopped : halted
+  const shellAgentOn = liveReadsEnabled ? !liveGlobalStopped : agentOn
   const liveStrategyStops = Array.isArray(liveRiskControls?.strategy_stops)
     ? liveRiskControls.strategy_stops
     : []
@@ -334,6 +339,10 @@ export default function App({ onExit }) {
   const after = (ms, fn) => timers.current.push(setTimeout(fn, ms))
 
   const simulateCrash = () => {
+    if (!demoControlsEnabled) {
+      showToast('Flash crash simulation is available only in demo mode', 'var(--warn)')
+      return
+    }
     clearTimers()
     setView('dashboard')
     setCrashState('crashing')
@@ -557,6 +566,22 @@ export default function App({ onExit }) {
     showToast('Agents resumed — policies restored to prior state', 'var(--accent)')
   }
 
+  const stopAllAgents = () => {
+    if (liveReadsEnabled) {
+      handleGlobalStop(true)
+      return
+    }
+    emergencyStop()
+  }
+
+  const resumeAllAgents = () => {
+    if (liveReadsEnabled) {
+      handleGlobalStop(false)
+      return
+    }
+    resumeAgents()
+  }
+
   // Live create-policy: Worker parse -> Worker builds unsigned create_policy PTB
   // -> wallet signs -> Worker activates the Durable Object runtime.
   const deployLive = async (text, meta) => {
@@ -606,11 +631,28 @@ export default function App({ onExit }) {
   }
 
   const handleAuth = (kind = 'demo') => {
+    if (kind !== 'demo') {
+      clearTimers()
+      setCrashState('idle')
+      setRisk(38)
+      setSuiPrice(4.182)
+      setSuiSpark(BASE_SPARK)
+    }
     setSessionMode(kind)
     setAuthed(true)
   }
 
   const shownActivity = liveReadsEnabled ? liveActivity : activity
+  const shellCrashState = liveReadsEnabled ? 'idle' : crashState
+  const shellSuiPrice = liveReadsEnabled ? Number(liveMarket?.SUI_DBUSDC?.last_price ?? suiPrice) : suiPrice
+  const shellSuiChange = liveReadsEnabled ? liveMarket?.sui_change ?? RG.prices.SUI.chg : RG.prices.SUI.chg
+  const liveSpark = Array.isArray(liveMarket?.sui_spark) && liveMarket.sui_spark.length >= 2
+    ? liveMarket.sui_spark
+    : BASE_SPARK
+  const state = { risk, suiPrice, suiSpark, crashState, mode, agentOn: shellAgentOn, activity: shownActivity }
+  const dashboardState = liveReadsEnabled
+    ? { ...state, suiPrice: shellSuiPrice, suiSpark: liveSpark, crashState: 'idle', activity: liveActivity }
+    : state
   const sourceMeta = buildSourceMeta({
     live: liveReadsEnabled,
     loading: liveLoading,
@@ -618,7 +660,6 @@ export default function App({ onExit }) {
     meta: liveReadMeta,
     count: liveActivityLoading ? '…' : shownActivity.length,
   })
-  const state = { risk, suiPrice, suiSpark, crashState, mode, agentOn, activity: shownActivity }
 
   if (!authed) return (
     <>
@@ -672,9 +713,11 @@ export default function App({ onExit }) {
             <div className="card rg-agentcard" style={{ padding: 14, marginBottom: 12 }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
                 <span className="eyebrow">Agent</span>
-                <button aria-label={agentOn ? 'Disable agent' : 'Enable agent'} onClick={() => setAgentOn(v => !v)} style={{ width: 38, height: 22, borderRadius: 100, border: 'none', cursor: 'pointer', position: 'relative',
-                  background: agentOn ? 'var(--accent)' : 'var(--glass-hi)', transition: 'all .18s' }}>
-                  <div style={{ position: 'absolute', top: 2, left: agentOn ? 18 : 2, width: 18, height: 18, borderRadius: '50%', background: '#fff', transition: 'all .18s' }} />
+                <button aria-label={shellAgentOn ? 'Disable agent' : 'Enable agent'} disabled={liveReadsEnabled}
+                  title={liveReadsEnabled ? 'Live agent state is controlled by signed risk controls' : (shellAgentOn ? 'Disable agent' : 'Enable agent')}
+                  onClick={() => { if (!liveReadsEnabled) setAgentOn(v => !v) }} style={{ width: 38, height: 22, borderRadius: 100, border: 'none', cursor: liveReadsEnabled ? 'not-allowed' : 'pointer', position: 'relative',
+                  background: shellAgentOn ? 'var(--accent)' : 'var(--glass-hi)', opacity: liveReadsEnabled ? 0.72 : 1, transition: 'all .18s' }}>
+                  <div style={{ position: 'absolute', top: 2, left: shellAgentOn ? 18 : 2, width: 18, height: 18, borderRadius: '50%', background: '#fff', transition: 'all .18s' }} />
                 </button>
               </div>
               <div style={{ display: 'flex', gap: 6, background: 'var(--bg-0)', borderRadius: 'var(--r-sm)', padding: 4 }}>
@@ -709,13 +752,15 @@ export default function App({ onExit }) {
             </div>
 
             {/* emergency circuit breaker */}
-            {halted ? (
-              <Button className="mb-3 bg-accent text-accent-foreground font-semibold" fullWidth onPress={resumeAgents}
+            {globalStopActive ? (
+              <Button className="mb-3 bg-accent text-accent-foreground font-semibold" fullWidth onPress={resumeAllAgents}
+                isDisabled={riskControlMutation.isPending}
                 startContent={<Icon name="refresh" size={15} />}>
                 <span className="rg-navlabel">Resume agents</span>
               </Button>
             ) : (
-              <Button className="mb-3 bg-danger text-white font-semibold" fullWidth onPress={emergencyStop}
+              <Button className="mb-3 bg-danger text-white font-semibold" fullWidth onPress={stopAllAgents}
+                isDisabled={riskControlMutation.isPending}
                 startContent={<Icon name="alert" size={15} />}>
                 <span className="rg-navlabel">Emergency stop</span>
               </Button>
@@ -754,8 +799,8 @@ export default function App({ onExit }) {
               {['SUI', 'DEEP'].map(s => {
                 const pr = RG.prices[s]
                 const isSui = s === 'SUI'
-                const price = isSui ? suiPrice : pr.usd
-                const chg = isSui && crashState !== 'idle' ? -8.42 : pr.chg
+                const price = isSui ? shellSuiPrice : pr.usd
+                const chg = isSui && shellCrashState !== 'idle' ? -8.42 : isSui ? shellSuiChange : pr.chg
                 return (
                   <div key={s} style={{ display: 'flex', alignItems: 'center', gap: 7 }}>
                     <Token sym={s} size={20} />
@@ -812,7 +857,7 @@ export default function App({ onExit }) {
             </div>
 
             {/* demo controls */}
-            {crashState === 'idle' ? (
+            {demoControlsEnabled && (crashState === 'idle' ? (
               <Button size="sm" onPress={simulateCrash} isDisabled={halted}
                 className="rg-btn-danger-2"
                 startContent={<Icon name="alert" size={14} />}>
@@ -822,7 +867,7 @@ export default function App({ onExit }) {
               <Button size="sm" className="rg-btn-2" onPress={resetDemo} startContent={<Icon name="refresh" size={14} />}>
                 <span className="rg-navlabel">Reset demo</span>
               </Button>
-            )}
+            ))}
           </header>
 
           {/* scroll body */}
@@ -841,7 +886,7 @@ export default function App({ onExit }) {
                   <span className="dot"></span>{sourceMeta.label}</span>
               </div>
             )}
-            {halted && (
+            {globalStopActive && (
               <div style={{ display: 'flex', alignItems: 'center', gap: 14, padding: '14px 18px', borderRadius: 'var(--r-lg)', marginBottom: 18,
                 background: 'var(--danger-dim)', border: '1px solid rgba(255,84,112,0.45)' }}>
                 <div style={{ width: 38, height: 38, borderRadius: 10, background: 'var(--danger)', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
@@ -851,7 +896,8 @@ export default function App({ onExit }) {
                   <div className="display" style={{ fontWeight: 600, fontSize: 14.5, color: 'var(--danger)' }}>Circuit breaker engaged — all agents halted</div>
                   <div style={{ fontSize: 12.5, color: 'var(--t1)', marginTop: 1 }}>Every policy is frozen on-chain. No agent can execute until you resume — your funds and limits are untouched.</div>
                 </div>
-                <Button size="sm" onPress={resumeAgents}
+                <Button size="sm" onPress={resumeAllAgents}
+                  isDisabled={riskControlMutation.isPending}
                   className="rg-btn-2"
                   style={{ borderColor: 'var(--accent)', color: 'var(--accent)', background: 'var(--accent-dim)' }}
                   startContent={<Icon name="refresh" size={13} />}>
@@ -859,13 +905,13 @@ export default function App({ onExit }) {
                 </Button>
               </div>
             )}
-            {view === 'dashboard' && <Dashboard state={state} live={liveReadsEnabled ? { summary: liveSummary, market: liveMarket, activity: liveActivity } : null} />}
+            {view === 'dashboard' && <Dashboard state={dashboardState} live={liveReadsEnabled ? { summary: liveSummary, market: liveMarket, activity: liveActivity } : null} />}
             {view === 'new' && <NewStrategy mode={mode} setMode={setMode} onDone={deployPolicy} seed={seed} />}
             {view === 'activity' && <ActivityView activity={shownActivity} policies={displayedPolicies} onTx={setTxView} live={liveReadsEnabled} loading={liveActivityLoading} source={sourceMeta} />}
             {view === 'markets' && <MarketsView onDeploy={(s) => { setSeed(s); setView('new') }} live={liveFeed} onToast={showToast} />}
             {view === 'risk' && <RiskCenter
               policies={displayedPolicies}
-              stopped={halted}
+              stopped={globalStopActive}
               onEmergencyStop={emergencyStop}
               onTogglePolicy={liveReadsEnabled ? undefined : togglePolicy}
               onToggleGlobalStop={liveReadsEnabled ? handleGlobalStop : undefined}
