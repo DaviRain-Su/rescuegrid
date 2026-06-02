@@ -7,6 +7,7 @@ import { useState, useEffect } from 'react'
 import { RG } from '../data.js'
 import { getTransaction } from '../api.js'
 import { Icon } from './primitives.jsx'
+import { Button } from '@heroui/react'
 
 function CapRow({ granted, label, fn }) {
   return (
@@ -77,7 +78,7 @@ export function PolicyInspect({ p, activity, onClose, onRevoke, onTx, readOnly =
                   <span className={`dot ${statusMeta.pulse ? 'pulse' : ''}`}></span>{statusMeta.label}</span>
               </div>
             </div>
-            <button onClick={onClose} className="btn btn-sm btn-ghost" style={{ padding: 8 }}><Icon name="x" size={16} /></button>
+            <Button isIconOnly variant="light" size="sm" onPress={onClose} aria-label="Close"><Icon name="x" size={16} /></Button>
           </div>
         </div>
 
@@ -194,10 +195,10 @@ export function PolicyInspect({ p, activity, onClose, onRevoke, onTx, readOnly =
 
         {/* footer revoke */}
         <div style={{ position: 'sticky', bottom: 0, background: 'var(--bg-2)', borderTop: '1px solid var(--border)', padding: '16px 24px', display: 'flex', gap: 10 }}>
-          <button className="btn btn-ghost" style={{ flex: 1, justifyContent: 'center' }} onClick={onClose}>Close</button>
-          <button className="btn btn-danger" disabled={readOnly || p.status === 'revoked'} style={{ flex: 1, justifyContent: 'center', opacity: readOnly || p.status === 'revoked' ? 0.55 : 1 }} onClick={() => { onRevoke(p.id); onClose() }}>
-            <Icon name="x" size={15} stroke={2.4} /> {readOnly ? 'Read-only mode' : p.status === 'revoked' ? 'Already revoked' : 'Revoke authority'}
-          </button>
+          <Button variant="bordered" style={{ flex: 1 }} onPress={onClose}>Close</Button>
+          <Button className="bg-danger text-white" style={{ flex: 1 }} isDisabled={readOnly || p.status === 'revoked'} onPress={() => { onRevoke(p.id); onClose() }} startContent={<Icon name="x" size={15} stroke={2.4} />}>
+            {readOnly ? 'Read-only mode' : p.status === 'revoked' ? 'Already revoked' : 'Revoke authority'}
+          </Button>
         </div>
       </div>
     </div>
@@ -253,7 +254,7 @@ export function TxDrawer({ tx, onClose }) {
                 Testnet{data?.checkpoint ? ` · checkpoint ${data.checkpoint.toLocaleString()}` : ''}
               </div>
             </div>
-            <button onClick={onClose} className="btn btn-sm btn-ghost" style={{ padding: 8 }}><Icon name="x" size={16} /></button>
+            <Button isIconOnly variant="light" size="sm" onPress={onClose} aria-label="Close"><Icon name="x" size={16} /></Button>
           </div>
         </div>
 
@@ -326,9 +327,9 @@ export function TxDrawer({ tx, onClose }) {
             </>
           )}
 
-          <button className="btn" style={{ justifyContent: 'center' }} onClick={() => window.open(explorer, '_blank', 'noopener,noreferrer')}>
-            <Icon name="link" size={14} /> View on SuiScan
-          </button>
+          <Button variant="bordered" className="justify-center" onPress={() => window.open(explorer, '_blank', 'noopener,noreferrer')} startContent={<Icon name="link" size={14} />}>
+            View on SuiScan
+          </Button>
         </div>
       </div>
     </div>
