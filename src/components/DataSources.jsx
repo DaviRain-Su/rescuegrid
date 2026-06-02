@@ -41,7 +41,7 @@ function FeedTestButton({ feed }) {
 }
 
 export function DataSources({ onToast, live, setLive }) {
-  const feeds = RG.dataFeeds;
+  const feeds = RG.dataFeeds.filter(f => f.scope === 'sui');
   const groups = [...new Set(feeds.map(f => f.group))];
   const liveCount = feeds.filter(f => f.access !== 'proxy').length;
   const proxyCount = feeds.filter(f => f.access === 'proxy').length;
@@ -55,13 +55,13 @@ export function DataSources({ onToast, live, setLive }) {
           <Icon name="globe" size={22} />
         </div>
         <div style={{ flex: 1, minWidth: 240 }}>
-          <div className="display" style={{ fontSize: 16, fontWeight: 600 }}>Feed mode</div>
+          <div className="display" style={{ fontSize: 16, fontWeight: 600 }}>Sui feed mode</div>
           <div style={{ fontSize: 12.5, color: 'var(--t2)', marginTop: 3, maxWidth: 560, lineHeight: 1.5 }}>
-            The app ships on a <strong style={{ color: 'var(--t0)' }}>structured demo feed</strong> shaped exactly like production. Flip to live and the same components read real public APIs — keyed/signing feeds still route through a backend.
+            The app ships on a <strong style={{ color: 'var(--t0)' }}>Sui-only structured demo feed</strong> shaped like production. Flip to live and the same components read Sui-scoped public APIs — keyed signing still routes through the backend.
           </div>
         </div>
         {/* toggle */}
-        <div onClick={() => { const n = !live; setLive(n); onToast && onToast(n ? 'Live feed armed — public sources fetch directly; keyed feeds need the backend' : 'Back to demo feed — deterministic data for the prototype', n ? 'var(--accent)' : 'var(--sui)'); }}
+        <div onClick={() => { const n = !live; setLive(n); onToast && onToast(n ? 'Sui live feed armed — public sources fetch directly; keyed feeds need the backend' : 'Back to Sui demo feed — deterministic data for the prototype', n ? 'var(--accent)' : 'var(--sui)'); }}
           style={{ cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 11, padding: '10px 14px', borderRadius: 'var(--r-md)',
             border: `1.5px solid ${live ? 'var(--accent)' : 'var(--border)'}`, background: live ? 'var(--accent-dim)' : 'var(--glass)' }}>
           <span style={{ fontSize: 12, fontWeight: 600, color: live ? 'var(--accent)' : 'var(--t2)' }}>{live ? 'Live feed' : 'Demo feed'}</span>
@@ -73,7 +73,7 @@ export function DataSources({ onToast, live, setLive }) {
 
       {/* counts */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: 14 }}>
-        {[['Feeds wired', feeds.length, 'var(--t0)'], ['Browser-direct', liveCount, 'var(--safe)'], ['Need backend', proxyCount, 'var(--warn)']].map(([k, v, c]) => (
+        {[['Sui feeds', feeds.length, 'var(--t0)'], ['Direct Sui reads', liveCount, 'var(--safe)'], ['Worker-backed', proxyCount, 'var(--warn)']].map(([k, v, c]) => (
           <div key={k} className="card" style={{ padding: '14px 16px' }}>
             <div className="eyebrow">{k}</div>
             <div className="mono display" style={{ fontSize: 22, fontWeight: 600, marginTop: 6, color: c }}>{v}</div>
@@ -134,7 +134,7 @@ export function DataSources({ onToast, live, setLive }) {
               <span style={{ fontSize: 12.5, fontWeight: 600, color: 'var(--safe)' }}>Browser-direct</span>
             </div>
             <div style={{ fontSize: 11.5, color: 'var(--t1)', lineHeight: 1.5 }}>
-              Public, CORS-open read APIs (DefiLlama, Pyth, CoinGecko, Sui RPC) are fetched straight from the client and mapped into the same data shapes — no server. The <strong style={{ color: 'var(--t0)' }}>Test live</strong> button proves it end-to-end.
+              Public, CORS-open Sui reads (DefiLlama Sui pools, Pyth Sui prices, Sui token tickers and Sui RPC) are fetched straight from the client and mapped into the same data shapes. The <strong style={{ color: 'var(--t0)' }}>Test live</strong> button proves it end-to-end.
             </div>
           </div>
           <div style={{ padding: '13px 15px', borderRadius: 'var(--r-md)', background: 'var(--glass)', border: '1px solid var(--border)' }}>

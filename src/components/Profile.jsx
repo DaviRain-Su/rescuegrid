@@ -115,6 +115,7 @@ export function Profile({ account, holdings, policies, funding = null, live = fa
   const activePol = policies.filter(p => p.status === 'active').length
   const totalCap = policies.reduce((s, p) => s + p.budgetCap, 0)
   const usedCap = policies.reduce((s, p) => s + p.budgetUsed, 0)
+  const protocolScopes = a.protocolScopes || []
 
   const tokenColor = { SUI: 'var(--sui)', USDC: '#3fa0ff', DEEP: 'var(--safe)', WAL: '#7d8bff' }
   const advisory = <span className="badge badge-neutral" style={{ fontSize: 9, marginLeft: 6 }}>advisory</span>
@@ -427,20 +428,20 @@ export function Profile({ account, holdings, policies, funding = null, live = fa
         </div>
 
         {/* ---------- scoped Sui protocol permissions (demo persona) ---------- */}
-        {a.exchanges && a.exchanges.length > 0 && (
+        {protocolScopes.length > 0 && (
           <div className="card" style={{ padding: '16px 18px' }}>
             <div className="card-hd" style={{ padding: 0, marginBottom: 14 }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                 <span style={{ color: 'var(--warn)' }}><Icon name="swap" size={16} /></span>
                 <div className="card-title">Scoped Sui protocols</div>
-                <span className="badge badge-neutral" style={{ fontSize: 9.5 }}>{a.exchanges.filter(e => e.status === 'connected').length} linked</span>
+                <span className="badge badge-neutral" style={{ fontSize: 9.5 }}>{protocolScopes.filter(e => e.status === 'connected').length} linked</span>
               </div>
               <Button size="sm" variant="light" className="rg-btn-ghost" onPress={() => onToast && onToast('Add a Sui protocol scope to a policy', 'var(--sui)')}>
                 <Icon name="plus" size={13} /> Connect
               </Button>
             </div>
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 10 }}>
-              {a.exchanges.map(ex => {
+              {protocolScopes.map(ex => {
                 const on = ex.status === 'connected'
                 return (
                   <div key={ex.id} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '12px 14px', borderRadius: 'var(--r-md)',

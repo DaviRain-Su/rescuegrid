@@ -349,10 +349,10 @@ export function ActiveStrategy({ p, activity, onBack, onToggle, onRebalance, onR
   const liveDeltaN = L.delta.neutral ? +(jit(2) * 0.3).toFixed(2) : baseDelta;
   const liveDelta = { v: (liveDeltaN >= 0 ? '+' : '−') + Math.abs(liveDeltaN).toFixed(2) + '%', neutral: Math.abs(liveDeltaN) <= 5 };
   // attach a live mark price to each leg
-  const markBase = { SUI: 4.182, DEEP: 0.1043, WAL: 0.627 }[sc] || 4.182;
+  const markSeed = { SUI: 4.182, DEEP: 0.1043, WAL: 0.627 }[sc] || 4.182;
   L.legs = L.legs.map((l, i) => {
-    const mk = markBase * (1 + (active ? jit(i + 3) * 0.0011 : 0));
-    return { ...l, mark: markBase < 1 ? mk.toFixed(4) : mk.toFixed(markBase > 1000 ? 0 : 3) };
+    const mk = markSeed * (1 + (active ? jit(i + 3) * 0.0011 : 0));
+    return { ...l, mark: markSeed < 1 ? mk.toFixed(4) : mk.toFixed(markSeed > 1000 ? 0 : 3) };
   });
 
   const kpis = [

@@ -128,7 +128,7 @@ export function Dashboard({ state, live }) {
       { k: 'Budget utilisation', w: Math.round(util * 50), lv: util > 0.7 ? 'danger' : util > 0.4 ? 'warn' : 'safe' },
       { k: 'Concentration', w: Math.round(conc * 30), lv: conc > 0.5 ? 'warn' : 'safe' },
       { k: 'Market volatility', w: Math.round(volContribution), lv: (vol || 0) > 4 ? 'danger' : (vol || 0) > 2 ? 'warn' : 'safe' },
-      { k: 'Baseline', w: 15, lv: 'safe' },
+      { k: 'Reference', w: 15, lv: 'safe' },
     ],
   } : null
 

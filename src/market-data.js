@@ -364,13 +364,13 @@ export function attachMarketData(RG) {
   }
 
   RG.dataFeeds = [
-    { id: 'llama', group: 'Market data', name: 'Sui DeFi yields & TVL', provider: 'DefiLlama', endpoint: 'yields.llama.fi/pools', type: 'REST', access: 'live', cadence: '60s', powers: 'Sui yield monitor and opportunities', test: 'https://yields.llama.fi/pools' },
-    { id: 'pyth', group: 'Market data', name: 'Sui spot & oracle prices', provider: 'Pyth / Hermes', endpoint: 'hermes.pyth.network', type: 'REST / SSE', access: 'live', cadence: '400ms', powers: 'Prices, risk gauge and Guardian', test: 'https://hermes.pyth.network/v2/price_feeds?query=sui&asset_type=crypto' },
-    { id: 'cg', group: 'Market data', name: 'SUI / DEEP / WAL 24h data', provider: 'CoinGecko', endpoint: 'api.coingecko.com', type: 'REST', access: 'live', cadence: '60s', powers: 'Tickers and sparklines', test: 'https://api.coingecko.com/api/v3/ping' },
-    { id: 'suirpc', group: 'On-chain', name: 'Sui full-node RPC', provider: 'Sui / Mysten', endpoint: 'fullnode.testnet.sui.io', type: 'JSON-RPC', access: 'live', cadence: 'realtime', powers: 'Balances, policy objects and checkpoints', test: null },
-    { id: 'deepbook', group: 'On-chain', name: 'DeepBook order book', provider: 'DeepBook indexer', endpoint: 'deepbook-indexer.testnet', type: 'REST / WS', access: 'live', cadence: 'realtime', powers: 'Spot books and CLOB depth', test: null },
-    { id: 'bluefin', group: 'Derivatives', name: 'Bluefin funding rates', provider: 'Bluefin', endpoint: 'public funding endpoint', type: 'REST / WS', access: 'mixed', cadence: '5s', powers: 'Sui perp hedge monitor', test: null },
-    { id: 'signer', group: 'Execution', name: 'Sui agent signer / executor', provider: 'zkLogin + Cloudflare', endpoint: 'durable object + signer', type: 'internal', access: 'proxy', cadence: 'on demand', powers: 'Policy execution and gas sponsor', test: null },
+    { id: 'llama', scope: 'sui', group: 'Market data', name: 'Sui DeFi yields & TVL', provider: 'DefiLlama', endpoint: 'yields.llama.fi/pools?chain=Sui', type: 'REST', access: 'live', cadence: '60s', powers: 'Sui yield monitor and opportunities', test: 'https://yields.llama.fi/pools' },
+    { id: 'pyth', scope: 'sui', group: 'Market data', name: 'Sui spot & oracle prices', provider: 'Pyth / Hermes', endpoint: 'hermes.pyth.network?query=sui', type: 'REST / SSE', access: 'live', cadence: '400ms', powers: 'Prices, risk gauge and Guardian', test: 'https://hermes.pyth.network/v2/price_feeds?query=sui&asset_type=crypto' },
+    { id: 'cg', scope: 'sui', group: 'Market data', name: 'SUI / DEEP / WAL 24h data', provider: 'CoinGecko', endpoint: 'api.coingecko.com/sui-tokens', type: 'REST', access: 'live', cadence: '60s', powers: 'Tickers and sparklines', test: 'https://api.coingecko.com/api/v3/ping' },
+    { id: 'suirpc', scope: 'sui', group: 'On-chain', name: 'Sui full-node RPC', provider: 'Sui / Mysten', endpoint: 'fullnode.testnet.sui.io', type: 'JSON-RPC', access: 'live', cadence: 'realtime', powers: 'Balances, policy objects and checkpoints', test: null },
+    { id: 'deepbook', scope: 'sui', group: 'On-chain', name: 'DeepBook order book', provider: 'DeepBook indexer', endpoint: 'deepbook-indexer.testnet', type: 'REST / WS', access: 'live', cadence: 'realtime', powers: 'Spot books and CLOB depth', test: null },
+    { id: 'bluefin', scope: 'sui', group: 'Derivatives', name: 'Bluefin funding rates', provider: 'Bluefin', endpoint: 'public Sui funding endpoint', type: 'REST / WS', access: 'mixed', cadence: '5s', powers: 'Sui perp hedge monitor', test: null },
+    { id: 'signer', scope: 'sui', group: 'Execution', name: 'Sui agent signer / executor', provider: 'zkLogin + Cloudflare', endpoint: 'durable object + Sui signer', type: 'internal', access: 'proxy', cadence: 'on demand', powers: 'Policy execution and gas sponsor', test: null },
   ]
 
   RG.runtimes = {

@@ -288,7 +288,7 @@ export const RG = {
     sessionExpires: '~36h',
     ephemeralKey: 'ed25519 · 0x4c8d…71ab',
     gas: { sponsored: 47, saved: 0.0421, station: 'RescueGrid Gas Station' },
-    exchanges: [],
+    protocolScopes: [],
   },
 }
 

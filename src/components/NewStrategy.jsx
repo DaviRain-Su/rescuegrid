@@ -187,7 +187,7 @@ export function NewStrategy({ onDone, mode, setMode, seed }) {
 
   const classify = (s) => {
     if (/entire|all-?in|ignore slippage|everything|max leverage|20x/i.test(s)) return 'risky'
-    if (/spot arb|cross-?venue|cross-?exchange/i.test(s)) return 'spot'
+    if (/spot arb|sui dex spread|deepbook.*cetus|cetus.*deepbook/i.test(s)) return 'spot'
     if (/funding|arb|arbitrage|perp|delta-?neutral|basis/i.test(s)) return 'funding-arb'
     if (/\blp\b|liquidity|concentrated|re-?center|pool range/i.test(s)) return 'lp'
     if (/stablecoin|idle|yield router|lend|lending|supply|money market|best (rate|yield)/i.test(s)) return 'lend'

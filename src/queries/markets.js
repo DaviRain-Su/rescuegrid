@@ -2,6 +2,11 @@ import { useQuery } from '@tanstack/react-query'
 import { RG } from '../data.js'
 
 const LIVE_CHAINS = new Set(['Sui'])
+const SUI_CHAIN_IDS = new Set(['sui'])
+
+export function isSuiYieldRow(row) {
+  return SUI_CHAIN_IDS.has((row?.chain || '').toLowerCase())
+}
 
 export const defiLlamaPoolsQueryKey = ['defillama', 'yield-pools']
 
@@ -16,7 +21,7 @@ export function mapDefiLlamaPool(pool) {
   const sym = (pool.symbol || '?').toUpperCase()
   const isLP = /[-/]/.test(sym)
   const cleanSymbol = sym.replace(/[^A-Z]/g, '')
-  const isLST = /^(ST|HASUI|VSUI|AFSUI|JITOSOL|AMAPT)/.test(cleanSymbol) || /staked/i.test(pool.poolMeta || '')
+  const isLST = /^(ST|HASUI|VSUI|AFSUI)/.test(cleanSymbol) || /staked/i.test(pool.poolMeta || '')
   const type = isLST ? 'LST' : isLP ? 'LP' : 'Lending'
   const risk = apy >= 30 || pool.ilRisk === 'yes' ? 'high' : apy >= 12 ? 'med' : 'low'
   const d7 = +(pool.apyPct7D || 0)
@@ -77,7 +82,7 @@ export function mapYieldPoolToOpportunity(pool) {
 
 export function demoYieldOpportunities(typeScenario) {
   const chainName = (id) => (RG.chains.find((c) => c.id === id) || {}).name || id
-  return RG.yields.map((yieldRow) => ({
+  return RG.yields.filter(isSuiYieldRow).map((yieldRow) => ({
     kind: 'yield',
     proto: yieldRow.proto,
     name: RG.protocols[yieldRow.proto].name,

@@ -3,7 +3,7 @@ import { flexRender, getCoreRowModel, useReactTable } from '@tanstack/react-tabl
 import { RG } from '../data.js'
 import { Icon, Token, Sparkline, ProtoGlyph, fmtUsd, fmtTvlM } from './primitives.jsx'
 import { PoolDrawer } from './MarketDrawers.jsx'
-import { demoYieldOpportunities, mapYieldPoolToOpportunity, useDefiLlamaYieldPools } from '../queries/markets.js'
+import { demoYieldOpportunities, isSuiYieldRow, mapYieldPoolToOpportunity, useDefiLlamaYieldPools } from '../queries/markets.js'
 
 const RISK_META = {
   low:  { c: 'var(--safe)',   cls: 'badge-safe' },
@@ -35,7 +35,7 @@ function YieldMonitor({ onDeploy, onInspect, chain, live, onToast }) {
   const [sort, setSort] = useState('apy');
   const types = ['all', 'Lending', 'LP', 'LST', 'Vault', 'CLOB'];
   const livePoolsQuery = useDefiLlamaYieldPools({ enabled: live });
-  const liveRows = livePoolsQuery.data || null;
+  const liveRows = livePoolsQuery.data ? livePoolsQuery.data.filter(isSuiYieldRow) : null;
   const liveState = !live ? 'idle' : livePoolsQuery.isPending ? 'loading' : livePoolsQuery.isError ? 'err' : 'ok';
 
   useEffect(() => {
@@ -49,9 +49,9 @@ function YieldMonitor({ onDeploy, onInspect, chain, live, onToast }) {
     }
   }, [live, livePoolsQuery.isSuccess, livePoolsQuery.isError, livePoolsQuery.dataUpdatedAt, livePoolsQuery.error, livePoolsQuery.data]);
 
-  const source = (live && liveRows) ? liveRows : RG.yields;
+  const source = (live && liveRows) ? liveRows : RG.yields.filter(isSuiYieldRow);
   const rows = useMemo(() => source
-    .filter(y => (chain === 'all' || y.chain === chain) && (type === 'all' || y.type === type))
+    .filter(y => isSuiYieldRow(y) && y.chain === chain && (type === 'all' || y.type === type))
     .map(y => ({ ...y, apy: y.apy != null ? y.apy : y.base + y.reward }))
     .sort((a, b) => sort === 'apy' ? b.apy - a.apy : sort === 'tvl' ? b.tvl - a.tvl
       : ({ low: 0, med: 1, high: 2 }[a.risk] - { low: 0, med: 1, high: 2 }[b.risk]))
@@ -121,7 +121,7 @@ function YieldMonitor({ onDeploy, onInspect, chain, live, onToast }) {
           <div style={{ paddingLeft: 6 }}>
             <div style={{ display: 'flex', alignItems: 'baseline', gap: 6 }}>
               <span className="mono display" style={{ fontSize: 18, fontWeight: 600, color: 'var(--accent)' }}>{y.apy.toFixed(1)}%</span>
-              <span className="mono" style={{ fontSize: 10.5, color: 'var(--t2)' }}>{y.base.toFixed(1)} base{y.reward > 0 ? ` · ${y.reward.toFixed(1)} rwd` : ''}</span>
+              <span className="mono" style={{ fontSize: 10.5, color: 'var(--t2)' }}>{y.base.toFixed(1)} supply{y.reward > 0 ? ` · ${y.reward.toFixed(1)} rwd` : ''}</span>
             </div>
             <div style={{ height: 4, background: 'var(--bg-0)', borderRadius: 100, overflow: 'hidden', marginTop: 5, display: 'flex', maxWidth: 150 }}>
               <div style={{ width: `${basePct}%`, background: 'var(--sui)' }} />
@@ -203,7 +203,7 @@ function YieldMonitor({ onDeploy, onInspect, chain, live, onToast }) {
         {live && liveState === 'loading'
           ? <><span className="dot pulse" style={{ background: 'var(--accent)' }}></span> Fetching live pools from DefiLlama…</>
           : live && liveState === 'ok'
-          ? <><Icon name="globe" size={13} style={{ color: 'var(--accent)' }} /> Live · real pools from DefiLlama · click a row for details · {rows.length} shown</>
+          ? <><Icon name="globe" size={13} style={{ color: 'var(--accent)' }} /> Live · Sui pools from DefiLlama · click a row for details · {rows.length} shown</>
           : live && liveState === 'err'
           ? <><Icon name="alert" size={13} style={{ color: 'var(--warn)' }} /> Live feed unavailable — showing demo data · {rows.length} pools</>
           : <><Icon name="eye" size={13} style={{ color: 'var(--sui)' }} /> Click any pool for its 30-day APY / TVL history and on-chain details · tap the bolt to hand it to the agent · {rows.length} pools shown.</>}
@@ -442,7 +442,7 @@ function Opportunities({ onDeploy, live, onToast }) {
   }, [live, livePoolsQuery.isSuccess, livePoolsQuery.isError, livePoolsQuery.dataUpdatedAt, livePoolsQuery.data]);
 
   const liveYields = live && livePoolsQuery.data
-    ? livePoolsQuery.data.slice().sort((a, b) => b.apy - a.apy).slice(0, 16).map(mapYieldPoolToOpportunity)
+    ? livePoolsQuery.data.filter(isSuiYieldRow).slice().sort((a, b) => b.apy - a.apy).slice(0, 16).map(mapYieldPoolToOpportunity)
     : null;
   const yieldOpps = liveYields || demoYieldOpportunities(TYPE_SCENARIO);
   const opps = [
@@ -515,7 +515,8 @@ function Opportunities({ onDeploy, live, onToast }) {
 export function MarketsView({ onDeploy, live, onToast }) {
   const [tab, setTab] = useState('opps');
   const [inspect, setInspect] = useState(null);
-  const [chain, setChain] = useState('all');
+  const [chain, setChain] = useState('sui');
+  const visibleChains = RG.chains.filter(ch => ch.id === 'sui');
   const protoCount = Object.keys(RG.protocols).length;
   const bestApy = Math.max(...RG.yields.map(y => y.base + y.reward));
   const bestArb = Math.max(...RG.perps.map(p => arbOf(p).spread));
@@ -549,13 +550,7 @@ export function MarketsView({ onDeploy, live, onToast }) {
         <div style={{ display: 'flex', alignItems: 'center', gap: 9, flexWrap: 'wrap' }}>
           <span className="eyebrow" style={{ display: 'inline-flex', alignItems: 'center', gap: 6, marginRight: 2 }}>
             <Icon name="globe" size={13} /> network</span>
-          <button onClick={() => setChain('all')}
-            style={{ display: 'flex', alignItems: 'center', gap: 7, padding: '7px 13px', borderRadius: 100, cursor: 'pointer',
-              border: `1px solid ${chain === 'all' ? 'var(--border-hi)' : 'var(--border)'}`,
-              background: chain === 'all' ? 'var(--glass-hi)' : 'var(--glass-2)',
-              color: chain === 'all' ? 'var(--t0)' : 'var(--t2)', fontFamily: 'var(--f-body)', fontSize: 12.5, fontWeight: 600 }}>
-            Sui only</button>
-          {RG.chains.map(ch => <ChainChip key={ch.id} ch={ch} active={chain === ch.id} onClick={() => setChain(ch.id)} />)}
+          {visibleChains.map(ch => <ChainChip key={ch.id} ch={ch} active={chain === ch.id} onClick={() => setChain(ch.id)} />)}
         </div>
       )}
 
