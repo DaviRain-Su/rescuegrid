@@ -41,6 +41,7 @@ npm run build                       # production build → dist/
 npm --prefix worker test            # backend checks
 npm --prefix worker run typecheck   # Worker TypeScript
 npm run test:auth-wallets           # sign-in wallet / Enoki option contract
+npm run test:activity-ledger        # Agent Activity normalization / signer evidence
 npm run test:wallet-flow            # mock wallet create/revoke orchestration
 cd move/rescuegrid && sui move test # Move tests
 npm run config                      # sanitized Testnet deployment IDs

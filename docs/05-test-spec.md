@@ -514,7 +514,8 @@ MVP desktop viewport:
 - `npm run test:auth-wallets` covers the frontend sign-in option contract: standard wallets and Enoki wallets are split, Google zkLogin gets a visible "Continue with Google" label, Enoki-only availability is not reported as "no wallet", and configured-but-not-mounted Enoki shows a provider-loading state.
 - `npm run test:wallet-flow` covers the frontend wallet orchestration contract with a mock signer: parse -> build `tx_json` -> wallet sign -> `waitForTransaction(showObjectChanges/showEvents)` -> require `PolicyCreated.wrapper_id` -> activate runtime, plus revoke build -> wallet sign.
 - Activity view shows events and budget within one 5 second polling interval after chain state changes.
-- Activity view preserves signer approval evidence (`signer_kind`, `approval_state`, `WAAP_APPROVAL_*`) and the approval filter treats WaaP approval rows as approval-required blockers.
+- `npm run test:activity-ledger` covers the Activity ledger normalization contract: signer blocker code extraction, WaaP approval evidence rows, signer-block filter state, non-signer funding blockers, and policy lookup by wrapper id.
+- Activity view preserves signer approval evidence (`signer_kind`, `approval_state`, `WAAP_APPROVAL_*`), exposes signer blocker rows in expanded audit details, and the signer / approval filters treat WaaP approval rows as signer-blocked and approval-required blockers.
 - Revoke button changes state to revoked within one 5 second polling interval.
 - Policy Inspect names the real MoveGate Mandate + RescuePolicyWrapper model and does not show stale AgentPolicy, AgentCap, or sponsored-gas claims.
 - Profile / Accounts shows the live runtime signer kind, deployment agent, execution blocker, Worker data-provider status, known signer kinds and WaaP/local-daemon external signer boundary when `VITE_WORKER_URL` is configured.

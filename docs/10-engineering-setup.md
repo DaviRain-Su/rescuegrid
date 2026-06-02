@@ -37,7 +37,7 @@ must be reconciled with RescueGrid's MoveGate + `RescuePolicyWrapper` contract.
 | Sui object and shared-object modeling | `object-model` | `RescuePolicyWrapper`, MoveGate Mandate references, future `PolicyPrivateRecord` access object | `cd move/rescuegrid && sui move build`, `cd move/rescuegrid && sui move test` |
 | Move build and unit tests | `sui-build-test`, `move-unit-testing` | wrapper invariants, event schema, abort-code behavior, publish readiness | `cd move/rescuegrid && sui move test` |
 | Publish and upgrade workflow | `sui-publish` | Testnet publish, package id updates, deployment config refresh | `npm run config`, follow publish checklist in status docs |
-| Frontend wallet and transaction UX | `frontend-apps` | dApp Kit wallet connect, wallet-signed create/revoke flows, zkLogin optional path | `npm run build`, `npm run test:auth-wallets`, `npm run test:wallet-flow`, `npm run test:live-config`, `npm run test:signer-health` |
+| Frontend wallet and transaction UX | `frontend-apps` | dApp Kit wallet connect, wallet-signed create/revoke flows, zkLogin optional path, Agent Activity signer evidence | `npm run build`, `npm run test:auth-wallets`, `npm run test:activity-ledger`, `npm run test:wallet-flow`, `npm run test:live-config`, `npm run test:signer-health` |
 | Walrus Sites deployment | `walrus-sites`, `walrus-sites-publishing` | Future decentralized frontend hosting only | `npm run build` plus a separate deployment verification note |
 
 ## Guardrails
