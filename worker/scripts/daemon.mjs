@@ -11,6 +11,8 @@ import { setTimeout as delay } from 'node:timers/promises'
 import { DEPLOYMENT } from '../src/sui-tx.js'
 import { runTick } from '../src/tick.js'
 import { runtimeCoreStatus } from '../src/runtime-core.js'
+import { requireChainDataProvider } from '../src/chain-data-provider.js'
+import { buildExecutionReadiness } from '../src/execution-readiness.js'
 import {
   KNOWN_SIGNER_KINDS,
   SIGNER_KIND_WORKER_SECRET,
@@ -142,9 +144,9 @@ export function validateDaemonConfig(config, { requirePolicies = false } = {}) {
   return { ok: true }
 }
 
-export function daemonStatus(config) {
+export function daemonStatus(config, { executionReadiness = null } = {}) {
   const runtimeCore = runtimeCoreStatus()
-  return {
+  const status = {
     status: 'ok',
     chain: config.chain,
     agent_address: config.agent_address,
@@ -158,6 +160,8 @@ export function daemonStatus(config) {
     tick_interval_ms: config.tick_interval_ms,
     log_path: config.log_path,
   }
+  if (executionReadiness) status.execution_readiness = executionReadiness
+  return status
 }
 
 function runtimeEnv(config) {
@@ -168,6 +172,28 @@ function runtimeEnv(config) {
     SIGNER_KIND: config.signer_kind,
     AGENT_KEY: readLocalAgentKey() || undefined,
   }
+}
+
+export async function daemonExecutionReadiness(config, { chainData = null } = {}) {
+  return buildExecutionReadiness({
+    env: runtimeEnv(config),
+    chainData: chainData || requireChainDataProvider(runtimeEnv(config)),
+  })
+}
+
+async function daemonStatusWithReadiness(config) {
+  const status = daemonStatus(config)
+  try {
+    status.execution_readiness = await daemonExecutionReadiness(config)
+  } catch (e) {
+    status.execution_readiness = {
+      status: 'error',
+      code: e?.code || 'READINESS_READ_FAILED',
+      message: e?.message || String(e),
+      execution_claimed: false,
+    }
+  }
+  return status
 }
 
 function publicTickResult(result, wrapperId) {
@@ -288,7 +314,7 @@ export async function main(argv = process.argv.slice(2)) {
   }
 
   if (command === 'status') {
-    print(daemonStatus(config), json)
+    print(await daemonStatusWithReadiness(config), json)
     return 0
   }
   if (command === 'logs') {

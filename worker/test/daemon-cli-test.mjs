@@ -4,6 +4,7 @@ import { join } from 'node:path'
 import { tmpdir } from 'node:os'
 import {
   appendDaemonLog,
+  daemonExecutionReadiness,
   daemonStatus,
   parseDaemonArgs,
   readDaemonLogs,
@@ -45,6 +46,26 @@ try {
   assert.equal(Object.hasOwn(status.runtime_core.boundaries, 'policy_reader'), true)
   assert.equal(status.runtime_core.registered_adapters[0].kind, 'deepbook')
   assert.equal(status.known_signer_kinds.includes('waap'), true)
+
+  const executionReadiness = await daemonExecutionReadiness({ ...config, signer_kind: 'waap', execution_enabled: true }, {
+    chainData: {
+      async readBalanceManagerBalance(coinType) {
+        if (coinType === DEPLOYMENT.deepbook.dbusdc_coin_type) return 1000n
+        if (coinType === DEPLOYMENT.deepbook.deep_coin_type) return 10n
+        throw new Error(`unexpected coin type ${coinType}`)
+      },
+      async getAgentSuiGasBalance(owner) {
+        assert.equal(owner, DEPLOYMENT.agent.address)
+        return { totalBalance: '1000000' }
+      },
+    },
+  })
+  assert.equal(executionReadiness.funding_ready, true)
+  assert.equal(executionReadiness.execution_ready, false)
+  assert.deepEqual(executionReadiness.blocker_codes, ['UNSUPPORTED_SIGNER'])
+  const statusWithReadiness = daemonStatus(config, { executionReadiness })
+  assert.equal(statusWithReadiness.execution_readiness.signer.kind, 'waap')
+  assert.equal(statusWithReadiness.execution_readiness.execution_claimed, false)
 
   assert.deepEqual(validateDaemonConfig(config, { requirePolicies: true }), { ok: true })
 
