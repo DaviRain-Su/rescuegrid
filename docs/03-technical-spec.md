@@ -740,6 +740,44 @@ Rules:
 - Production Mainnet must not use `worker-secret`; it must use an external/user-controlled signer mode.
 - The frontend must treat this endpoint as status evidence only. It cannot infer that execution is allowed unless `execution.enabled=true`.
 
+### `GET /api/chain-data/status`
+
+Returns non-secret ChainDataProvider posture for Data Sources, smoke tests and GraphQL migration checks. The endpoint is read-only and must not reveal GraphQL endpoint URLs, Worker secrets or signer secrets.
+
+Response:
+
+```json
+{
+  "status": "ok",
+  "chain": "sui:testnet",
+  "provider_kind": "json-rpc",
+  "known_provider_kinds": ["json-rpc", "graphql"],
+  "provider_status": "configured",
+  "available": true,
+  "configured": true,
+  "endpoint_configured": false,
+  "graphql_configured": false,
+  "worker_first": true,
+  "transport": "sui-json-rpc",
+  "read_model": {
+    "policy_objects": "json-rpc",
+    "policy_events": "json-rpc",
+    "owner_policy_list": "json-rpc",
+    "balances": "json-rpc",
+    "market": "json-rpc"
+  },
+  "probe": { "status": "skipped", "reason": "probe=false" }
+}
+```
+
+Rules:
+
+- Default response must not run a live probe. It only reports selected provider, transport class and read model.
+- `?probe=true` may perform a bounded read probe. For `json-rpc`, this reads the Sui clock object. For `graphql`, it runs a basic schema probe, clock object read and 1-row policy event query.
+- GraphQL mode without `SUI_GRAPHQL_URL`, `SUI_GRAPHQL_ENDPOINT`, `GRAPHQL_URL` or injected transport returns `provider_status=unavailable` and `error.code=GRAPHQL_ENDPOINT_REQUIRED`.
+- A failed GraphQL schema/read probe returns `provider_status=probe_failed` and a sanitized `probe` error; the endpoint URL and secret values must not be included.
+- GraphQL remains Worker-first and read-only. Balance, gas and DeepBook market reads may still use the JSON-RPC fallback until their GraphQL query shapes are validated.
+
 ### `GET /api/execution/readiness`
 
 Returns the combined execution preflight for cloud agent, local daemon and UI surfaces. This endpoint is read-only and must not submit a transaction or claim execution success.

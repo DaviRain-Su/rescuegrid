@@ -1,6 +1,8 @@
+import { useState } from 'react'
 import { RG } from '../data.js'
 import { Icon } from './primitives.jsx'
 import { useFeedTestMutation } from '../queries/feeds.js'
+import { WORKER_CONFIGURED } from '../api.js'
 import {
   ADAPTER_SURFACE_WORKER_CONFIGURED,
   adapterSurfaceUnavailable,
@@ -8,6 +10,7 @@ import {
   useDexReadAdapters,
   useLendingReadAdapters,
 } from '../queries/adapter-surfaces.js'
+import { useChainDataStatus } from '../queries/chain-data-status.js'
 
 const ACCESS_META = {
   live:  { c: 'var(--safe)',   label: 'Live · direct', note: 'Public, CORS-open — the browser fetches it directly.' },
@@ -64,6 +67,64 @@ function WorkerSurfaceCard({ title, icon, data, query, metricRows, adapterRows }
   );
 }
 
+function ChainDataProviderCard({ data, query, onProbe }) {
+  const unavailable = !WORKER_CONFIGURED ? 'worker not configured' : query.isError ? 'worker read failed' : data?.provider_status || 'loading';
+  const ready = data?.provider_status === 'ready' || (data?.provider_status === 'configured' && data?.available);
+  const warn = data?.provider_status === 'probe_failed' || data?.provider_status === 'unavailable' || data?.status === 'error';
+  const tone = ready ? 'safe' : warn ? 'warn' : 'neutral';
+  const readModel = data?.read_model || {};
+  const probeStatus = data?.probe?.status || (query.isPending ? 'loading' : 'not run');
+  return (
+    <div className="card" style={{ padding: '15px 17px', display: 'flex', flexDirection: 'column', gap: 12, minWidth: 0 }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 9 }}>
+        <span style={{ color: ready ? 'var(--accent)' : warn ? 'var(--warn)' : 'var(--t2)' }}><Icon name="layers" size={16} /></span>
+        <div className="card-title" style={{ fontSize: 13 }}>Worker chain provider</div>
+        <div style={{ flex: 1 }} />
+        <SurfacePill tone={tone}>{data?.provider_status || unavailable}</SurfacePill>
+      </div>
+      {data?.status === 'ok' ? (
+        <>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: 8 }}>
+            {[
+              ['Provider', data.provider_kind || '—'],
+              ['Transport', data.transport || '—'],
+              ['Probe', probeStatus],
+            ].map(([k, v]) => (
+              <div key={k} style={{ padding: '9px 10px', borderRadius: 8, background: 'var(--glass)', border: '1px solid var(--border)' }}>
+                <div className="eyebrow" style={{ fontSize: 8.5 }}>{k}</div>
+                <div className="mono display" style={{ fontSize: 13, fontWeight: 600, marginTop: 4, overflow: 'hidden', textOverflow: 'ellipsis' }}>{v}</div>
+              </div>
+            ))}
+          </div>
+          <div style={{ display: 'flex', gap: 7, flexWrap: 'wrap' }}>
+            {Object.entries(readModel).map(([k, v]) => (
+              <span key={k} className="badge badge-neutral" style={{ fontSize: 9.5 }}>
+                {k.replace(/_/g, ' ')}
+                <span style={{ color: String(v).includes('fallback') ? 'var(--warn)' : 'var(--safe)', marginLeft: 5 }}>{v}</span>
+              </span>
+            ))}
+          </div>
+          {data.probe?.status === 'error' && (
+            <div className="mono" style={{ fontSize: 10, color: 'var(--warn)', lineHeight: 1.45 }}>
+              {data.probe.code || 'PROBE_FAILED'} · {data.probe.message || 'schema/read probe failed'}
+            </div>
+          )}
+          <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
+            <button onClick={onProbe} disabled={query.isFetching} className="btn btn-sm">
+              {query.isFetching ? <><span className="dot pulse" style={{ background: 'var(--accent)' }}></span> probing…</>
+                : <><Icon name="refresh" size={12} /> Probe reads</>}
+            </button>
+          </div>
+        </>
+      ) : (
+        <div style={{ fontSize: 11.5, color: 'var(--t2)', lineHeight: 1.45 }}>
+          Worker chain-provider status appears here when `VITE_WORKER_URL` points at the RescueGrid Worker.
+        </div>
+      )}
+    </div>
+  );
+}
+
 function FeedTestButton({ feed }) {
   const testFeedMutation = useFeedTestMutation();
   const state = testFeedMutation.isPending ? 'testing' : testFeedMutation.isSuccess ? 'ok' : testFeedMutation.isError ? 'err' : 'idle';
@@ -96,12 +157,15 @@ function FeedTestButton({ feed }) {
 }
 
 export function DataSources({ onToast, live, setLive }) {
+  const [probeChainData, setProbeChainData] = useState(false);
   const feeds = RG.dataFeeds.filter(f => f.scope === 'sui');
   const groups = [...new Set(feeds.map(f => f.group))];
   const liveCount = feeds.filter(f => f.access !== 'proxy').length;
   const proxyCount = feeds.filter(f => f.access === 'proxy').length;
   const dexQuery = useDexReadAdapters();
   const lendingQuery = useLendingReadAdapters();
+  const chainDataQuery = useChainDataStatus({ probe: probeChainData });
+  const chainDataStatus = chainDataQuery.data;
   const dexSurface = okAdapterSurface(dexQuery);
   const lendingSurface = okAdapterSurface(lendingQuery);
 
@@ -145,6 +209,15 @@ export function DataSources({ onToast, live, setLive }) {
           <Icon name="shield" size={12} /> Worker adapter surfaces
         </div>
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
+          <ChainDataProviderCard
+            data={chainDataStatus}
+            query={chainDataQuery}
+            onProbe={() => {
+              if (probeChainData) chainDataQuery.refetch();
+              else setProbeChainData(true);
+              onToast && onToast('ChainDataProvider probe queued through the Worker', 'var(--accent)');
+            }}
+          />
           <WorkerSurfaceCard
             title="Sui DEX read adapters"
             icon="scale"

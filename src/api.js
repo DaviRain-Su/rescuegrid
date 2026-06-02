@@ -187,6 +187,20 @@ export function getRuntimeStatus() {
   }))
 }
 
+/** GET /api/chain-data/status — Worker ChainDataProvider status, optional probe. */
+export function getChainDataStatus({ probe = false } = {}) {
+  const query = probe ? '?probe=true' : ''
+  return workerGet(`/api/chain-data/status${query}`).catch((e) => ({
+    status: 'error',
+    code: WORKER_CONFIGURED ? 'WORKER_READ_FAILED' : 'WORKER_NOT_CONFIGURED',
+    message: String(e?.message || e),
+    provider_kind: null,
+    provider_status: 'unavailable',
+    available: false,
+    probe: { status: 'error' },
+  }))
+}
+
 function ownerControlNonce() {
   const cryptoApi = globalThis.crypto
   if (cryptoApi?.randomUUID) return cryptoApi.randomUUID()

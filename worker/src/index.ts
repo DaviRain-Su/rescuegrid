@@ -7,7 +7,7 @@ import { bodyLimit } from 'hono/body-limit'
 import { parseIntent } from './parse.js'
 import { strategyHash } from './strategy-core.js'
 import { buildCreatePolicyTx, buildRevokeTx } from './sui-tx.js'
-import { requireChainDataProvider } from './chain-data-provider.js'
+import { getChainDataProviderStatus, requireChainDataProvider } from './chain-data-provider.js'
 import { DEPLOYMENT } from './sui-tx.js'
 import { getSuiAdapterCandidateData } from './sui-adapter-candidates.js'
 import { getSuiDexReadAdapterData } from './sui-dex-read-adapters.js'
@@ -132,6 +132,10 @@ app.get('/', (c) => c.json({ service: 'rescuegrid-worker', agent: AGENT_ADDRESS,
 
 app.get('/api/runtime/status', (c) => {
   return c.json(getRuntimeStatus(c.env))
+})
+
+app.get('/api/chain-data/status', async (c) => {
+  return c.json(await getChainDataProviderStatus(c.env, { probe: c.req.query('probe') === 'true' }))
 })
 
 app.get('/api/execution/readiness', async (c) => {

@@ -5,6 +5,7 @@ import {
   JsonRpcChainDataProvider,
   configuredGraphqlEndpoint,
   configuredChainDataProviderKind,
+  getChainDataProviderStatus,
   requireChainDataProvider,
   resolveChainDataProvider,
   unsupportedChainDataProvider,
@@ -84,6 +85,9 @@ const gqlEvents = [
 ]
 const fakeFetchGraphql = async ({ name, variables }) => {
   gqlCalls.push({ name, variables })
+  if (name === 'schemaProbe') {
+    return { __typename: 'Query' }
+  }
   if (name === 'readObject') {
     const fieldsById = {
       [WRAPPER_ID]: wrapperFields,
@@ -208,6 +212,45 @@ const fakeFallback = {
   assert.equal((await provider.readBalanceManagerBalance(DEPLOYMENT.deepbook.dbusdc_coin_type)).toString(), '42')
   assert.equal((await provider.getAgentSuiGasBalance('0xagent')).totalBalance, '99')
   assert.equal(gqlCalls.some((call) => call.name === 'policyEvents'), true)
+}
+
+{
+  const jsonRpcStatus = await getChainDataProviderStatus({}, { client: fakeClient, probe: true })
+  assert.equal(jsonRpcStatus.status, 'ok')
+  assert.equal(jsonRpcStatus.provider_kind, CHAIN_DATA_PROVIDER_JSON_RPC)
+  assert.equal(jsonRpcStatus.provider_status, 'ready')
+  assert.equal(jsonRpcStatus.probe.status, 'ok')
+  assert.equal(jsonRpcStatus.probe.clock_timestamp_ms, 1770000000000)
+  assert.equal(jsonRpcStatus.endpoint_configured, false)
+
+  const missingGraphql = await getChainDataProviderStatus({ CHAIN_DATA_PROVIDER: 'graphql' }, { client: fakeClient, probe: true })
+  assert.equal(missingGraphql.status, 'ok')
+  assert.equal(missingGraphql.provider_kind, 'graphql')
+  assert.equal(missingGraphql.provider_status, 'unavailable')
+  assert.equal(missingGraphql.available, false)
+  assert.equal(missingGraphql.error.code, 'GRAPHQL_ENDPOINT_REQUIRED')
+
+  const graphqlStatus = await getChainDataProviderStatus(
+    { CHAIN_DATA_PROVIDER: 'graphql' },
+    { fetchGraphql: fakeFetchGraphql, fallback: fakeFallback, probe: true },
+  )
+  assert.equal(graphqlStatus.status, 'ok')
+  assert.equal(graphqlStatus.provider_kind, 'graphql')
+  assert.equal(graphqlStatus.provider_status, 'ready')
+  assert.equal(graphqlStatus.graphql_configured, true)
+  assert.equal(graphqlStatus.transport, 'injected-graphql')
+  assert.equal(graphqlStatus.probe.status, 'ok')
+  assert.equal(graphqlStatus.probe.checks.some((check) => check.name === 'schema_probe' && check.ok), true)
+  assert.equal(graphqlStatus.probe.checks.some((check) => check.name === 'policy_events_query' && check.ok), true)
+
+  const failingGraphql = await getChainDataProviderStatus(
+    { CHAIN_DATA_PROVIDER: 'graphql' },
+    { fetchGraphql: async () => { throw Object.assign(new Error('schema changed'), { code: 'GRAPHQL_QUERY_ERROR' }) }, probe: true },
+  )
+  assert.equal(failingGraphql.provider_status, 'probe_failed')
+  assert.equal(failingGraphql.probe.status, 'error')
+  assert.equal(failingGraphql.probe.code, 'GRAPHQL_QUERY_ERROR')
+  assert.equal(JSON.stringify(failingGraphql).includes('SUI_GRAPHQL_URL=https://'), false)
 }
 
 console.log('\nALL CHAIN DATA PROVIDER TESTS PASS')

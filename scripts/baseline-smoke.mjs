@@ -136,6 +136,14 @@ async function main() {
   assert('runtime status data provider is Worker-first', provider.worker_first === true && typeof provider.kind === 'string', provider.kind || 'missing')
   assert('runtime status does not leak worker secrets', secretValues.every((value) => !runtimeText.includes(value)), 'secret values absent')
 
+  const chainDataStatusResult = await checkJson(`${WORKER_URL}/api/chain-data/status`)
+  const chainDataStatus = chainDataStatusResult.json || {}
+  const chainDataText = chainDataStatusResult.text || ''
+  assert('worker chain data status reachable', chainDataStatusResult.ok && chainDataStatusResult.status === 200 && chainDataStatus.status === 'ok', `${WORKER_URL}/api/chain-data/status status=${chainDataStatusResult.status}`)
+  assert('chain data status matches runtime provider', chainDataStatus.provider_kind === provider.kind && chainDataStatus.worker_first === true, chainDataStatus.provider_kind || 'missing')
+  assert('chain data status exposes read model', chainDataStatus.read_model && typeof chainDataStatus.read_model.policy_objects === 'string', chainDataStatus.read_model?.policy_objects || 'missing')
+  assert('chain data status does not leak worker secrets', secretValues.every((value) => !chainDataText.includes(value)), 'secret values absent')
+
   const executionReadinessStatus = await checkJson(`${WORKER_URL}/api/execution/readiness`)
   const executionReadiness = executionReadinessStatus.json || {}
   const readinessText = executionReadinessStatus.text || ''

@@ -23,6 +23,7 @@ export const KNOWN_CHAIN_DATA_PROVIDER_KINDS = Object.freeze([
   CHAIN_DATA_PROVIDER_JSON_RPC,
   CHAIN_DATA_PROVIDER_GRAPHQL,
 ])
+export const CHAIN_DATA_PROVIDER_STATUS_PATH = '/api/chain-data/status'
 
 export function unsupportedChainDataProvider(kind) {
   return {
@@ -79,6 +80,28 @@ query RescueGridPolicyEvents($package: String!, $module: String!, $cursor: Strin
     }
   }
 }`
+
+const GRAPHQL_SCHEMA_PROBE = `
+query RescueGridGraphqlSchemaProbe {
+  __typename
+}`
+
+const CHAIN_DATA_READ_MODELS = Object.freeze({
+  [CHAIN_DATA_PROVIDER_JSON_RPC]: {
+    policy_objects: 'json-rpc',
+    policy_events: 'json-rpc',
+    owner_policy_list: 'json-rpc',
+    balances: 'json-rpc',
+    market: 'json-rpc',
+  },
+  [CHAIN_DATA_PROVIDER_GRAPHQL]: {
+    policy_objects: 'graphql',
+    policy_events: 'graphql',
+    owner_policy_list: 'graphql',
+    balances: 'json-rpc-fallback',
+    market: 'json-rpc-fallback',
+  },
+})
 
 function graphqlError(code, message) {
   const err = new Error(message)
@@ -176,6 +199,29 @@ function policyEventSortDesc(a, b) {
   return Number(b.timestamp_ms || 0) - Number(a.timestamp_ms || 0)
 }
 
+function providerTransport(kind, provider, options = {}) {
+  if (kind === CHAIN_DATA_PROVIDER_GRAPHQL) {
+    if (options.fetchGraphql || provider?.fetchGraphql) return 'injected-graphql'
+    if (options.endpoint || provider?.endpoint) return 'http-graphql'
+    return 'unconfigured-graphql'
+  }
+  return 'sui-json-rpc'
+}
+
+function providerReadModel(kind) {
+  return CHAIN_DATA_READ_MODELS[kind] || {}
+}
+
+function sanitizeProviderError(error) {
+  if (!error) return null
+  return {
+    code: error.code || 'CHAIN_DATA_PROVIDER_ERROR',
+    message: String(error.message || error),
+    provider_kind: error.provider_kind || undefined,
+    query_name: error.query_name || undefined,
+  }
+}
+
 export class JsonRpcChainDataProvider {
   constructor({ client = getClient() } = {}) {
     this.kind = CHAIN_DATA_PROVIDER_JSON_RPC
@@ -237,6 +283,17 @@ export class JsonRpcChainDataProvider {
 
   policyEventsToFeedItems(events, policyLabel) {
     return policyEventsToFeedItems(events, policyLabel)
+  }
+
+  async probeStatus() {
+    const clockTimestampMs = await this.readClockTimestampMs()
+    return {
+      status: 'ok',
+      checks: [
+        { name: 'clock_object_read', ok: clockTimestampMs != null },
+      ],
+      clock_timestamp_ms: clockTimestampMs ?? null,
+    }
   }
 }
 
@@ -429,6 +486,21 @@ export class GraphqlChainDataProvider {
   policyEventsToFeedItems(events, policyLabel) {
     return policyEventsToFeedItems(events, policyLabel)
   }
+
+  async probeStatus() {
+    await this.query('schemaProbe', GRAPHQL_SCHEMA_PROBE, {})
+    const clockTimestampMs = await this.readClockTimestampMs()
+    const events = await this.queryPolicyModuleEvents({ max: 1, maxPages: 1, pageSize: 1 })
+    return {
+      status: 'ok',
+      checks: [
+        { name: 'schema_probe', ok: true },
+        { name: 'clock_object_read', ok: clockTimestampMs != null },
+        { name: 'policy_events_query', ok: Array.isArray(events), rows: events.length },
+      ],
+      clock_timestamp_ms: clockTimestampMs ?? null,
+    }
+  }
 }
 
 export function resolveChainDataProvider(env = {}, options = {}) {
@@ -458,4 +530,50 @@ export function requireChainDataProvider(env = {}, options = {}) {
   const provider = resolveChainDataProvider(env, options)
   if (provider.available) return provider
   throw Object.assign(new Error(provider.error.message), provider.error)
+}
+
+export async function getChainDataProviderStatus(env = {}, options = {}) {
+  const kind = normalizeProviderKind(options.kind || configuredChainDataProviderKind(env))
+  const provider = resolveChainDataProvider(env, options)
+  const endpointConfigured = Boolean(options.endpoint || configuredGraphqlEndpoint(env))
+  const configured = kind === CHAIN_DATA_PROVIDER_JSON_RPC || endpointConfigured || Boolean(options.fetchGraphql)
+  const out = {
+    status: 'ok',
+    chain: 'sui:testnet',
+    provider_kind: kind,
+    known_provider_kinds: KNOWN_CHAIN_DATA_PROVIDER_KINDS,
+    provider_status: provider.available ? 'configured' : 'unavailable',
+    available: Boolean(provider.available),
+    configured,
+    endpoint_configured: endpointConfigured,
+    graphql_configured: kind === CHAIN_DATA_PROVIDER_GRAPHQL && configured,
+    worker_first: true,
+    transport: providerTransport(kind, provider, options),
+    read_model: providerReadModel(kind),
+    probe: { status: 'skipped', reason: options.probe ? 'provider unavailable' : 'probe=false' },
+  }
+  if (!provider.available) {
+    return {
+      ...out,
+      error: sanitizeProviderError(provider.error),
+    }
+  }
+  if (!options.probe) return out
+
+  try {
+    return {
+      ...out,
+      provider_status: 'ready',
+      probe: await provider.probeStatus(),
+    }
+  } catch (e) {
+    return {
+      ...out,
+      provider_status: 'probe_failed',
+      probe: {
+        status: 'error',
+        ...sanitizeProviderError(e),
+      },
+    }
+  }
 }
