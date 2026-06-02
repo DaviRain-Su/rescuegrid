@@ -18,6 +18,42 @@ function bigintOrZero(value) {
   }
 }
 
+export const DEFAULT_FUNDING_THRESHOLDS = {
+  DBUSDC: '1',
+  DEEP: '1',
+  SUI_MIST: '1',
+}
+
+export function positiveIntegerString(value, fallback = '1') {
+  if (typeof value !== 'string') return fallback
+  return /^[1-9]\d*$/.test(value) ? value : fallback
+}
+
+function maxBigintString(a, b) {
+  const left = bigintOrZero(a)
+  const right = bigintOrZero(b)
+  return (left >= right ? left : right).toString()
+}
+
+export function resolveFundingThresholds({ configured = {}, requested = {} } = {}) {
+  const out = {}
+  for (const asset of Object.keys(DEFAULT_FUNDING_THRESHOLDS)) {
+    const fallback = DEFAULT_FUNDING_THRESHOLDS[asset]
+    const configuredValue = positiveIntegerString(configured[asset], fallback)
+    const requestedValue = positiveIntegerString(requested[asset], configuredValue)
+    const required = maxBigintString(configuredValue, requestedValue)
+    out[asset] = {
+      required,
+      configured: configuredValue,
+      requested: requested[asset] == null ? null : requestedValue,
+      source: required === requestedValue && requested[asset] != null
+        ? 'configured_minimum_or_higher_request'
+        : 'configured_minimum',
+    }
+  }
+  return out
+}
+
 function normalizeDefaults(defaults) {
   if (!defaults || typeof defaults !== 'object' || Array.isArray(defaults)) return {}
   return defaults
@@ -99,6 +135,7 @@ export function buildFundingReadiness({
   requiredDbusdcBalance = '1',
   requiredDeepBalance = '1',
   requiredSuiGasMist = '1',
+  thresholdMetadata = {},
 }) {
   const balances = {
     DBUSDC: numericString(dbusdcBalance),
@@ -106,9 +143,9 @@ export function buildFundingReadiness({
     SUI_MIST: numericString(suiBalanceMist),
   }
   const thresholds = {
-    DBUSDC: { required: numericString(requiredDbusdcBalance), label: 'BalanceManager quote balance for live DeepBook orders' },
-    DEEP: { required: numericString(requiredDeepBalance), label: 'BalanceManager DEEP fee balance' },
-    SUI_MIST: { required: numericString(requiredSuiGasMist), label: 'Agent wallet SUI gas balance' },
+    DBUSDC: { required: numericString(requiredDbusdcBalance), label: 'BalanceManager quote balance for live DeepBook orders', ...(thresholdMetadata.DBUSDC || {}) },
+    DEEP: { required: numericString(requiredDeepBalance), label: 'BalanceManager DEEP fee balance', ...(thresholdMetadata.DEEP || {}) },
+    SUI_MIST: { required: numericString(requiredSuiGasMist), label: 'Agent wallet SUI gas balance', ...(thresholdMetadata.SUI_MIST || {}) },
   }
   const criteria = [
     {
@@ -163,6 +200,7 @@ export function buildFundingReadiness({
   }
   const fundingBlockers = blockers.filter((b) => b.code !== 'EXECUTION_DISABLED')
   const fundingReady = fundingBlockers.length === 0
+  const executionReady = blockers.length === 0
 
   return {
     holder: 'agent_balance_manager',
@@ -175,12 +213,18 @@ export function buildFundingReadiness({
     funding_state: fundingReady ? 'ready' : 'blocked',
     funding_ready: fundingReady,
     funding_precondition_satisfied: fundingReady,
+    readiness_scope: 'funding',
+    execution_readiness_state: executionReady ? 'ready' : 'blocked',
+    execution_ready: executionReady,
     execution_claimed: false,
-    readiness_state: blockers.length ? 'blocked' : 'ready',
-    ready: blockers.length === 0,
-    blockers,
+    readiness_state: fundingReady ? 'ready' : 'blocked',
+    ready: fundingReady,
+    blockers: fundingBlockers,
     funding_blockers: fundingBlockers,
-    blocker_labels: blockers.map((b) => b.label),
-    blocker_codes: blockers.map((b) => b.code),
+    execution_blockers: blockers,
+    blocker_labels: fundingBlockers.map((b) => b.label),
+    blocker_codes: fundingBlockers.map((b) => b.code),
+    execution_blocker_labels: blockers.map((b) => b.label),
+    execution_blocker_codes: blockers.map((b) => b.code),
   }
 }

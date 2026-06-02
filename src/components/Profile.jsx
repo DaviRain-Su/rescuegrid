@@ -92,6 +92,11 @@ function FundingReadiness({ funding, live }) {
           {funding.blockers.map((b) => <span key={b.code} className="badge badge-warn" style={{ fontSize: 9 }}>{b.code}</span>)}
         </div>
       )}
+      {funding.execution_blockers?.some((b) => b.code === 'EXECUTION_DISABLED') && (
+        <div style={{ fontSize: 10.5, color: 'var(--t2)', marginTop: 8 }}>
+          Funding is usable, but live execution remains separately gated by <span className="mono">EXECUTION_ENABLED</span>.
+        </div>
+      )}
     </div>
   )
 }
@@ -104,6 +109,8 @@ export function Profile({ account, holdings, policies, funding = null, live = fa
   const freePct = total > 0 ? (free / total) * 100 : 0
   const animTotal = useAnimatedNumber(total, 700)
   const suiBal = holdings.find(h => h.sym === 'SUI')?.amount
+  const agentSuiMist = funding?.balances?.SUI_MIST
+  const agentSui = agentSuiMist != null ? Number(agentSuiMist) / 1e9 : null
 
   const activePol = policies.filter(p => p.status === 'active').length
   const totalCap = policies.reduce((s, p) => s + p.budgetCap, 0)
@@ -382,8 +389,8 @@ export function Profile({ account, holdings, policies, funding = null, live = fa
               <>
                 <div style={{ display: 'flex', gap: 12 }}>
                   <div style={{ flex: 1 }}>
-                    <div className="mono display" style={{ fontSize: 22, fontWeight: 600 }}>{suiBal != null ? suiBal.toFixed(3) : '—'}</div>
-                    <div style={{ fontSize: 11, color: 'var(--t2)', marginTop: 2 }}>{readOnly ? 'SUI at read owner · gas evidence' : 'SUI in wallet · your gas'}</div>
+                    <div className="mono display" style={{ fontSize: 22, fontWeight: 600 }}>{agentSui != null ? agentSui.toFixed(3) : suiBal != null ? suiBal.toFixed(3) : '—'}</div>
+                    <div style={{ fontSize: 11, color: 'var(--t2)', marginTop: 2 }}>{agentSui != null ? 'Agent SUI gas · chain read' : readOnly ? 'SUI at read owner · gas evidence' : 'SUI in wallet · your gas'}</div>
                   </div>
                   <div style={{ width: 1, background: 'var(--border)' }} />
                   <div style={{ flex: 1 }}>

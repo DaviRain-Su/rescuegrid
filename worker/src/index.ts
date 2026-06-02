@@ -11,7 +11,7 @@ import { getActivity, listPoliciesByOwner, listActivityByOwner, getOwnerSummary,
 import { getClient, DEPLOYMENT } from './sui-tx.js'
 import { runTick, validateExecutionPlan } from './tick.js'
 import { validateForceTrigger, validateTickAuthorization } from './tick-auth.js'
-import { buildFundingReadiness, parseIntentWithStability } from './read-surfaces.js'
+import { buildFundingReadiness, parseIntentWithStability, resolveFundingThresholds } from './read-surfaces.js'
 import {
   appendRuntimeActivity,
   runtimeErrorEvent,
@@ -32,6 +32,9 @@ export interface Env {
   INTERNAL_AGENT_TICK_TOKEN?: string
   RESCUEGRID_DEMO_MODE?: string
   EXECUTION_ENABLED?: string
+  REQUIRED_DBUSDC_BALANCE?: string
+  REQUIRED_DEEP_BALANCE?: string
+  REQUIRED_AGENT_SUI_GAS_MIST?: string
 }
 
 const app = new Hono<{ Bindings: Env }>()
@@ -43,11 +46,6 @@ function setParseCache(key: string, value: Record<string, unknown>) {
     if (firstKey !== undefined) parseCache.delete(firstKey)
   }
   parseCache.set(key, value)
-}
-
-function positiveIntegerQuery(value: string | undefined, fallback: string): string {
-  if (!value) return fallback
-  return /^\d+$/.test(value) ? value : fallback
 }
 
 async function fetchRuntimeJson(env: Env, wrapperId: string, path: string): Promise<Record<string, any> | null> {
@@ -223,6 +221,18 @@ app.get('/api/balances', async (c) => {
       readBalanceManagerBalance(client, DEPLOYMENT.deepbook.deep_coin_type),
       client.getBalance({ owner: DEPLOYMENT.agent.address, coinType: '0x2::sui::SUI' }),
     ])
+    const thresholds = resolveFundingThresholds({
+      configured: {
+        DBUSDC: c.env.REQUIRED_DBUSDC_BALANCE,
+        DEEP: c.env.REQUIRED_DEEP_BALANCE,
+        SUI_MIST: c.env.REQUIRED_AGENT_SUI_GAS_MIST,
+      },
+      requested: {
+        DBUSDC: c.req.query('dbusdc_threshold'),
+        DEEP: c.req.query('deep_threshold'),
+        SUI_MIST: c.req.query('sui_gas_threshold'),
+      },
+    }) as Record<string, { required: string; configured: string; requested: string | null; source: string }>
     const funding = buildFundingReadiness({
       agentAddress: DEPLOYMENT.agent.address,
       balanceManagerId: DEPLOYMENT.agent.balance_manager_id,
@@ -230,9 +240,10 @@ app.get('/api/balances', async (c) => {
       deepBalance: deepBalance.toString(),
       suiBalanceMist: String(suiBalance.totalBalance ?? '0'),
       executionEnabled: c.env.EXECUTION_ENABLED === 'true',
-      requiredDbusdcBalance: positiveIntegerQuery(c.req.query('dbusdc_threshold'), '1'),
-      requiredDeepBalance: positiveIntegerQuery(c.req.query('deep_threshold'), '1'),
-      requiredSuiGasMist: positiveIntegerQuery(c.req.query('sui_gas_threshold'), '1'),
+      requiredDbusdcBalance: thresholds.DBUSDC.required,
+      requiredDeepBalance: thresholds.DEEP.required,
+      requiredSuiGasMist: thresholds.SUI_MIST.required,
+      thresholdMetadata: thresholds,
     })
     return c.json({
       status: 'ok',

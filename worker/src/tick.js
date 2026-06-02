@@ -248,7 +248,7 @@ function perTradeAmount(wrapper) {
 }
 
 export function fundingReadinessBlock(funding) {
-  const blockers = funding?.blockers ?? []
+  const blockers = funding?.execution_blockers ?? funding?.blockers ?? []
   if (blockers.length === 0) return null
   const primary = funding.funding_blockers?.[0] ?? blockers[0]
   return {
@@ -264,8 +264,8 @@ export function fundingReadinessBlock(funding) {
     },
     funding,
     execution_claimed: false,
-    blocker_codes: funding.blocker_codes,
-    blocker_labels: funding.blocker_labels,
+    blocker_codes: funding.execution_blocker_codes ?? funding.blocker_codes,
+    blocker_labels: funding.execution_blocker_labels ?? funding.blocker_labels,
   }
 }
 

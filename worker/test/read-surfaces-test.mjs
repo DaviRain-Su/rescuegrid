@@ -4,6 +4,7 @@ import {
   bytesToHex,
   enrichPolicyFromChain,
   parseIntentWithStability,
+  resolveFundingThresholds,
 } from '../src/read-surfaces.js'
 
 const OWNER = '0x1111111111111111111111111111111111111111111111111111111111111111'
@@ -53,7 +54,8 @@ assert.equal(
   })
   assert.equal(readiness.readiness_state, 'blocked')
   assert.equal(readiness.ready, false)
-  assert.deepEqual(readiness.blocker_codes, ['EXECUTION_DISABLED', 'INSUFFICIENT_DBUSDC', 'INSUFFICIENT_DEEP'])
+  assert.deepEqual(readiness.blocker_codes, ['INSUFFICIENT_DBUSDC', 'INSUFFICIENT_DEEP'])
+  assert.deepEqual(readiness.execution_blocker_codes, ['EXECUTION_DISABLED', 'INSUFFICIENT_DBUSDC', 'INSUFFICIENT_DEEP'])
   assert.equal(readiness.balances.DBUSDC, '0')
   assert.equal(readiness.balances.DEEP, '0')
   assert.equal(readiness.balances.SUI_MIST, '123')
@@ -66,6 +68,7 @@ assert.equal(
     assert.equal(row.usability, row.usable ? 'usable' : 'blocked', `${row.asset} readiness row exposes usability`)
   }
   assert.equal(readiness.funding_ready, false)
+  assert.equal(readiness.execution_ready, false)
   assert.equal(readiness.execution_claimed, false)
 }
 
@@ -82,8 +85,11 @@ assert.equal(
   assert.equal(readiness.ready, true)
   assert.equal(readiness.funding_state, 'ready')
   assert.equal(readiness.funding_precondition_satisfied, true)
+  assert.equal(readiness.execution_ready, true)
+  assert.equal(readiness.execution_readiness_state, 'ready')
   assert.equal(readiness.execution_claimed, false, 'funding readiness never claims execution success before a real tx')
   assert.deepEqual(readiness.blocker_codes, [])
+  assert.deepEqual(readiness.execution_blocker_codes, [])
   assert.deepEqual(readiness.criteria.map((r) => [r.asset, r.usable]), [
     ['DBUSDC', true],
     ['DEEP', true],
@@ -131,8 +137,37 @@ assert.equal(
     executionEnabled: false,
   })
   assert.equal(readiness.funding_ready, true, 'funding precondition can be recognized separately from the enabled flag')
-  assert.equal(readiness.ready, false)
-  assert.deepEqual(readiness.blocker_codes, ['EXECUTION_DISABLED'])
+  assert.equal(readiness.readiness_state, 'ready')
+  assert.equal(readiness.ready, true)
+  assert.equal(readiness.execution_ready, false)
+  assert.equal(readiness.execution_readiness_state, 'blocked')
+  assert.deepEqual(readiness.blocker_codes, [])
+  assert.deepEqual(readiness.execution_blocker_codes, ['EXECUTION_DISABLED'])
+}
+
+{
+  const thresholds = resolveFundingThresholds({
+    configured: { DBUSDC: '10', DEEP: '5', SUI_MIST: '1000' },
+    requested: { DBUSDC: '0', DEEP: '3', SUI_MIST: '999' },
+  })
+  assert.equal(thresholds.DBUSDC.required, '10', 'zero request cannot weaken configured DBUSDC threshold')
+  assert.equal(thresholds.DEEP.required, '5', 'lower request cannot weaken configured DEEP threshold')
+  assert.equal(thresholds.SUI_MIST.required, '1000', 'lower request cannot weaken configured gas threshold')
+  const readiness = buildFundingReadiness({
+    agentAddress: OWNER,
+    balanceManagerId: '0xbm',
+    dbusdcBalance: '0',
+    deepBalance: '0',
+    suiBalanceMist: '0',
+    executionEnabled: true,
+    requiredDbusdcBalance: thresholds.DBUSDC.required,
+    requiredDeepBalance: thresholds.DEEP.required,
+    requiredSuiGasMist: thresholds.SUI_MIST.required,
+    thresholdMetadata: thresholds,
+  })
+  assert.equal(readiness.ready, false, 'configured thresholds keep zero balances blocked')
+  assert.deepEqual(readiness.blocker_codes, ['INSUFFICIENT_DBUSDC', 'INSUFFICIENT_DEEP', 'INSUFFICIENT_GAS'])
+  assert.equal(readiness.thresholds.DBUSDC.configured, '10')
 }
 
 console.log('\nALL READ SURFACE TESTS PASS')
