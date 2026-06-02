@@ -84,7 +84,7 @@
 | ID | Type | Estimate | Task | Acceptance |
 | --- | --- | --- | --- | --- |
 | G1 | Commit | 2h | Demo seed/config | 一条命令输出所需 env、package id、agent address |
-| G2 | Commit | 2h | Demo script | 覆盖 create -> monitor -> execute -> revoke |
+| G2 | Commit | 2h | Demo script | `npm run demo:loop` 覆盖 create -> activate/monitor -> internal tick -> revoke -> post-revoke tick；若 DBUSDC/DEEP 未到位，execute leg 必须明确输出 documented funding gate 且 `execution_claimed=false` |
 | G3 | Commit | 2h | README quickstart | 新用户能按步骤跑起演示 |
 | G4 | Commit | 3h | Final docs + QA pass | 子验收 1：PRD/架构/规格与实际实现保持一致；子验收 2：用浏览器、Worker 日志和链上查询验证完整闭环 |
 

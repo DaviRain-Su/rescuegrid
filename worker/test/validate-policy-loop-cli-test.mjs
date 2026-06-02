@@ -23,4 +23,16 @@ assert.match(safetyHelp.stdout, /mandate-wrapper mismatch/i)
 assert.match(safetyHelp.stdout, /no raw secrets/i)
 assert.equal(safetyHelp.stdout.includes('AGENT_KEY='), false, 'safety help output must not print secret values')
 
+const demoHelp = spawnSync(process.execPath, ['scripts/validate-demo-loop.mjs', '--help'], {
+  cwd: new URL('..', import.meta.url),
+  encoding: 'utf8',
+})
+
+assert.equal(demoHelp.status, 0, demoHelp.stderr)
+assert.match(demoHelp.stdout, /create -> activate\/monitor -> force tick -> revoke -> post-revoke tick/i)
+assert.match(demoHelp.stdout, /documented DBUSDC\/DEEP funding/i)
+assert.match(demoHelp.stdout, /no raw secrets/i)
+assert.equal(demoHelp.stdout.includes('AGENT_KEY='), false, 'demo help output must not print agent key values')
+assert.equal(demoHelp.stdout.includes('INTERNAL_AGENT_TICK_TOKEN='), false, 'demo help output must not print tick token values')
+
 console.log('\nALL POLICY LOOP CLI TESTS PASS')

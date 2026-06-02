@@ -334,7 +334,7 @@ Concurrency:
 
 ## 8. Demo Acceptance Script
 
-The final demo must prove this exact sequence:
+The final demo should be backed by `npm run demo:loop` plus browser evidence. The script must prove this exact sequence against the live Worker and Sui Testnet:
 
 1. Start with no active Policy.
 2. Login with zkLogin on Sui Testnet.
@@ -343,8 +343,8 @@ The final demo must prove this exact sequence:
 5. Show `executor_kind=deepbook` in structured strategy.
 6. Confirm and create Policy.
 7. Show mandate id, wrapper id and budget ceiling.
-8. Let Cloud Agent tick execute one Deepbook Testnet trade; demo may use a dev-only manual trigger or mock price feed if the real 8% price drop is not happening.
-9. Show transaction digest and `AgentTradeExecuted` event.
+8. Let Cloud Agent tick attempt one Deepbook Testnet trade; demo may use a dev-only manual trigger or mock price feed if the real 8% price drop is not happening.
+9. Show transaction digest and `AgentTradeExecuted` event, or show the documented DBUSDC/DEEP Testnet funding gate with `execution_claimed=false`.
 10. Revoke Policy from Dashboard.
 11. Run or wait for another tick.
 12. Show Agent cannot execute after revoke.
@@ -352,7 +352,7 @@ The final demo must prove this exact sequence:
 Passing criteria:
 
 - At least one real Sui Testnet transaction is visible.
-- At least one real Deepbook-related execution is visible, or a documented Testnet blocker is explicitly shown with fallback approved before demo.
+- At least one real Deepbook-related execution is visible, or a documented Testnet blocker is explicitly shown by `npm run demo:loop` with fallback approved before demo.
 - Revocation is visible both in UI and chain state.
 - No step requires exposing a user private key to the Agent.
 - The deployed agent address shown in preview matches the agent recorded in the Mandate and Wrapper.

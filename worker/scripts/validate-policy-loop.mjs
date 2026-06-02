@@ -194,6 +194,7 @@ const strategy = {
   owner: ownerAddress,
   agent: delegatedAgentAddress,
   chain: expectedChain,
+  executor_kind: 'deepbook',
   pool_id: DEPLOYMENT.deepbook.pools.SUI_DBUSDC.pool_id,
   budget_coin_type: DEPLOYMENT.deepbook.dbusdc_coin_type,
   budget_ceiling: '50000000',

@@ -11,6 +11,7 @@
     "test:hash": "node test/hash-vectors.mjs",
     "test:guardian": "node test/guardian-test.mjs",
     "test:tick": "node test/tick-test.mjs",
+    "demo:loop": "node scripts/validate-demo-loop.mjs",
     "test": "node test/hash-vectors.mjs && node test/parse-intent-test.mjs && node test/guardian-test.mjs && node test/tick-test.mjs && node test/tick-auth-test.mjs && node test/read-surfaces-test.mjs && node test/runtime-activity-test.mjs && node test/policy-event-feed-test.mjs && node test/executor-adapters-test.mjs && node test/secret-safe-signer-test.mjs && node test/validate-policy-loop-cli-test.mjs"
   },
   "dependencies": {

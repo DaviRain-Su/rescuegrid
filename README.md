@@ -42,6 +42,7 @@ npm --prefix worker test            # backend checks
 npm --prefix worker run typecheck   # Worker TypeScript
 cd move/rescuegrid && sui move test # Move tests
 npm run config                      # sanitized Testnet deployment IDs
+npm run demo:loop                   # create -> activate/tick -> revoke live demo evidence
 ```
 
 The verified live Worker URL for this repo is the local Worker at `http://localhost:8787`, and the verified frontend port is `http://localhost:5175`. Sui objects are deployed on **Sui Testnet only** (see [`docs/STATUS.md`](docs/STATUS.md) / `npm run config`); do not treat this README as Mainnet or Cloudflare production-deploy evidence.
@@ -77,6 +78,8 @@ With a connected wallet + Worker URL, **New strategy → Sign & deploy** parses 
 
 > Agent-key validation path: mission validation used the dedicated Worker-held agent key from `worker/.dev.vars` through secret-safe scripts to create/list/revoke current-run policies on Sui Testnet. Do not print or commit `.dev.vars` values; evidence records only public signer/owner/agent addresses, object IDs, strategy hashes, and tx digests.
 
+> Demo-loop validation path: with the local Worker running and `INTERNAL_AGENT_TICK_TOKEN` + `RESCUEGRID_DEMO_MODE=true` configured, `npm run demo:loop` creates a Testnet policy, activates the Durable Object runtime, forces one internal tick, records either a real execution or the documented funding gate, revokes, then proves the post-revoke tick stops without execution.
+
 > Funding/execution gate: the deployed agent BalanceManager is currently unfunded for execution (`DBUSDC=0`, `DEEP=0` in final validation). Readiness surfaces correctly remain blocked with labels such as `EXECUTION_DISABLED`, `INSUFFICIENT_DBUSDC`, and `INSUFFICIENT_DEEP`. Real DeepBook execution was explicitly deferred/skipped until usable Testnet DBUSDC/DEEP funding exists; this repo must not claim a successful live DeepBook fill yet.
 
 ## Final validation snapshot
@@ -86,6 +89,7 @@ Observed final mission evidence is Testnet-only:
 - Validators passed: `npm run build`, `npm --prefix worker test`, `npm --prefix worker run typecheck`, `cd move/rescuegrid && sui move test`, and `npm run config`.
 - Browser/API surfaces were verified on `http://localhost:5175` with live Worker reads to `http://localhost:8787`.
 - Scripted agent-key Testnet validation created, listed, surfaced in UI/API, and revoked a current-run policy; chain and Worker reads stayed consistent post-revoke.
+- `npm run demo:loop` is the G2 live demo validator: create -> activate/monitor -> force tick -> revoke -> post-revoke tick. In the current funding state it should report the documented execution gate, not a fake fill.
 - Funding/readiness, tick auth, trigger-not-met, Guardian safety, revoked/failed/unresolved paths all remained non-success with unchanged spend and no execution-success activity.
 - Successful real DeepBook execution was not run and should remain documented as deferred until the DBUSDC/DEEP gate is satisfied.
 

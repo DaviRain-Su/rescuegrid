@@ -14,7 +14,7 @@ const client = getClient()
 const nowMs = Date.now()
 const strategy = {
   version: '1', strategy_type: 'risk_response', owner, agent: DEPLOYMENT.agent.address,
-  chain: 'sui:testnet', pool_id: DEPLOYMENT.deepbook.pools.SUI_DBUSDC.pool_id,
+  chain: 'sui:testnet', executor_kind: 'deepbook', pool_id: DEPLOYMENT.deepbook.pools.SUI_DBUSDC.pool_id,
   budget_coin_type: DEPLOYMENT.deepbook.dbusdc_coin_type,
   budget_ceiling: '50000000',
   trigger: { metric: 'price_drop_pct', asset: 'SUI', threshold_pct: '8' },

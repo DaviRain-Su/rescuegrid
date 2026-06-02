@@ -124,6 +124,7 @@ async function createPolicy({ marker, budgetCeiling, maxSlippageBps, expiresAtMs
     owner: ownerAddress,
     agent: delegatedAgentAddress,
     chain: expectedChain,
+    executor_kind: 'deepbook',
     pool_id: poolId,
     budget_coin_type: DEPLOYMENT.deepbook.dbusdc_coin_type,
     budget_ceiling: String(budgetCeiling),
