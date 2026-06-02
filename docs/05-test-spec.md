@@ -264,6 +264,23 @@ Security / boundary:
 - 响应不得包含 Archival Store endpoint URL、endpoint token、`AGENT_KEY`、owner key、WaaP token 或 Worker secret。
 - `execution_hot_path_unchanged` 和 `activity_hot_path_unchanged` 必须保持 true，直到真实 archival provider 和 reconciliation 测试落地。
 
+### `GET /api/private-records/contract`
+
+Happy path:
+
+- 默认返回 `provider.kind=none`、`provider.provider_status=disabled`、`provider.blocker_code=PRIVATE_RECORDS_DISABLED`。
+- 返回 `record_contracts`，且 id 必须包含且仅包含 `strategy_snapshot`、`backtest_report`、`agent_reasoning_trace`、`incident_report`。
+- 每个 record contract 必须有 encrypted payload fields、chain anchor fields、authorized readers、disallowed fields、required redactions、consumers、`client_side_encryption_required=true` 和 `signing_secret_allowed=false`。
+- `PRIVATE_RECORD_PROVIDER=seal-walrus` 但 Seal/Walrus 姿态不完整时，返回 `provider_status=unavailable` 和 `PRIVATE_RECORDS_CONFIG_REQUIRED`。
+- `PRIVATE_RECORD_PROVIDER=seal-walrus` 且 Seal/Walrus 姿态完整时，返回 `provider_status=not_validated`，不能返回 ready。
+- Data Sources UI 必须显示 Private policy records 的 provider、contract count、secret blocker 和 provider blocker，不能暗示已经启用 Seal/Walrus 存储。
+
+Security / boundary:
+
+- 响应不得包含 Seal/Walrus endpoint URL、endpoint token、`AGENT_KEY`、owner key、WaaP token、WaaP session file、raw hidden model reasoning 或 Worker secret。
+- `AGENT_KEY`、owner wallet private key、WaaP permission token 和 raw hidden model reasoning 只能作为 disallowed schema metadata 出现，不能作为 payload。
+- `storage_hot_path_unchanged` 和 `execution_hot_path_unchanged` 必须保持 true，直到真实 Seal/Walrus write/read、Sui ACL 和 chain-anchor 验证落地。
+
 ### `npm run chain-data:status`
 
 Happy path:

@@ -12,6 +12,7 @@ import {
 } from '../queries/adapter-surfaces.js'
 import { useChainDataStatus } from '../queries/chain-data-status.js'
 import { okArchivalReplayContract, useArchivalReplayContract } from '../queries/archival-replay.js'
+import { okPrivatePolicyRecordContract, usePrivatePolicyRecordContract } from '../queries/private-policy-records.js'
 
 const ACCESS_META = {
   live:  { c: 'var(--safe)',   label: 'Live · direct', note: 'Public, CORS-open — the browser fetches it directly.' },
@@ -176,6 +177,56 @@ function ArchivalReplayCard({ data, query }) {
   );
 }
 
+function PrivatePolicyRecordCard({ data, query }) {
+  const unavailable = !WORKER_CONFIGURED ? 'worker not configured' : query.isError ? 'worker read failed' : data?.provider?.provider_status || 'loading';
+  const provider = data?.provider || {};
+  const ready = provider.provider_status === 'ready';
+  const warn = provider.provider_status && provider.provider_status !== 'ready';
+  const tone = ready ? 'safe' : warn ? 'warn' : 'neutral';
+  const contracts = data?.record_contracts || [];
+  return (
+    <div className="card" style={{ padding: '15px 17px', display: 'flex', flexDirection: 'column', gap: 12, minWidth: 0 }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 9 }}>
+        <span style={{ color: ready ? 'var(--accent)' : warn ? 'var(--warn)' : 'var(--t2)' }}><Icon name="key" size={16} /></span>
+        <div className="card-title" style={{ fontSize: 13 }}>Private policy records</div>
+        <div style={{ flex: 1 }} />
+        <SurfacePill tone={tone}>{provider.provider_status || unavailable}</SurfacePill>
+      </div>
+      {data?.status === 'ok' ? (
+        <>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: 8 }}>
+            {[
+              ['Provider', provider.kind || 'none'],
+              ['Contracts', contracts.length],
+              ['Secrets', provider.signing_secret_allowed ? 'allowed' : 'blocked'],
+            ].map(([k, v]) => (
+              <div key={k} style={{ padding: '9px 10px', borderRadius: 8, background: 'var(--glass)', border: '1px solid var(--border)' }}>
+                <div className="eyebrow" style={{ fontSize: 8.5 }}>{k}</div>
+                <div className="mono display" style={{ fontSize: 13, fontWeight: 600, marginTop: 4, overflow: 'hidden', textOverflow: 'ellipsis' }}>{v}</div>
+              </div>
+            ))}
+          </div>
+          <div style={{ display: 'flex', gap: 7, flexWrap: 'wrap' }}>
+            {contracts.map((row) => (
+              <span key={row.id} className="badge badge-neutral" style={{ fontSize: 9.5 }}>
+                {row.label}
+                <span style={{ color: row.client_side_encryption_required ? 'var(--warn)' : 'var(--t2)', marginLeft: 5 }}>contract</span>
+              </span>
+            ))}
+          </div>
+          <div className="mono" style={{ fontSize: 10, color: 'var(--t2)', lineHeight: 1.45 }}>
+            {provider.blocker_code || 'PRIVATE_RECORD_CONTRACT_ONLY'} · encrypted storage hot path unchanged
+          </div>
+        </>
+      ) : (
+        <div style={{ fontSize: 11.5, color: 'var(--t2)', lineHeight: 1.45 }}>
+          Private policy record contracts appear here when `VITE_WORKER_URL` points at the RescueGrid Worker.
+        </div>
+      )}
+    </div>
+  );
+}
+
 function FeedTestButton({ feed }) {
   const testFeedMutation = useFeedTestMutation();
   const state = testFeedMutation.isPending ? 'testing' : testFeedMutation.isSuccess ? 'ok' : testFeedMutation.isError ? 'err' : 'idle';
@@ -217,8 +268,10 @@ export function DataSources({ onToast, live, setLive }) {
   const lendingQuery = useLendingReadAdapters();
   const chainDataQuery = useChainDataStatus({ probe: probeChainData });
   const archivalReplayQuery = useArchivalReplayContract();
+  const privateRecordQuery = usePrivatePolicyRecordContract();
   const chainDataStatus = chainDataQuery.data;
   const archivalReplay = okArchivalReplayContract(archivalReplayQuery);
+  const privatePolicyRecords = okPrivatePolicyRecordContract(privateRecordQuery);
   const dexSurface = okAdapterSurface(dexQuery);
   const lendingSurface = okAdapterSurface(lendingQuery);
 
@@ -296,6 +349,7 @@ export function DataSources({ onToast, live, setLive }) {
             adapterRows={lendingSurface?.adapters || []}
           />
           <ArchivalReplayCard data={archivalReplay} query={archivalReplayQuery} />
+          <PrivatePolicyRecordCard data={privatePolicyRecords} query={privateRecordQuery} />
         </div>
       </div>
 

@@ -834,6 +834,58 @@ Rules:
 - Output must not include Archival Store endpoint URLs, access tokens, `AGENT_KEY`, owner keys, WaaP tokens or Worker secrets.
 - Chain events and object snapshots remain authoritative. Durable Object runtime rows can annotate replay output but cannot override terminal chain state or claim execution success.
 
+### `GET /api/private-records/contract`
+
+Returns the Worker-first private policy record contract for a future Seal + Walrus storage layer. This endpoint is read-only; it defines schemas, access anchors and blockers, but does not upload to Walrus, create a Seal policy, mutate Sui objects or decrypt payloads.
+
+Response:
+
+```json
+{
+  "status": "ok",
+  "chain": "sui:testnet",
+  "provider": {
+    "kind": "none",
+    "known_provider_kinds": ["none", "seal-walrus"],
+    "provider_status": "disabled",
+    "seal_configured": false,
+    "walrus_configured": false,
+    "worker_first": true,
+    "read_only_contract": true,
+    "client_side_encryption_required": true,
+    "signing_secret_allowed": false,
+    "storage_hot_path_unchanged": true,
+    "execution_hot_path_unchanged": true,
+    "migration_ready": false,
+    "blocker_code": "PRIVATE_RECORDS_DISABLED"
+  },
+  "access_model": {
+    "pattern": "Sui access object + Seal policy + Walrus blob id",
+    "agent_can_decrypt_by_default": false,
+    "worker_can_decrypt_by_default": false,
+    "on_chain_payload_policy": "hashes_and_blob_ids_only"
+  },
+  "record_contracts": [
+    { "id": "strategy_snapshot" },
+    { "id": "backtest_report" },
+    { "id": "agent_reasoning_trace" },
+    { "id": "incident_report" }
+  ]
+}
+```
+
+Rules:
+
+- Default provider is `none`; it must return `provider_status=disabled` and `blocker_code=PRIVATE_RECORDS_DISABLED`.
+- `PRIVATE_RECORD_PROVIDER=seal-walrus` without both Seal and Walrus posture configured returns `provider_status=unavailable` and `PRIVATE_RECORDS_CONFIG_REQUIRED`.
+- `PRIVATE_RECORD_PROVIDER=seal-walrus` with Seal and Walrus posture configured returns `provider_status=not_validated`, not ready. Configured posture is not encrypted storage proof.
+- The endpoint must define exactly four initial record contracts: `strategy_snapshot`, `backtest_report`, `agent_reasoning_trace` and `incident_report`.
+- Every record contract must require client-side encryption and set `signing_secret_allowed=false`.
+- Chain anchors may store wrapper id, mandate id, owner, `strategy_hash`, Seal access object id, Walrus blob id, content hash and version. On-chain payloads must be hashes and blob ids only.
+- The agent and Worker cannot decrypt private records by default. Owner-delegated readers must be explicit.
+- Output must not include Seal/Walrus endpoint URLs, access-token values, owner key values, WaaP session values, permission-token values, raw hidden model reasoning text or Worker secret values. Secret key names such as `AGENT_KEY` may appear only as disallowed schema metadata.
+- Private record storage cannot submit transactions or relax Guardian, MoveGate or `RescuePolicyWrapper` checks.
+
 ### `npm run chain-data:status`
 
 Runs the same ChainDataProvider status logic from a local CLI so cloud Worker and local daemon migrations can be validated before changing production reads.

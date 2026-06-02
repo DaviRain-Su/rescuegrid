@@ -71,6 +71,8 @@ Useful RescueGrid artifacts for Seal/Walrus:
 - human approval notes,
 - incident reports after failed or blocked ticks.
 
+Implementation status: J5 is now implemented as a contract boundary at `/api/private-records/contract`. It defines `strategy_snapshot`, `backtest_report`, `agent_reasoning_trace` and `incident_report` record schemas, the Sui access object + Seal policy + Walrus blob id anchor model, and secret redaction rules. The provider defaults to `none`; `seal-walrus` only reports configuration posture and stays `not_validated` until encrypted write/read, ACL and chain-anchor validation are implemented. This is storage-only and cannot submit transactions or relax Guardian / MoveGate / `RescuePolicyWrapper` checks.
+
 ## 3. Sui Stack CRM reference
 
 The `sui-stack-crm` project is valuable because it demonstrates the exact Sui Stack pattern RescueGrid might need later:

@@ -7,6 +7,7 @@ import { bodyLimit } from 'hono/body-limit'
 import { parseIntent } from './parse.js'
 import { strategyHash } from './strategy-core.js'
 import { getArchivalReplayContract } from './archival-replay.js'
+import { getPrivatePolicyRecordContract } from './private-policy-records.js'
 import { buildCreatePolicyTx, buildRevokeTx } from './sui-tx.js'
 import { getChainDataProviderStatus, requireChainDataProvider } from './chain-data-provider.js'
 import { DEPLOYMENT } from './sui-tx.js'
@@ -72,6 +73,16 @@ export interface Env {
   SUI_ARCHIVAL_STORE_URL?: string
   SUI_ARCHIVAL_URL?: string
   ARCHIVAL_STORE_URL?: string
+  PRIVATE_RECORD_PROVIDER?: string
+  RESCUEGRID_PRIVATE_RECORD_PROVIDER?: string
+  SEAL_CONFIGURED?: string
+  RESCUEGRID_SEAL_CONFIGURED?: string
+  SEAL_API_URL?: string
+  RESCUEGRID_SEAL_API_URL?: string
+  WALRUS_CONFIGURED?: string
+  RESCUEGRID_WALRUS_CONFIGURED?: string
+  WALRUS_API_URL?: string
+  RESCUEGRID_WALRUS_API_URL?: string
 }
 
 const app = new Hono<{ Bindings: Env }>()
@@ -151,6 +162,10 @@ app.get('/api/chain-data/status', async (c) => {
 
 app.get('/api/archival/replay-contract', (c) => {
   return c.json(getArchivalReplayContract(c.env))
+})
+
+app.get('/api/private-records/contract', (c) => {
+  return c.json(getPrivatePolicyRecordContract(c.env))
 })
 
 app.get('/api/execution/readiness', async (c) => {

@@ -153,6 +153,16 @@ async function main() {
   assert('archival replay exposes required contracts', ['historical_activity', 'performance_replay', 'judge_demo_replay'].every((id) => replayContractIds.includes(id)), replayContractIds.join(',') || 'missing')
   assert('archival replay does not leak worker secrets', secretValues.every((value) => !archivalText.includes(value)), 'secret values absent')
 
+  const privateRecordsResult = await checkJson(`${WORKER_URL}/api/private-records/contract`)
+  const privateRecords = privateRecordsResult.json || {}
+  const privateRecordsText = privateRecordsResult.text || ''
+  const privateRecordIds = (privateRecords.record_contracts || []).map((row) => row.id)
+  assert('worker private policy records contract reachable', privateRecordsResult.ok && privateRecordsResult.status === 200 && privateRecords.status === 'ok', `${WORKER_URL}/api/private-records/contract status=${privateRecordsResult.status}`)
+  assert('private records are Worker-first contract-only', privateRecords.provider?.worker_first === true && privateRecords.provider?.read_only_contract === true, privateRecords.provider?.kind || 'missing')
+  assert('private records expose required contracts', ['strategy_snapshot', 'backtest_report', 'agent_reasoning_trace', 'incident_report'].every((id) => privateRecordIds.includes(id)), privateRecordIds.join(',') || 'missing')
+  assert('private records keep signing secrets disallowed', privateRecords.provider?.signing_secret_allowed === false && (privateRecords.record_contracts || []).every((row) => row.signing_secret_allowed === false), 'signing_secret_allowed=false')
+  assert('private records do not leak worker secrets', secretValues.every((value) => !privateRecordsText.includes(value)), 'secret values absent')
+
   const executionReadinessStatus = await checkJson(`${WORKER_URL}/api/execution/readiness`)
   const executionReadiness = executionReadinessStatus.json || {}
   const readinessText = executionReadinessStatus.text || ''
