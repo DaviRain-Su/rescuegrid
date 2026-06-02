@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict'
-import { validateForceTrigger, validateTickAuthorization } from '../src/tick-auth.js'
+import { validateForceTrigger, validateTickAuthorization, validateTickBody } from '../src/tick-auth.js'
 
 {
   const missing = validateTickAuthorization({ authorizationHeader: undefined, expectedToken: 'configured-token' })
@@ -26,6 +26,27 @@ import { validateForceTrigger, validateTickAuthorization } from '../src/tick-aut
 {
   const valid = validateTickAuthorization({ authorizationHeader: 'Bearer configured-token', expectedToken: 'configured-token' })
   assert.equal(valid.ok, true)
+}
+
+{
+  const missing = validateTickBody({ wrapperId: undefined })
+  assert.equal(missing.ok, false)
+  assert.equal(missing.status, 400)
+  assert.equal(missing.body.code, 'BAD_REQUEST')
+  assert.equal(missing.body.execution_claimed, false)
+}
+
+{
+  const malformed = validateTickBody({ wrapperId: 'not-an-object-id' })
+  assert.equal(malformed.ok, false)
+  assert.equal(malformed.status, 400)
+  assert.equal(malformed.body.code, 'BAD_REQUEST')
+}
+
+{
+  const valid = validateTickBody({ wrapperId: '0xabc123' })
+  assert.equal(valid.ok, true)
+  assert.equal(valid.wrapperId, '0xabc123')
 }
 
 {

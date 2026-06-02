@@ -10,7 +10,7 @@ import { buildCreatePolicyTx, buildRevokeTx } from './sui-tx.js'
 import { countActivePoliciesByDeployment, getActivity, listPoliciesByOwner, listActivityByOwner, getOwnerSummary, getMarket, getBalances, readMandate, readWrapper, readBalanceManagerBalance, policyEventsToFeedItems } from './chain.js'
 import { getClient, DEPLOYMENT } from './sui-tx.js'
 import { runTick, validateExecutionPlan } from './tick.js'
-import { validateForceTrigger, validateTickAuthorization } from './tick-auth.js'
+import { validateForceTrigger, validateTickAuthorization, validateTickBody } from './tick-auth.js'
 import { buildFundingReadiness, parseIntentWithStability, resolveFundingThresholds } from './read-surfaces.js'
 import {
   appendRuntimeActivity,
@@ -447,10 +447,11 @@ app.post('/api/agent/tick', async (c) => {
   } catch {
     return c.json({ status: 'error', code: 'BAD_REQUEST', message: 'Invalid JSON body.' }, 400)
   }
-  if (!body.wrapper_id) return c.json({ status: 'error', code: 'BAD_REQUEST', message: 'wrapper_id required.' }, 400)
+  const bodyResult = validateTickBody({ wrapperId: body.wrapper_id })
+  if (!bodyResult.ok) return c.json(bodyResult.body, bodyResult.status as 400)
   const forceResult = validateForceTrigger({ forceTriggerRequested: body.force_trigger === true, demoMode: c.env.RESCUEGRID_DEMO_MODE })
   if (!forceResult.ok) return c.json(forceResult.body, forceResult.status as 403)
-  const result = await runTick(c.env, { wrapperId: body.wrapper_id, forceTrigger: forceResult.forceTrigger })
+  const result = await runTick(c.env, { wrapperId: bodyResult.wrapperId, forceTrigger: forceResult.forceTrigger })
   return c.json({ status: 'ok', ...result })
 })
 

@@ -18,6 +18,22 @@ export function validateTickAuthorization({ authorizationHeader, expectedToken }
   return { ok: true }
 }
 
+export function validateTickBody({ wrapperId }) {
+  if (!wrapperId || !/^0x[0-9a-fA-F]+$/.test(String(wrapperId))) {
+    return {
+      ok: false,
+      status: 400,
+      body: {
+        status: 'error',
+        code: 'BAD_REQUEST',
+        message: 'Valid wrapper_id required.',
+        execution_claimed: false,
+      },
+    }
+  }
+  return { ok: true, wrapperId: String(wrapperId) }
+}
+
 export function validateForceTrigger({ forceTriggerRequested, demoMode }) {
   if (forceTriggerRequested && demoMode !== 'true') {
     return {
