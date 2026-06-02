@@ -6,6 +6,7 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { dirname, resolve } from 'node:path'
 import { pathToFileURL } from 'node:url'
 import deployment from '../core/deployment.js'
+import { getClient } from '../worker/src/sui-tx.js'
 
 const DEFAULT_FRONTEND_URL = 'http://localhost:5175'
 const DEFAULT_WORKER_URL = 'http://localhost:8787'
@@ -250,6 +251,7 @@ export function buildWalletEvidence({
       },
     ],
     evidence_fields: {
+      owner_address: ownerAddress || '',
       sign_in_screenshot: '',
       wallet_create_prompt_screenshot: '',
       create_tx_digest: '',
@@ -383,6 +385,314 @@ export function writeWalletEvidenceArtifact(evidence, { outPath, format = 'json'
   }
 }
 
+function stripCodeFence(value) {
+  return String(value ?? '').trim().replace(/^`+|`+$/g, '').trim()
+}
+
+function evidenceValuePresent(value) {
+  const normalized = stripCodeFence(value)
+  return normalized !== '' && !/^TODO\b/i.test(normalized) && normalized !== 'n/a'
+}
+
+function normalizeHexLike(value) {
+  return stripCodeFence(value).toLowerCase()
+}
+
+function normalizeStrategyHash(value) {
+  const normalized = normalizeHexLike(value)
+  if (!normalized) return normalized
+  return normalized.startsWith('0x') ? normalized : `0x${normalized}`
+}
+
+function mergeEvidenceField(fields, key, value) {
+  const normalized = stripCodeFence(value)
+  if (!normalized) return
+  if (!fields[key] || !evidenceValuePresent(fields[key])) fields[key] = normalized
+}
+
+export function parseWalletEvidenceArtifact(text) {
+  const raw = String(text || '')
+  const trimmed = raw.trim()
+  if (!trimmed) {
+    return { format: 'empty', fields: {}, metadata: {}, status: 'error', code: 'EMPTY_ARTIFACT' }
+  }
+  if (trimmed.startsWith('{')) {
+    const json = JSON.parse(trimmed)
+    return {
+      format: 'json',
+      fields: {
+        ...(json.evidence_fields || {}),
+        owner_address: json.evidence_fields?.owner_address || json.wallet?.owner_address || '',
+      },
+      metadata: {
+        chain: json.chain || null,
+        frontend_url: json.frontend?.url || null,
+        worker_url: json.worker?.url || null,
+        generated_at: json.generated_at || null,
+      },
+      status: 'ok',
+    }
+  }
+
+  const fields = {}
+  const metadata = {}
+  for (const rawLine of raw.split(/\r?\n/)) {
+    const line = rawLine.trim()
+    let match = line.match(/^- ([A-Za-z0-9_]+):\s*(.*)$/)
+    if (match) {
+      mergeEvidenceField(fields, match[1], match[2])
+      continue
+    }
+    match = line.match(/^Owner address:\s*(.*)$/i)
+    if (match) {
+      mergeEvidenceField(fields, 'owner_address', match[1])
+      continue
+    }
+    match = line.match(/^Worker:\s*(.*)$/i)
+    if (match) {
+      metadata.worker_url = stripCodeFence(match[1])
+      continue
+    }
+    match = line.match(/^Frontend:\s*(.*)$/i)
+    if (match) {
+      metadata.frontend_url = stripCodeFence(match[1])
+      continue
+    }
+    match = line.match(/^Chain:\s*(.*)$/i)
+    if (match) {
+      metadata.chain = stripCodeFence(match[1])
+      continue
+    }
+    match = line.match(/^Generated:\s*(.*)$/i)
+    if (match) {
+      metadata.generated_at = stripCodeFence(match[1])
+    }
+  }
+  return { format: 'markdown', fields, metadata, status: 'ok' }
+}
+
+function hexFromMaybeVector(value) {
+  if (typeof value === 'string') return normalizeStrategyHash(value)
+  if (!Array.isArray(value)) return null
+  return `0x${value.map((b) => Number(b).toString(16).padStart(2, '0')).join('')}`
+}
+
+function findPolicyEvent(tx, eventName) {
+  return (tx?.events || []).find((event) => String(event.type).endsWith(`::policy::${eventName}`))
+    || (tx?.events || []).find((event) => String(event.type).endsWith(`::${eventName}`))
+    || null
+}
+
+function txStatus(tx) {
+  return tx?.effects?.status?.status || tx?.effects?.status || null
+}
+
+function txSummary(tx, eventName) {
+  const event = findPolicyEvent(tx, eventName)
+  return {
+    digest: tx?.digest || null,
+    status: txStatus(tx),
+    checkpoint: tx?.checkpoint || null,
+    timestamp_ms: tx?.timestampMs || null,
+    event_type: event?.type || null,
+    event: event?.parsedJson || null,
+  }
+}
+
+async function readTransaction(client, digest) {
+  return client.getTransactionBlock({
+    digest,
+    options: { showEvents: true, showEffects: true, showObjectChanges: true },
+  })
+}
+
+function createCheck({ id, label, passed, expected = null, actual = null, detail = null, skipped = false }) {
+  return {
+    id,
+    label,
+    status: skipped ? 'skipped' : passed ? 'passed' : 'failed',
+    passed: skipped ? null : Boolean(passed),
+    expected,
+    actual,
+    detail,
+  }
+}
+
+function checkEqual(id, label, actual, expected, detail = null) {
+  return createCheck({
+    id,
+    label,
+    passed: normalizeHexLike(actual) === normalizeHexLike(expected),
+    expected,
+    actual,
+    detail,
+  })
+}
+
+function buildMissingChecks(fields, requiredFields) {
+  return requiredFields.map((field) => createCheck({
+    id: `field:${field}`,
+    label: `${field} is present in the artifact`,
+    passed: evidenceValuePresent(fields[field]),
+    expected: 'present non-TODO value',
+    actual: fields[field] || '',
+  }))
+}
+
+async function verifyWorkerDetail({ workerUrl, wrapperId, revokeDigest, fetchImpl, timeoutMs, requireWorker }) {
+  if (!workerUrl) {
+    return [createCheck({
+      id: 'worker:detail',
+      label: 'Worker detail check',
+      skipped: true,
+      detail: 'worker URL not configured',
+    })]
+  }
+  const result = await fetchJson(`${normalizeUrl(workerUrl)}/api/policies/${wrapperId}/activity`, { fetchImpl, timeoutMs })
+  if (result.status !== 'ok') {
+    return [createCheck({
+      id: 'worker:detail',
+      label: 'Worker detail endpoint is reachable',
+      passed: false,
+      skipped: !requireWorker,
+      expected: requireWorker ? 'ok' : 'optional',
+      actual: result.status,
+      detail: result.error,
+    })]
+  }
+  const body = result.body || {}
+  const policy = body.policy || {}
+  const activity = body.activity || []
+  return [
+    createCheck({
+      id: 'worker:detail',
+      label: 'Worker detail endpoint is reachable',
+      passed: body.status === 'ok',
+      expected: 'ok',
+      actual: body.status,
+    }),
+    checkEqual('worker:wrapper', 'Worker detail wrapper id matches artifact', policy.wrapper_id, wrapperId),
+    createCheck({
+      id: 'worker:revoked',
+      label: 'Worker detail shows revoked chain state after revoke',
+      passed: policy.revoked === true || policy.runtime_state === 'Revoked' || policy.status === 'revoked',
+      expected: 'revoked',
+      actual: { revoked: policy.revoked, runtime_state: policy.runtime_state, status: policy.status },
+    }),
+    createCheck({
+      id: 'worker:revoke-activity',
+      label: 'Worker activity includes the revoke tx digest',
+      passed: activity.some((row) => row.tx === revokeDigest || row.tx_digest === revokeDigest),
+      expected: revokeDigest,
+      actual: activity.map((row) => row.tx || row.tx_digest).filter(Boolean).slice(0, 10),
+    }),
+  ]
+}
+
+export async function verifyWalletEvidenceArtifact({
+  artifactText,
+  workerUrl = null,
+  suiClient = null,
+  fetchImpl = globalThis.fetch,
+  timeoutMs = DEFAULT_TIMEOUT_MS,
+  requireWorker = false,
+} = {}) {
+  const parsed = parseWalletEvidenceArtifact(artifactText)
+  const fields = parsed.fields || {}
+  const checks = []
+  const requiredFields = ['owner_address', 'create_tx_digest', 'wrapper_id', 'mandate_id', 'strategy_hash', 'revoke_tx_digest']
+  checks.push(...buildMissingChecks(fields, requiredFields))
+  const missing = checks.filter((check) => check.status === 'failed').map((check) => check.id.replace('field:', ''))
+
+  const report = {
+    status: 'ok',
+    purpose: 'browser_wallet_clickthrough_evidence_verification',
+    verified: false,
+    chain: parsed.metadata?.chain || deployment.chain,
+    worker_url: workerUrl || parsed.metadata?.worker_url || null,
+    fields: Object.fromEntries(requiredFields.map((field) => [field, fields[field] || ''])),
+    checks,
+    create_transaction: null,
+    revoke_transaction: null,
+    execution_claimed: false,
+  }
+
+  if (missing.length > 0) {
+    report.status = 'error'
+    report.code = 'EVIDENCE_FIELDS_INCOMPLETE'
+    report.missing_fields = missing
+    return report
+  }
+
+  const client = suiClient || getClient()
+  const createTx = await readTransaction(client, fields.create_tx_digest)
+  const revokeTx = await readTransaction(client, fields.revoke_tx_digest)
+  const createEvent = findPolicyEvent(createTx, 'PolicyCreated')
+  const revokeEvent = findPolicyEvent(revokeTx, 'PolicyRevoked')
+  const createJson = createEvent?.parsedJson || {}
+  const revokeJson = revokeEvent?.parsedJson || {}
+  const expectedStrategyHash = normalizeStrategyHash(fields.strategy_hash)
+  const actualStrategyHash = hexFromMaybeVector(createJson.strategy_hash)
+  const expectedWorkerUrl = workerUrl || parsed.metadata?.worker_url || null
+
+  report.create_transaction = txSummary(createTx, 'PolicyCreated')
+  report.revoke_transaction = txSummary(revokeTx, 'PolicyRevoked')
+  report.checks.push(
+    createCheck({
+      id: 'chain:create-status',
+      label: 'Create transaction succeeded on Sui',
+      passed: txStatus(createTx) === 'success',
+      expected: 'success',
+      actual: txStatus(createTx),
+    }),
+    createCheck({
+      id: 'chain:create-event',
+      label: 'Create transaction emitted PolicyCreated',
+      passed: Boolean(createEvent),
+      expected: 'PolicyCreated',
+      actual: createEvent?.type || null,
+    }),
+    checkEqual('chain:create-wrapper', 'PolicyCreated wrapper id matches artifact', createJson.wrapper_id, fields.wrapper_id),
+    checkEqual('chain:create-mandate', 'PolicyCreated mandate id matches artifact', createJson.mandate_id, fields.mandate_id),
+    checkEqual('chain:create-owner', 'PolicyCreated owner matches artifact', createJson.owner, fields.owner_address),
+    checkEqual('chain:create-strategy-hash', 'PolicyCreated strategy hash matches artifact', actualStrategyHash, expectedStrategyHash),
+    createCheck({
+      id: 'chain:revoke-status',
+      label: 'Revoke transaction succeeded on Sui',
+      passed: txStatus(revokeTx) === 'success',
+      expected: 'success',
+      actual: txStatus(revokeTx),
+    }),
+    createCheck({
+      id: 'chain:revoke-event',
+      label: 'Revoke transaction emitted PolicyRevoked',
+      passed: Boolean(revokeEvent),
+      expected: 'PolicyRevoked',
+      actual: revokeEvent?.type || null,
+    }),
+    checkEqual('chain:revoke-wrapper', 'PolicyRevoked wrapper id matches artifact', revokeJson.wrapper_id, fields.wrapper_id),
+    checkEqual('chain:revoke-mandate', 'PolicyRevoked mandate id matches artifact', revokeJson.mandate_id, fields.mandate_id),
+    checkEqual('chain:revoke-owner', 'PolicyRevoked owner matches artifact', revokeJson.owner, fields.owner_address),
+  )
+
+  report.checks.push(...await verifyWorkerDetail({
+    workerUrl: expectedWorkerUrl,
+    wrapperId: fields.wrapper_id,
+    revokeDigest: fields.revoke_tx_digest,
+    fetchImpl,
+    timeoutMs,
+    requireWorker,
+  }))
+
+  const hardFailures = report.checks.filter((check) => check.status === 'failed')
+  report.verified = hardFailures.length === 0
+  if (!report.verified) {
+    report.status = 'error'
+    report.code = 'EVIDENCE_VERIFICATION_FAILED'
+  }
+  return report
+}
+
 function help() {
   console.log(`Build a RescueGrid browser wallet click-through evidence artifact.
 
@@ -391,11 +701,14 @@ Usage:
   npm run wallet:evidence -- --format markdown
   npm run wallet:evidence -- --format markdown --out .rescuegrid/wallet-clickthrough-evidence.md
   npm run wallet:evidence -- --frontend-url http://localhost:5175 --worker-url http://localhost:8787 --owner 0x...
+  npm run wallet:evidence -- --verify --input .rescuegrid/wallet-clickthrough-evidence.md
 
 This is read-only. It may fetch public Worker status/readiness endpoints, then
 prints or writes a manual Slush / standard Sui wallet evidence checklist. It
 does not create policies, submit PTBs, run demo:execute or print signing
-secrets, Worker secrets, tick tokens or WaaP approval values.`)
+secrets, Worker secrets, tick tokens or WaaP approval values. With --verify it
+checks a filled artifact against public Sui transaction events and optional
+Worker detail reads.`)
 }
 
 export async function main(argv = process.argv.slice(2), env = process.env, options = {}) {
@@ -406,6 +719,7 @@ export async function main(argv = process.argv.slice(2), env = process.env, opti
   }
 
   const envFile = readSelectedEnv(flags.get('--env-file') || '.env.local')
+  const timeoutMs = Number(flags.get('--timeout-ms') || DEFAULT_TIMEOUT_MS)
   const frontendUrl = normalizeUrl(firstValue(
     flags.get('--frontend-url'),
     env.RESCUEGRID_FRONTEND_URL,
@@ -414,7 +728,7 @@ export async function main(argv = process.argv.slice(2), env = process.env, opti
     envFile.FRONTEND_URL,
     DEFAULT_FRONTEND_URL,
   ))
-  const workerUrl = normalizeUrl(firstValue(
+  const configuredWorkerUrl = firstValue(
     flags.get('--worker-url'),
     env.RESCUEGRID_WORKER_URL,
     env.WORKER_URL,
@@ -422,9 +736,24 @@ export async function main(argv = process.argv.slice(2), env = process.env, opti
     envFile.RESCUEGRID_WORKER_URL,
     envFile.WORKER_URL,
     envFile.VITE_WORKER_URL,
-    DEFAULT_WORKER_URL,
-  ))
-  const timeoutMs = Number(flags.get('--timeout-ms') || DEFAULT_TIMEOUT_MS)
+  )
+  const workerUrl = normalizeUrl(firstValue(configuredWorkerUrl, DEFAULT_WORKER_URL))
+
+  if (flags.has('--verify')) {
+    const inputPath = flags.get('--input') || flags.get('--artifact') || '.rescuegrid/wallet-clickthrough-evidence.md'
+    const artifactText = readFileSync(resolve(String(inputPath)), 'utf8')
+    const report = await verifyWalletEvidenceArtifact({
+      artifactText,
+      workerUrl: configuredWorkerUrl ? normalizeUrl(configuredWorkerUrl) : null,
+      suiClient: options.suiClient,
+      fetchImpl: options.fetchImpl,
+      timeoutMs: Number.isFinite(timeoutMs) && timeoutMs > 0 ? timeoutMs : DEFAULT_TIMEOUT_MS,
+      requireWorker: flags.has('--require-worker'),
+    })
+    console.log(JSON.stringify(report, null, 2))
+    return report.verified ? 0 : 1
+  }
+
   const workerState = await collectWorkerPublicState(workerUrl, {
     fetchImpl: options.fetchImpl,
     timeoutMs: Number.isFinite(timeoutMs) && timeoutMs > 0 ? timeoutMs : DEFAULT_TIMEOUT_MS,

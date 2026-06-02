@@ -18,6 +18,7 @@
     "test:wallet-flow": "node src/queries/wallet-flow.test.mjs",
     "test:wallet-evidence": "node scripts/wallet-clickthrough-evidence.test.mjs",
     "wallet:evidence": "node scripts/wallet-clickthrough-evidence.mjs",
+    "wallet:evidence:verify": "node scripts/wallet-clickthrough-evidence.mjs --verify",
     "funding:request": "node worker/scripts/funding-handoff.mjs",
     "funding:watch": "node worker/scripts/funding-watch.mjs",
     "chain-data:status": "node worker/scripts/chain-data-status.mjs",

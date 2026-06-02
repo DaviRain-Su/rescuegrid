@@ -6,8 +6,10 @@ import { join } from 'node:path'
 import {
   buildWalletEvidence,
   collectWorkerPublicState,
+  parseWalletEvidenceArtifact,
   parseArgs,
   serializeWalletEvidence,
+  verifyWalletEvidenceArtifact,
   writeWalletEvidenceArtifact,
 } from './wallet-clickthrough-evidence.mjs'
 import deployment from '../core/deployment.js'
@@ -119,6 +121,7 @@ const markdown = serializeWalletEvidence(evidence, 'markdown')
 assert.match(markdown, /RescueGrid Wallet Click-Through Evidence/)
 assert.match(markdown, /Slush/)
 assert.match(markdown, /Sui Testnet/)
+assert.match(markdown, /owner_address:/)
 assert.match(markdown, /create_tx_digest: TODO/)
 assert.match(markdown, /wrapper_id: TODO/)
 assert.match(markdown, /Execution claimed: false/)
@@ -150,12 +153,132 @@ const unavailable = await collectWorkerPublicState('http://worker.test', {
 assert.equal(unavailable.root.status, 'unavailable')
 assert.equal(buildWalletEvidence({ workerState: unavailable }).worker.public_state_available, false)
 
+const filledArtifact = `# RescueGrid Wallet Click-Through Evidence
+
+Generated: 2026-06-03T00:00:00.000Z
+Chain: sui:testnet
+Frontend: http://localhost:5175
+Worker: http://worker.test
+
+## Wallet
+
+Wallet: Slush
+Network: Sui Testnet
+Owner address: 0x1111111111111111111111111111111111111111111111111111111111111111
+
+## Evidence Fields
+
+- owner_address: 0x1111111111111111111111111111111111111111111111111111111111111111
+- create_tx_digest: create-digest
+- wrapper_id: 0x2222222222222222222222222222222222222222222222222222222222222222
+- mandate_id: 0x3333333333333333333333333333333333333333333333333333333333333333
+- strategy_hash: 0xabc123
+- revoke_tx_digest: revoke-digest
+`
+
+const parsedArtifact = parseWalletEvidenceArtifact(filledArtifact)
+assert.equal(parsedArtifact.status, 'ok')
+assert.equal(parsedArtifact.format, 'markdown')
+assert.equal(parsedArtifact.metadata.worker_url, 'http://worker.test')
+assert.equal(parsedArtifact.fields.wrapper_id, '0x2222222222222222222222222222222222222222222222222222222222222222')
+
+let chainReads = 0
+const fakeSuiClient = {
+  async getTransactionBlock({ digest, options }) {
+    chainReads += 1
+    assert.equal(options.showEvents, true)
+    if (digest === 'create-digest') {
+      return {
+        digest,
+        checkpoint: '1',
+        timestampMs: '1000',
+        effects: { status: { status: 'success' } },
+        events: [{
+          type: `${deployment.rescuegrid.package_id}::policy::PolicyCreated`,
+          parsedJson: {
+            owner: '0x1111111111111111111111111111111111111111111111111111111111111111',
+            wrapper_id: '0x2222222222222222222222222222222222222222222222222222222222222222',
+            mandate_id: '0x3333333333333333333333333333333333333333333333333333333333333333',
+            strategy_hash: '0xabc123',
+          },
+        }],
+      }
+    }
+    if (digest === 'revoke-digest') {
+      return {
+        digest,
+        checkpoint: '2',
+        timestampMs: '2000',
+        effects: { status: { status: 'success' } },
+        events: [{
+          type: `${deployment.rescuegrid.package_id}::policy::PolicyRevoked`,
+          parsedJson: {
+            owner: '0x1111111111111111111111111111111111111111111111111111111111111111',
+            wrapper_id: '0x2222222222222222222222222222222222222222222222222222222222222222',
+            mandate_id: '0x3333333333333333333333333333333333333333333333333333333333333333',
+          },
+        }],
+      }
+    }
+    throw new Error(`unexpected digest ${digest}`)
+  },
+}
+const fakeWorkerFetch = async (url) => {
+  assert.equal(String(url), 'http://worker.test/api/policies/0x2222222222222222222222222222222222222222222222222222222222222222/activity')
+  return {
+    ok: true,
+    status: 200,
+    async text() {
+      return JSON.stringify({
+        status: 'ok',
+        policy: {
+          wrapper_id: '0x2222222222222222222222222222222222222222222222222222222222222222',
+          revoked: true,
+          runtime_state: 'Revoked',
+        },
+        activity: [{ type: 'PolicyRevoked', tx: 'revoke-digest' }],
+      })
+    },
+  }
+}
+const verifiedReport = await verifyWalletEvidenceArtifact({
+  artifactText: filledArtifact,
+  suiClient: fakeSuiClient,
+  fetchImpl: fakeWorkerFetch,
+})
+assert.equal(verifiedReport.status, 'ok')
+assert.equal(verifiedReport.verified, true)
+assert.equal(verifiedReport.execution_claimed, false)
+assert.equal(verifiedReport.checks.every((check) => check.status === 'passed'), true)
+assert.equal(chainReads, 2)
+
+const optionalWorkerReport = await verifyWalletEvidenceArtifact({
+  artifactText: filledArtifact.replace('http://worker.test', 'http://worker-offline.test'),
+  suiClient: fakeSuiClient,
+  fetchImpl: async () => { throw new Error('offline') },
+})
+assert.equal(optionalWorkerReport.verified, true)
+assert.equal(optionalWorkerReport.checks.some((check) => check.id === 'worker:detail' && check.status === 'skipped'), true)
+
+const incompleteReport = await verifyWalletEvidenceArtifact({
+  artifactText: markdown,
+  suiClient: {
+    async getTransactionBlock() {
+      throw new Error('should not read chain when required fields are missing')
+    },
+  },
+})
+assert.equal(incompleteReport.status, 'error')
+assert.equal(incompleteReport.code, 'EVIDENCE_FIELDS_INCOMPLETE')
+assert(incompleteReport.missing_fields.includes('create_tx_digest'))
+
 const help = spawnSync(process.execPath, ['scripts/wallet-clickthrough-evidence.mjs', '--help'], {
   cwd: new URL('..', import.meta.url),
   encoding: 'utf8',
 })
 assert.equal(help.status, 0, help.stderr)
 assert.match(help.stdout, /wallet click-through evidence/i)
+assert.match(help.stdout, /--verify/)
 assert.match(help.stdout, /--out/)
 assert.equal(help.stdout.includes('AGENT_KEY='), false)
 assert.equal(help.stdout.includes('INTERNAL_AGENT_TICK_TOKEN='), false)
