@@ -33,6 +33,8 @@ Coverage rule:
 - Do not create one executor per protocol. Build category adapters and keep protocol-specific behavior behind configuration, conformance tests and target constraints.
 - Refresh the coverage pool before demos, submissions and adapter work; DefiLlama TVL and volume rankings are unstable inputs, not permanent product commitments.
 
+Implementation status: `worker/src/sui-protocol-registry.js` and `/api/protocols` now expose the current Sui-only coverage baseline refreshed on 2026-06-02 UTC from DefiLlama `protocols` plus the Sui DEX volume overview. The registry uses `chainTvls.Sui` for top-26 ranking, includes Turbos as a volume exception, and marks only DeepBook V3 as `live_executor`.
+
 Execution rule:
 
 | Tier | Meaning | Protocols | Product stance |

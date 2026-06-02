@@ -106,6 +106,15 @@ export function getMarket() {
   return read('/api/market', () => chainRead.getMarket())
 }
 
+/** GET /api/protocols — Sui-only protocol coverage registry for watch/adapters. */
+export function getProtocols() {
+  return workerGet('/api/protocols').catch((e) => ({
+    status: 'error',
+    code: WORKER_CONFIGURED ? 'WORKER_READ_FAILED' : 'WORKER_NOT_CONFIGURED',
+    message: String(e?.message || e),
+  }))
+}
+
 /** GET /api/balances?owner= — real wallet token holdings valued via market. */
 export function getBalances(owner) {
   return read(`/api/balances?owner=${owner}`, () => chainRead.getBalances(owner))

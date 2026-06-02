@@ -9,6 +9,7 @@ import { strategyHash } from './strategy-core.js'
 import { buildCreatePolicyTx, buildRevokeTx } from './sui-tx.js'
 import { requireChainDataProvider } from './chain-data-provider.js'
 import { DEPLOYMENT } from './sui-tx.js'
+import { getSuiProtocolCoverage } from './sui-protocol-registry.js'
 import { runTick, validateExecutionPlan } from './tick.js'
 import { validateForceTrigger, validateTickAuthorization, validateTickBody } from './tick-auth.js'
 import { buildFundingReadiness, parseIntentWithStability, resolveFundingThresholds } from './read-surfaces.js'
@@ -247,6 +248,11 @@ app.get('/api/market', async (c) => {
   } catch (e) {
     return c.json({ status: 'error', code: 'MARKET_READ_FAILED', message: String((e as Error).message) }, 502)
   }
+})
+
+app.get('/api/protocols', (c) => {
+  const includeDisplayOnly = c.req.query('include_display_only') !== 'false'
+  return c.json(getSuiProtocolCoverage({ includeDisplayOnly }))
 })
 
 app.get('/api/balances', async (c) => {
