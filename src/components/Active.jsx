@@ -548,3 +548,72 @@ export function ActiveStrategy({ p, activity, onBack, onToggle, onRebalance, onR
     </div>
   );
 }
+
+/* ---------- Portfolio · live summary (top of Policies page) ---------- */
+export function PortfolioSummary({ policies, onLive }) {
+  const active = policies.filter(p => p.status === 'active');
+  const [clock, setClock] = useState(0);
+  useEffect(() => {
+    if (!active.length) return;
+    const iv = setInterval(() => setClock(c => c + 1), 2500);
+    return () => clearInterval(iv);
+  }, [active.length]);
+
+  const rows = active.map((p, i) => {
+    const sc = (p.scope && p.scope[0]) || '—';
+    const b = (STRAT_LIVE[p.strategy] || STRAT_LIVE['rescue-grid'])(p, sc, p.budgetUsed, p.budgetCap);
+    const baseU = parseFloat(String(b.pnlU).replace(/[^0-9.\-]/g, '')) || 0;
+    const j = Math.sin((clock + 1) * 7.1 + i * 3.3);
+    const pnl = baseU + j * Math.max(0.4, Math.abs(baseU) * 0.05);
+    return { p, pnl, neutral: b.delta.neutral };
+  });
+  const totalPnl = rows.reduce((s, r) => s + r.pnl, 0);
+  const deployed = active.reduce((s, p) => s + p.budgetUsed, 0);
+  const cap = policies.reduce((s, p) => s + p.budgetCap, 0);
+  const neutralN = rows.filter(r => r.neutral).length;
+  const series = useMemo(() => Array.from({ length: 24 }, (_, k) => +(100 + Math.sin(k * 0.6) * 1.2 + k * 0.12).toFixed(2)), []);
+
+  if (!active.length) return null;
+  return (
+    <div className="card" style={{ padding: 18 }}>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          <span style={{ color: 'var(--accent)' }}><Icon name="activity" size={16} /></span>
+          <div className="card-title">Portfolio · live</div>
+          <span className="badge badge-accent" style={{ fontSize: 9 }}><span className="dot pulse"></span>{active.length} running</span>
+        </div>
+        <span className="mono display" style={{ fontSize: 20, fontWeight: 600, color: totalPnl >= 0 ? 'var(--safe)' : 'var(--danger)' }}>{totalPnl >= 0 ? '+' : '−'}${fmtUsd(Math.abs(totalPnl))}</span>
+      </div>
+      <div style={{ display: 'grid', gridTemplateColumns: '1.3fr 1fr', gap: 18, alignItems: 'center' }}>
+        <TimeChart data={series} w={320} height={92} color="var(--safe)" fmt={(v) => v.toFixed(1)} xLabels={['−1h', 'now']} baseline={100} />
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 9 }}>
+          {[['Aggregate PnL', (totalPnl >= 0 ? '+' : '−') + '$' + fmtUsd(Math.abs(totalPnl)), totalPnl >= 0 ? 'var(--safe)' : 'var(--danger)'],
+            ['Capital deployed', '$' + fmtUsd(deployed, 0) + ' / $' + fmtUsd(cap, 0), 'var(--t0)'],
+            ['Market-neutral', neutralN + ' / ' + active.length + ' strategies', 'var(--sui)']].map(([k, v, c]) => (
+            <div key={k} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: 12 }}>
+              <span style={{ color: 'var(--t2)' }}>{k}</span>
+              <span className="mono" style={{ fontWeight: 600, color: c }}>{v}</span>
+            </div>
+          ))}
+        </div>
+      </div>
+      {/* per-strategy contribution bars */}
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 7, marginTop: 14, paddingTop: 14, borderTop: '1px solid var(--border)' }}>
+        {rows.map((r, i) => {
+          const sm = { 'rescue-grid': 'grid', dca: 'target', hedge: 'shield', 'funding-arb': 'swap', 'spot-arb': 'scale', 'lp-manage': 'droplet', lending: 'percent' }[r.p.strategy] || 'grid';
+          const w = Math.min(100, Math.abs(r.pnl) / (Math.max(...rows.map(x => Math.abs(x.pnl))) || 1) * 100);
+          return (
+            <div key={r.p.id} onClick={() => onLive && onLive(r.p)} className="mkt-row" style={{ display: 'flex', alignItems: 'center', gap: 11, padding: '7px 9px', borderRadius: 'var(--r-sm)', cursor: 'pointer' }}>
+              <span style={{ width: 24, height: 24, borderRadius: 7, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'var(--glass-hi)', color: 'var(--accent)' }}><Icon name={sm} size={13} /></span>
+              <span style={{ fontSize: 12, fontWeight: 600, flex: 1, minWidth: 0, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{r.p.name}</span>
+              <div style={{ width: 80, height: 5, background: 'var(--bg-0)', borderRadius: 100, overflow: 'hidden' }}>
+                <div style={{ width: w + '%', height: '100%', background: r.pnl >= 0 ? 'var(--safe)' : 'var(--danger)' }} />
+              </div>
+              <span className="mono" style={{ fontSize: 11.5, fontWeight: 600, width: 64, textAlign: 'right', color: r.pnl >= 0 ? 'var(--safe)' : 'var(--danger)' }}>{r.pnl >= 0 ? '+' : '−'}${fmtUsd(Math.abs(r.pnl))}</span>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}

@@ -4,6 +4,7 @@
 import { useState } from 'react'
 import { Icon, fmtUsd } from './primitives.jsx'
 import { Button, ProgressBar } from '@heroui/react'
+import { PortfolioSummary } from './Active.jsx'
 
 function LoadingCard({ label }) {
   return (
@@ -187,6 +188,7 @@ export function PoliciesView({ policies, onRevoke, onInspect, onLive, live = fal
   const totalUsed = policies.reduce((s, p) => s + p.budgetUsed, 0)
   return (
     <div style={{ maxWidth: 980, margin: '0 auto', display: 'flex', flexDirection: 'column', gap: 18 }}>
+      <PortfolioSummary policies={policies} onLive={onLive} />
       <div className="card" style={{ padding: '18px 22px', display: 'flex', alignItems: 'center', gap: 28, flexWrap: 'wrap' }}>
         <div>
           <div className="eyebrow">Active policies</div>
