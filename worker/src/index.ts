@@ -10,6 +10,7 @@ import { buildCreatePolicyTx, buildRevokeTx } from './sui-tx.js'
 import { requireChainDataProvider } from './chain-data-provider.js'
 import { DEPLOYMENT } from './sui-tx.js'
 import { getSuiProtocolCoverage } from './sui-protocol-registry.js'
+import { getSuiWatchData } from './sui-watch-registry.js'
 import { runTick, validateExecutionPlan } from './tick.js'
 import { validateForceTrigger, validateTickAuthorization, validateTickBody } from './tick-auth.js'
 import { buildFundingReadiness, parseIntentWithStability, resolveFundingThresholds } from './read-surfaces.js'
@@ -253,6 +254,11 @@ app.get('/api/market', async (c) => {
 app.get('/api/protocols', (c) => {
   const includeDisplayOnly = c.req.query('include_display_only') !== 'false'
   return c.json(getSuiProtocolCoverage({ includeDisplayOnly }))
+})
+
+app.get('/api/protocols/watchlist', (c) => {
+  const includeDisplayOnly = c.req.query('include_display_only') !== 'false'
+  return c.json(getSuiWatchData({ includeDisplayOnly }))
 })
 
 app.get('/api/balances', async (c) => {

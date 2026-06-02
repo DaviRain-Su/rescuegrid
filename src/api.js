@@ -115,6 +115,15 @@ export function getProtocols() {
   }))
 }
 
+/** GET /api/protocols/watchlist — Sui-only market watch metadata. */
+export function getProtocolWatchlist() {
+  return workerGet('/api/protocols/watchlist').catch((e) => ({
+    status: 'error',
+    code: WORKER_CONFIGURED ? 'WORKER_READ_FAILED' : 'WORKER_NOT_CONFIGURED',
+    message: String(e?.message || e),
+  }))
+}
+
 /** GET /api/balances?owner= — real wallet token holdings valued via market. */
 export function getBalances(owner) {
   return read(`/api/balances?owner=${owner}`, () => chainRead.getBalances(owner))

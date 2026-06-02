@@ -33,13 +33,13 @@ Coverage rule:
 - Do not create one executor per protocol. Build category adapters and keep protocol-specific behavior behind configuration, conformance tests and target constraints.
 - Refresh the coverage pool before demos, submissions and adapter work; DefiLlama TVL and volume rankings are unstable inputs, not permanent product commitments.
 
-Implementation status: `worker/src/sui-protocol-registry.js` and `/api/protocols` now expose the current Sui-only coverage baseline refreshed on 2026-06-02 UTC from DefiLlama `protocols` plus the Sui DEX volume overview. The registry uses `chainTvls.Sui` for top-26 ranking, includes Turbos as a volume exception, and marks only DeepBook V3 as `live_executor`.
+Implementation status: `worker/src/sui-protocol-registry.js` and `/api/protocols` expose the current Sui-only coverage baseline refreshed on 2026-06-02 UTC from DefiLlama `protocols` plus the Sui DEX volume overview. The registry uses `chainTvls.Sui` for top-26 ranking, includes Turbos as a volume exception, and marks only DeepBook V3 as the configured executor. `worker/src/sui-watch-registry.js` and `/api/protocols/watchlist` map that protocol universe into 31 Sui-only market rows with protocol, venue, market, risk, adapter and data-source metadata. DeepBook rows are `live_executor_funding_gated`, with `executor_configured=true`, `execution_enabled=false` and `execution_blocker_code=FUNDING_GATED` until DBUSDC/DEEP funding is real.
 
 Execution rule:
 
 | Tier | Meaning | Protocols | Product stance |
 | --- | --- | --- | --- |
-| Tier 0 | Live / current executor | DeepBook V3 | Keep as the only current live executor until funding and execution evidence are clean. |
+| Tier 0 | Configured executor, funding-gated | DeepBook V3 | Keep as the only current executor path; do not mark autonomous execution enabled until funding and execution evidence are clean. |
 | Tier 1 | Execution adapter candidates | Cetus CLMM, Bluefin Spot, Turbos, Momentum, NAVI, Suilend, Scallop, AlphaLend | Worth implementing because they have clear trading/lending operations and enough liquidity or volume. |
 | Tier 2 | Watch-first candidates | Bucket, Current, SpringSui, Haedal, Volo, AlphaFi, Kai, Mole, Ember | Useful for yield, health, redemption and position monitoring; execution waits for stronger constraints. |
 | Tier 3 | Display/watch-only | Ondo, KAIO, MatrixDock, Bluefin Pro, Sudo Perps, DipCoin Perps | Show risk and opportunity signals, but do not grant autonomous execution until issuer, settlement, margin and liquidation rules are specified. |

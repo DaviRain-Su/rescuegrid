@@ -100,6 +100,8 @@
 | H6 | Explore | 3h | Watch-only protocol design | 明确 Bucket、Current、SpringSui、Haedal、Volo、AlphaFi、Kai、Mole、Ondo、KAIO、MatrixDock、Ember、Bluefin Pro、Sudo、DipCoin 的可读状态、redemption/liquidity/issuer/margin 风险和禁止执行边界 |
 | H7 | Commit | 4h | Adapter SDK skeleton | 新 adapter 必须提供 readMarket、planExecution、buildPtb、parseExecutionResult、liquidity gate、volume gate 和 conformance tests |
 
+Current H3 implementation status: `/api/protocols` exposes the Sui protocol coverage registry, and `/api/protocols/watchlist` exposes 31 Sui-only market rows with protocol, venue, market, risk, adapter and data-source metadata. DeepBook is represented as the only configured executor path, but market watch rows keep `execution_enabled=false` and `execution_blocker_code=FUNDING_GATED` until live DBUSDC/DEEP funding is available.
+
 ## Phase I - Post-MVP Multivenue Expansion
 
 Phase I is a product expansion track, not a hackathon dependency. Planning baseline: [`docs/06-post-mvp-multivenue-roadmap.md`](06-post-mvp-multivenue-roadmap.md).
