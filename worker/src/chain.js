@@ -140,12 +140,20 @@ export async function getBalances(owner) {
   return out
 }
 
-/** Live market snapshot from the DeepBook testnet indexer ticker. */
+/** Live market snapshot from the DeepBook testnet indexer (ticker + recent trades). */
+const INDEXER = 'https://deepbook-indexer.testnet.mystenlabs.com'
 export async function getMarket() {
-  const res = await fetch('https://deepbook-indexer.testnet.mystenlabs.com/ticker')
-  const t = await res.json()
+  const t = await (await fetch(`${INDEXER}/ticker`)).json()
   const pick = (k) => (t[k] ? { last_price: t[k].last_price, base_volume: t[k].base_volume } : null)
-  return { SUI_DBUSDC: pick('SUI_DBUSDC'), DEEP_DBUSDC: pick('DEEP_DBUSDC'), WAL_DBUSDC: pick('WAL_DBUSDC') }
+  // real recent SUI/DBUSDC price series from trades (chronological)
+  let sui_spark = [], sui_change = null
+  try {
+    const trades = await (await fetch(`${INDEXER}/trades/SUI_DBUSDC?limit=40`)).json()
+    const prices = (trades || []).map((x) => Number(x.price)).filter((n) => n > 0).reverse()
+    sui_spark = prices
+    if (prices.length >= 2) sui_change = +(((prices[prices.length - 1] - prices[0]) / prices[0]) * 100).toFixed(2)
+  } catch { /* spark optional */ }
+  return { SUI_DBUSDC: pick('SUI_DBUSDC'), DEEP_DBUSDC: pick('DEEP_DBUSDC'), WAL_DBUSDC: pick('WAL_DBUSDC'), sui_spark, sui_change }
 }
 
 /** Owner-scoped activity feed merged from all policy-module events. */

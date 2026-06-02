@@ -87,6 +87,9 @@ export function Dashboard({ state, live }) {
   const util = sum && sum.total_authorized > 0 ? sum.total_deployed / sum.total_authorized : 0
   const conc = activePos.length > 0 ? 1 / activePos.length : 0
   const shownRisk = liveOn ? Math.min(95, Math.round(15 + util * 50 + conc * 30)) : risk
+  const liveSpark = live?.market?.sui_spark
+  const chartData = liveOn && Array.isArray(liveSpark) && liveSpark.length >= 2 ? liveSpark : suiSpark
+  const liveChg = live?.market?.sui_change
 
   const banner = crashState === 'crashing'
     ? { c: 'var(--danger)', bg: 'var(--danger-dim)', icon: 'alert', t: 'Flash crash detected · SUI −8.4% in 6 min', s: 'Risk score spiking — agent evaluating rescue conditions…' }
@@ -155,13 +158,15 @@ export function Dashboard({ state, live }) {
                 <div className="mono" style={{ fontSize: 22, fontWeight: 600, color: crashState === 'crashing' ? 'var(--danger)' : 'var(--t0)' }}>
                   ${(liveOn ? livePrice : animPrice).toFixed(3)}
                 </div>
-                <div className="mono" style={{ fontSize: 12, fontWeight: 600, color: RG.prices.SUI.chg < 0 ? 'var(--danger)' : 'var(--safe)' }}>
-                  {crashState === 'crashing' || crashState === 'rescuing' || crashState === 'rescued' ? '−8.42%' : `${RG.prices.SUI.chg}%`}
+                <div className="mono" style={{ fontSize: 12, fontWeight: 600, color: (liveOn ? (liveChg ?? 0) : RG.prices.SUI.chg) < 0 ? 'var(--danger)' : 'var(--safe)' }}>
+                  {liveOn
+                    ? (liveChg != null ? `${liveChg > 0 ? '+' : ''}${liveChg}% · recent` : '— · recent')
+                    : (crashState === 'crashing' || crashState === 'rescuing' || crashState === 'rescued' ? '−8.42%' : `${RG.prices.SUI.chg}%`)}
                 </div>
               </div>
             </div>
             <div style={{ padding: '12px 6px 0' }}>
-              <PriceChart data={suiSpark} crashState={crashState} />
+              <PriceChart data={chartData} crashState={crashState} />
             </div>
           </div>
 
