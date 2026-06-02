@@ -5,8 +5,9 @@ import { useState } from 'react'
 import { useCurrentAccount } from '@mysten/dapp-kit'
 import { RG } from '../data.js'
 import { Icon, Sparkline } from './primitives.jsx'
-import { WORKER_CONFIGURED, parseIntent as parseWorkerIntent } from '../api.js'
+import { WORKER_CONFIGURED, parseIntent as parseWorkerIntent, getSuiPriceHistory } from '../api.js'
 import { parseIntent as parseLocalIntent } from '../../core/strategy.js'
+import { runBacktest } from '../../core/backtest.js'
 
 function Stepper({ step, steps }) {
   return (
@@ -63,6 +64,7 @@ export function NewStrategy({ onDone, mode, setMode }) {
   const [expiry, setExpiry] = useState(14)
   const [livePreview, setLivePreview] = useState(null)
   const [livePreviewSource, setLivePreviewSource] = useState(null)
+  const [liveBacktest, setLiveBacktest] = useState(null)
   const account = useCurrentAccount()
   const live = !!account
   const steps = ['Intent', 'Review', 'Policy', 'Deploy']
@@ -71,6 +73,8 @@ export function NewStrategy({ onDone, mode, setMode }) {
   const meta = P.meta || RG.parsed.meta
   const blocked = P.guardian.some(g => g.level === 'fail')
   const failCount = P.guardian.filter(g => g.level === 'fail').length
+  const BT = (live && liveBacktest) ? liveBacktest : P.backtest
+  const btLive = !!(live && liveBacktest)
 
   const classify = (s) => {
     if (/entire|all-?in|ignore slippage|everything|max leverage|20x/i.test(s)) return 'risky'
@@ -91,9 +95,18 @@ export function NewStrategy({ onDone, mode, setMode }) {
           : parseLocalIntent(text, account.address)
         setLivePreview(preview)
         setLivePreviewSource(WORKER_CONFIGURED ? 'Worker' : 'local fallback')
+        if (preview?.status === 'ok' && preview.strategy) {
+          const th = Number(preview.strategy.trigger?.threshold_pct) || 8
+          const bud = preview.strategy.budget_ceiling ? Number(preview.strategy.budget_ceiling) / 1e6 : budget
+          try {
+            const h = await getSuiPriceHistory(30)
+            setLiveBacktest(h.status === 'ok' && h.prices.length > 2 ? runBacktest(h.prices, { thresholdPct: th, budget: bud }) : null)
+          } catch { setLiveBacktest(null) }
+        } else setLiveBacktest(null)
       } catch {
         setLivePreview(null)
         setLivePreviewSource(null)
+        setLiveBacktest(null)
       }
     } else {
       await new Promise(r => setTimeout(r, 1400))
@@ -202,18 +215,18 @@ export function NewStrategy({ onDone, mode, setMode }) {
             </div>
           </div>
 
-          {P.backtest && (
+          {BT && (
             <div className="card" style={{ padding: 0, overflow: 'hidden' }}>
               <div className="card-hd" style={{ paddingBottom: 14 }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                   <span style={{ color: 'var(--safe)' }}><Icon name="spark" size={16} /></span>
                   <div className="card-title">30-day backtest</div>
                 </div>
-                <span className="badge badge-neutral" style={{ fontSize: 9.5 }}>simulated · last 30d</span>
+                <span className={`badge ${btLive ? 'badge-accent' : 'badge-neutral'}`} style={{ fontSize: 9.5 }}>{btLive ? 'real SUI/USD · 30d' : 'simulated · last 30d'}</span>
               </div>
               <div style={{ display: 'grid', gridTemplateColumns: '200px 1fr', gap: 20, padding: '4px 18px 18px', alignItems: 'center' }}>
                 <div style={{ background: 'var(--bg-0)', border: '1px solid var(--border)', borderRadius: 'var(--r-md)', padding: '12px 14px' }}>
-                  <Sparkline data={P.backtest.curve} w={172} h={56} color="var(--safe)" />
+                  <Sparkline data={BT.curve} w={172} h={56} color="var(--safe)" />
                   <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 6 }}>
                     <span className="mono" style={{ fontSize: 9.5, color: 'var(--t3)' }}>−30d</span>
                     <span className="mono" style={{ fontSize: 9.5, color: 'var(--t3)' }}>today</span>
@@ -221,14 +234,15 @@ export function NewStrategy({ onDone, mode, setMode }) {
                 </div>
                 <div>
                   <div style={{ display: 'flex', gap: 22, marginBottom: 12 }}>
-                    {P.backtest.stats.map(s => (
+                    {BT.stats.map(s => (
                       <div key={s.k}>
                         <div className="mono display" style={{ fontSize: 18, fontWeight: 600, color: s.v.startsWith('+') ? 'var(--safe)' : 'var(--t0)' }}>{s.v}</div>
                         <div style={{ fontSize: 10.5, color: 'var(--t2)', marginTop: 2 }}>{s.k}</div>
                       </div>
                     ))}
                   </div>
-                  <div style={{ fontSize: 12.5, color: 'var(--t1)', lineHeight: 1.5 }}>{P.backtest.verdict}</div>
+                  <div style={{ fontSize: 12.5, color: 'var(--t1)', lineHeight: 1.5 }}>{BT.verdict}</div>
+                  {btLive && <div style={{ fontSize: 10.5, color: 'var(--t3)', marginTop: 8 }}>Simulated on real SUI/USD daily closes (CoinGecko) using your parsed threshold + budget. Past performance is not indicative of future results.</div>}
                 </div>
               </div>
             </div>

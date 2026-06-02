@@ -1,7 +1,9 @@
 /* ===========================================================
    RescueGrid — Dashboard screen
    =========================================================== */
+import { useState, useEffect } from 'react'
 import { RG } from '../data.js'
+import { getSuiPriceHistory } from '../api.js'
 import { Icon, Sparkline, RiskGauge, Token, PairGlyph, useAnimatedNumber, fmtUsd } from './primitives.jsx'
 
 function StatCard({ label, value, sub, accent, icon, spark, sparkColor }) {
@@ -74,6 +76,7 @@ export function Dashboard({ state, live }) {
   const p = RG.portfolio
   const animPrice = useAnimatedNumber(suiPrice, 500)
   const animTotal = useAnimatedNumber(p.total, 700)
+  const [priceHist, setPriceHist] = useState(null)
 
   // ── live mode: real on-chain data (summary/market/activity) ───────────
   const liveOn = !!live
@@ -86,10 +89,52 @@ export function Dashboard({ state, live }) {
   const activePos = (sum?.positions || []).filter(po => po.status === 'active')
   const util = sum && sum.total_authorized > 0 ? sum.total_deployed / sum.total_authorized : 0
   const conc = activePos.length > 0 ? 1 / activePos.length : 0
-  const shownRisk = liveOn ? Math.min(95, Math.round(15 + util * 50 + conc * 30)) : risk
+  // real SUI price history → real volatility + a risk-proxy series (advisory)
+  useEffect(() => {
+    if (!liveOn) { setPriceHist(null); return }
+    let alive = true
+    getSuiPriceHistory(14).then((h) => { if (alive) setPriceHist(h.status === 'ok' && h.prices.length > 2 ? h.prices : null) }).catch(() => {})
+    return () => { alive = false }
+  }, [liveOn])
+  const dailyRet = priceHist ? priceHist.slice(1).map((px, i) => (px - priceHist[i]) / priceHist[i]) : []
+  const vol = dailyRet.length ? Math.sqrt(dailyRet.reduce((s, r) => s + r * r, 0) / dailyRet.length) * 100 : null
+  const volContribution = Math.min(20, (vol || 0) * 2)
+  const riskSeries = priceHist
+    ? (() => {
+        let pk = priceHist[0]
+        return priceHist.map((px) => {
+          pk = Math.max(pk, px)
+          const dd = (pk - px) / pk
+          return Math.min(95, Math.round(15 + util * 50 + dd * 100))
+        })
+      })()
+    : null
+  const shownRisk = liveOn ? Math.min(95, Math.round(15 + util * 50 + conc * 30 + volContribution)) : risk
   const liveSpark = live?.market?.sui_spark
   const chartData = liveOn && Array.isArray(liveSpark) && liveSpark.length >= 2 ? liveSpark : suiSpark
   const liveChg = live?.market?.sui_change
+  // live risk-gauge factors + reasoning, derived from real on-chain + market data
+  const liveVol = vol != null ? (vol > 4 ? ['high', 'danger'] : vol > 2 ? ['moderate', 'warn'] : ['low', 'safe']) : ['n/a', 'safe']
+  const baseVol = live?.market?.SUI_DBUSDC?.base_volume
+  const liquidity = baseVol != null ? (baseVol > 1000 ? ['healthy', 'safe'] : baseVol > 0 ? ['thin', 'warn'] : ['idle', 'warn']) : ['n/a', 'warn']
+  const gaugeFactors = liveOn ? [
+    { k: 'Volatility (14d)', v: liveVol[0], lv: liveVol[1] },
+    { k: 'Slippage headroom', v: 'within cap', lv: 'safe' },
+    { k: 'Pool liquidity', v: liquidity[0], lv: liquidity[1] },
+  ] : [
+    { k: 'Volatility (1h)', v: crashState === 'crashing' ? 'extreme' : 'moderate', lv: crashState === 'crashing' ? 'danger' : 'warn' },
+    { k: 'Slippage headroom', v: 'within cap', lv: 'safe' },
+    { k: 'Pool liquidity', v: crashState === 'crashing' ? 'thinning' : 'healthy', lv: crashState === 'crashing' ? 'warn' : 'safe' },
+  ]
+  const liveReasoning = liveOn ? {
+    rationale: `${activePos.length} active polic${activePos.length === 1 ? 'y' : 'ies'} · ${Math.round(util * 100)}% of authorized budget deployed · recent SUI ${vol != null ? vol.toFixed(1) + '% daily volatility' : 'volatility unavailable'}. Advisory risk ${Math.round(shownRisk)}/100 from on-chain utilisation, concentration and market volatility — not investment advice.`,
+    factors: [
+      { k: 'Budget utilisation', w: Math.round(util * 50), lv: util > 0.7 ? 'danger' : util > 0.4 ? 'warn' : 'safe' },
+      { k: 'Concentration', w: Math.round(conc * 30), lv: conc > 0.5 ? 'warn' : 'safe' },
+      { k: 'Market volatility', w: Math.round(volContribution), lv: (vol || 0) > 4 ? 'danger' : (vol || 0) > 2 ? 'warn' : 'safe' },
+      { k: 'Baseline', w: 15, lv: 'safe' },
+    ],
+  } : null
 
   const banner = crashState === 'crashing'
     ? { c: 'var(--danger)', bg: 'var(--danger-dim)', icon: 'alert', t: 'Flash crash detected · SUI −8.4% in 6 min', s: 'Risk score spiking — agent evaluating rescue conditions…' }
@@ -137,7 +182,7 @@ export function Dashboard({ state, live }) {
           sub={{ text: liveOn ? (mode === 'cloud' ? 'Cloud · on-chain' : 'Local · on-chain') : (mode === 'cloud' ? 'Cloud · Worker' : 'Local · Ollama'), color: 'var(--t1)' }} />
         <StatCard label={liveOn ? 'Risk score · advisory' : 'Risk score'} value={Math.round(shownRisk)} icon="shield"
           accent={shownRisk >= 70 ? 'var(--danger)' : shownRisk >= 45 ? 'var(--warn)' : 'var(--safe)'}
-          spark={RG.riskHistory} sparkColor={shownRisk >= 70 ? 'var(--danger)' : shownRisk >= 45 ? 'var(--warn)' : 'var(--safe)'}
+          spark={liveOn ? (riskSeries || undefined) : RG.riskHistory} sparkColor={shownRisk >= 70 ? 'var(--danger)' : shownRisk >= 45 ? 'var(--warn)' : 'var(--safe)'}
           sub={{ text: shownRisk >= 70 ? 'critical' : shownRisk >= 45 ? 'elevated' : 'stable', color: shownRisk >= 70 ? 'var(--danger)' : shownRisk >= 45 ? 'var(--warn)' : 'var(--safe)' }} />
       </div>
 
@@ -253,11 +298,7 @@ export function Dashboard({ state, live }) {
             </div>
             <RiskGauge score={shownRisk} />
             <div style={{ width: '100%', marginTop: 14, display: 'flex', flexDirection: 'column', gap: 8 }}>
-              {[
-                { k: 'Volatility (1h)', v: crashState === 'crashing' ? 'extreme' : 'moderate', lv: crashState === 'crashing' ? 'danger' : 'warn' },
-                { k: 'Slippage headroom', v: 'within cap', lv: 'safe' },
-                { k: 'Pool liquidity', v: crashState === 'crashing' ? 'thinning' : 'healthy', lv: crashState === 'crashing' ? 'warn' : 'safe' },
-              ].map(r => (
+              {gaugeFactors.map(r => (
                 <div key={r.k} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: 12.5 }}>
                   <span style={{ color: 'var(--t1)' }}>{r.k}</span>
                   <span className={`badge badge-${r.lv}`}><span className="dot"></span>{r.v}</span>
@@ -266,7 +307,7 @@ export function Dashboard({ state, live }) {
             </div>
           </div>
 
-          <ReasoningPanel crashState={crashState} mode={mode} live={liveOn} />
+          <ReasoningPanel crashState={crashState} mode={mode} live={liveOn} liveData={liveReasoning} />
 
           <div className="card">
             <div className="card-hd" style={{ paddingBottom: 10 }}>
@@ -300,9 +341,9 @@ export function Dashboard({ state, live }) {
   )
 }
 
-function ReasoningPanel({ crashState, mode, live }) {
+function ReasoningPanel({ crashState, mode, live, liveData }) {
   const key = crashState === 'idle' ? 'idle' : (crashState === 'rescued' ? 'rescued' : 'crashing')
-  const R = RG.riskFactors[key]
+  const R = (live && liveData) ? liveData : RG.riskFactors[key]
   const maxW = 45
   const lvCol = { safe: 'var(--safe)', warn: 'var(--warn)', danger: 'var(--danger)' }
   return (

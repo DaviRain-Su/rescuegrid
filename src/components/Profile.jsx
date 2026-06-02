@@ -47,6 +47,7 @@ export function Profile({ account, holdings, policies, live = false, loading = f
   const deployed = total - free
   const freePct = total > 0 ? (free / total) * 100 : 0
   const animTotal = useAnimatedNumber(total, 700)
+  const suiBal = holdings.find(h => h.sym === 'SUI')?.amount
 
   const activePol = policies.filter(p => p.status === 'active').length
   const totalCap = policies.reduce((s, p) => s + p.budgetCap, 0)
@@ -304,29 +305,50 @@ export function Profile({ account, holdings, policies, live = false, loading = f
             </button>
           </div>
 
-          {/* gas station */}
+          {/* gas: live = real self-paid posture; demo = sponsored persona */}
           <div className="card" style={{ padding: '16px 18px' }}>
             <div className="card-hd" style={{ padding: 0, marginBottom: 12 }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                 <span style={{ color: 'var(--warn)' }}><Icon name="bolt" size={16} /></span>
-                <div className="card-title">Gas station{live && advisory}</div>
+                <div className="card-title">{live ? 'Gas & fees' : 'Gas station'}{live && advisory}</div>
               </div>
-              <span className="badge badge-warn" style={{ fontSize: 9.5 }}>sponsored</span>
+              <span className="badge badge-warn" style={{ fontSize: 9.5 }}>{live ? 'self-paid' : 'sponsored'}</span>
             </div>
-            <div style={{ display: 'flex', gap: 12 }}>
-              <div style={{ flex: 1 }}>
-                <div className="mono display" style={{ fontSize: 22, fontWeight: 600 }}>{a.gas?.sponsored ?? '—'}</div>
-                <div style={{ fontSize: 11, color: 'var(--t2)', marginTop: 2 }}>txns sponsored</div>
-              </div>
-              <div style={{ width: 1, background: 'var(--border)' }} />
-              <div style={{ flex: 1 }}>
-                <div className="mono display" style={{ fontSize: 22, fontWeight: 600 }}>{a.gas?.saved ?? '—'}</div>
-                <div style={{ fontSize: 11, color: 'var(--t2)', marginTop: 2 }}>SUI gas saved</div>
-              </div>
-            </div>
-            <div style={{ fontSize: 10.5, color: 'var(--t2)', marginTop: 12, lineHeight: 1.45 }}>
-              The agent pays fees from the {a.gas?.station || 'RescueGrid Gas Station'} — you hold no SUI for gas and never sign a fee.
-            </div>
+            {live ? (
+              <>
+                <div style={{ display: 'flex', gap: 12 }}>
+                  <div style={{ flex: 1 }}>
+                    <div className="mono display" style={{ fontSize: 22, fontWeight: 600 }}>{suiBal != null ? suiBal.toFixed(3) : '—'}</div>
+                    <div style={{ fontSize: 11, color: 'var(--t2)', marginTop: 2 }}>SUI in wallet · your gas</div>
+                  </div>
+                  <div style={{ width: 1, background: 'var(--border)' }} />
+                  <div style={{ flex: 1 }}>
+                    <div className="mono display" style={{ fontSize: 22, fontWeight: 600 }}>{activePol}</div>
+                    <div style={{ fontSize: 11, color: 'var(--t2)', marginTop: 2 }}>agent-run policies</div>
+                  </div>
+                </div>
+                <div style={{ fontSize: 10.5, color: 'var(--t2)', marginTop: 12, lineHeight: 1.45 }}>
+                  You sign and pay gas from your own wallet. The autonomous agent pays its execution gas from a dedicated key, only within what your policies authorize — no custodial gas station.
+                </div>
+              </>
+            ) : (
+              <>
+                <div style={{ display: 'flex', gap: 12 }}>
+                  <div style={{ flex: 1 }}>
+                    <div className="mono display" style={{ fontSize: 22, fontWeight: 600 }}>{a.gas?.sponsored ?? '—'}</div>
+                    <div style={{ fontSize: 11, color: 'var(--t2)', marginTop: 2 }}>txns sponsored</div>
+                  </div>
+                  <div style={{ width: 1, background: 'var(--border)' }} />
+                  <div style={{ flex: 1 }}>
+                    <div className="mono display" style={{ fontSize: 22, fontWeight: 600 }}>{a.gas?.saved ?? '—'}</div>
+                    <div style={{ fontSize: 11, color: 'var(--t2)', marginTop: 2 }}>SUI gas saved</div>
+                  </div>
+                </div>
+                <div style={{ fontSize: 10.5, color: 'var(--t2)', marginTop: 12, lineHeight: 1.45 }}>
+                  The agent pays fees from the {a.gas?.station || 'RescueGrid Gas Station'} — you hold no SUI for gas and never sign a fee.
+                </div>
+              </>
+            )}
           </div>
 
         </div>

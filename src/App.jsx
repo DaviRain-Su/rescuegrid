@@ -173,6 +173,7 @@ export default function App({ onExit }) {
     budgetCap: Number(p.budget_ceiling) / 1e6, budgetUsed: Number(spentUnits) / 1e6,
     scope: ['SUI/USDC'], maxSlippage: p.max_slippage_bps / 100,
     expires: new Date(Number(p.expires_at_ms)).toISOString(), created: '2026-06-02', execs: 0,
+    owner: p.owner,
   })
   const [liveActivity, setLiveActivity] = useState([])
   const [liveSummary, setLiveSummary] = useState(null)
@@ -286,7 +287,8 @@ export default function App({ onExit }) {
     setView('policies')
   }
 
-  const state = { risk, suiPrice, suiSpark, crashState, mode, agentOn, activity }
+  const shownActivity = liveMode ? liveActivity : activity
+  const state = { risk, suiPrice, suiSpark, crashState, mode, agentOn, activity: shownActivity }
 
   if (!authed) return (
     <>
@@ -314,7 +316,7 @@ export default function App({ onExit }) {
           <div style={{ display: 'flex', flexDirection: 'column', gap: 3, marginTop: 18 }}>
             <div className="eyebrow" style={{ padding: '0 13px 8px' }}>Workspace</div>
             <NavItem icon="dashboard" label="Dashboard" active={view === 'dashboard'} onClick={() => setView('dashboard')} />
-            <NavItem icon="activity" label="Agent activity" active={view === 'activity'} onClick={() => setView('activity')} badge={activity.length} />
+            <NavItem icon="activity" label="Agent activity" active={view === 'activity'} onClick={() => setView('activity')} badge={shownActivity.length} />
             <NavItem icon="shield" label="Policies" active={view === 'policies'} onClick={() => setView('policies')} />
             <NavItem icon="wallet" label="Profile & wallet" active={view === 'profile'} onClick={() => setView('profile')} />
           </div>
@@ -472,7 +474,7 @@ export default function App({ onExit }) {
             )}
             {view === 'dashboard' && <Dashboard state={state} live={liveMode ? { summary: liveSummary, market: liveMarket, activity: liveActivity } : null} />}
             {view === 'new' && <NewStrategy mode={mode} setMode={setMode} onDone={deployPolicy} />}
-            {view === 'activity' && <ActivityView activity={liveMode ? liveActivity : activity} onTx={setTxView} live={liveMode} loading={liveMode && liveLoading} />}
+            {view === 'activity' && <ActivityView activity={shownActivity} onTx={setTxView} live={liveMode} loading={liveMode && liveLoading} />}
             {view === 'policies' && <PoliciesView policies={policies} onRevoke={handleRevoke} onInspect={setInspect} live={liveMode} loading={liveMode && liveLoading} />}
             {view === 'profile' && <Profile
               live={liveMode}
@@ -493,7 +495,7 @@ export default function App({ onExit }) {
           </div>
         </main>
 
-        {inspect && <PolicyInspect p={inspect} activity={activity} onClose={() => setInspect(null)} onRevoke={handleRevoke} onTx={setTxView} />}
+        {inspect && <PolicyInspect p={inspect} activity={shownActivity} onClose={() => setInspect(null)} onRevoke={handleRevoke} onTx={setTxView} />}
         {txView && <TxDrawer tx={txView} onClose={() => setTxView(null)} />}
 
         {/* toast */}

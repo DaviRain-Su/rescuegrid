@@ -3,7 +3,9 @@
    Makes the Move Policy Object tangible: struct, capabilities,
    protocol allow-list, audit trail.
    =========================================================== */
+import { useState, useEffect } from 'react'
 import { RG } from '../data.js'
+import { getTransaction } from '../api.js'
 import { Icon } from './primitives.jsx'
 
 function CapRow({ granted, label, fn }) {
@@ -39,7 +41,7 @@ export function PolicyInspect({ p, activity, onClose, onRevoke, onTx }) {
   const structLines = [
     { t: 'public struct ', k: 'AgentPolicy', t2: ' has key {' },
     { indent: 1, key: 'id', val: 'UID' },
-    { indent: 1, key: 'owner', val: `address  // ${RG.user.addr}` },
+    { indent: 1, key: 'owner', val: `address  // ${p.owner ? p.owner.slice(0, 10) + '…' + p.owner.slice(-6) : RG.user.addr}` },
     { indent: 1, key: 'agent_cap', val: 'ID  // session key, revocable' },
     { indent: 1, key: 'budget_cap', val: `u64  // ${p.budgetCap}_000000 (${p.budgetCap} USDC)` },
     { indent: 1, key: 'budget_spent', val: `u64  // ${p.budgetUsed}_000000` },
@@ -197,20 +199,29 @@ export function PolicyInspect({ p, activity, onClose, onRevoke, onTx }) {
 }
 
 /* ---------- on-chain explorer drawer ---------- */
+function coinMeta(ct) {
+  if (!ct) return ['?', 0]
+  if (ct.endsWith('::sui::SUI')) return ['SUI', 9]
+  if (ct.includes('::DBUSDC::DBUSDC')) return ['USDC', 6]
+  if (ct.endsWith('::deep::DEEP')) return ['DEEP', 6]
+  if (ct.endsWith('::wal::WAL')) return ['WAL', 9]
+  return [ct.split('::').pop(), 0]
+}
+
 export function TxDrawer({ tx, onClose }) {
-  // synthesize a believable Sui explorer record from the digest
-  const calls = [
-    { fn: 'rescuegrid::policy::assert_within_budget', ok: true },
-    { fn: 'deepbook::pool::place_limit_order', ok: true },
-    { fn: 'rescuegrid::policy::record_spend', ok: true },
-    { fn: 'rescuegrid::policy::log_activity', ok: true },
-  ]
-  const events = [
-    { type: 'PriceChecked', data: 'oracle: Pyth · SUI/USDC · −8.4% vs 1h ref' },
-    { type: 'BudgetSpent', data: 'amount: 92_000000 · remaining: 316_000000' },
-    { type: 'OrderPlaced', data: 'pool: SUI/USDC · qty: 23.9 · price: 3.85' },
-    { type: 'AgentActivity', data: 'agent: 0x7a3f…c91e · action: "rescue"' },
-  ]
+  const [data, setData] = useState(null)
+  const [err, setErr] = useState(null)
+  useEffect(() => {
+    let alive = true
+    setData(null); setErr(null)
+    getTransaction(tx)
+      .then((r) => { if (alive) (r.status === 'ok' ? setData(r.tx) : setErr(r.message || 'Transaction not found')) })
+      .catch((e) => { if (alive) setErr(String(e?.message || e)) })
+    return () => { alive = false }
+  }, [tx])
+
+  const short = (a) => (a ? a.slice(0, 6) + '…' + a.slice(-4) : '—')
+  const explorer = `https://suiscan.xyz/testnet/tx/${tx}`
   const row = (k, v, mono) => (
     <div style={{ display: 'flex', justifyContent: 'space-between', gap: 16, padding: '10px 0', borderTop: '1px solid var(--border)' }}>
       <span style={{ fontSize: 12.5, color: 'var(--t2)' }}>{k}</span>
@@ -224,58 +235,92 @@ export function TxDrawer({ tx, onClose }) {
         borderLeft: '1px solid var(--border-hi)', overflowY: 'auto', boxShadow: '-30px 0 80px -20px rgba(0,0,0,0.6)' }}>
         <div style={{ position: 'sticky', top: 0, zIndex: 2, background: 'var(--bg-2)', borderBottom: '1px solid var(--border)', padding: '20px 24px' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-            <div>
+            <div style={{ minWidth: 0 }}>
               <div className="eyebrow" style={{ marginBottom: 6 }}>Sui · transaction</div>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                <span className="mono" style={{ fontSize: 16, fontWeight: 600 }}>{tx}</span>
-                <span className="badge badge-safe"><span className="dot"></span>Success</span>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+                <span className="mono" style={{ fontSize: 13, fontWeight: 600, wordBreak: 'break-all' }}>{tx}</span>
+                {data && <span className={`badge ${data.success ? 'badge-safe' : 'badge-warn'}`}><span className="dot"></span>{data.success ? 'Success' : 'Failed'}</span>}
+                {!data && !err && <span className="badge badge-neutral"><span className="dot"></span>Loading…</span>}
+                {err && <span className="badge badge-warn"><span className="dot"></span>Unavailable</span>}
               </div>
-              <div style={{ fontSize: 11.5, color: 'var(--t2)', marginTop: 5 }}>Testnet · checkpoint 84,209,113</div>
+              <div style={{ fontSize: 11.5, color: 'var(--t2)', marginTop: 5 }}>
+                Testnet{data?.checkpoint ? ` · checkpoint ${data.checkpoint.toLocaleString()}` : ''}
+              </div>
             </div>
             <button onClick={onClose} className="btn btn-sm btn-ghost" style={{ padding: 8 }}><Icon name="x" size={16} /></button>
           </div>
         </div>
 
         <div style={{ padding: '20px 24px', display: 'flex', flexDirection: 'column', gap: 22 }}>
-          <div>
-            <div className="eyebrow" style={{ marginBottom: 4 }}>Overview</div>
-            <div>
-              {row('Executed by', <>agent · delegated <span className="mono" style={{ color: 'var(--sui)' }}>{RG.user.addr}</span></>)}
-              {row('Authority', 'AgentPolicy 0x9c2a…41bf', true)}
-              {row('Signed with', 'session key · AgentCap', false)}
-              {row('Gas used', '0.00091 SUI', true)}
-              {row('Gas paid by', 'gas station (sponsored)', false)}
-              {row('Timestamp', '2026-06-01 14:31:05 UTC', false)}
+          {!data && !err && <div style={{ fontSize: 12.5, color: 'var(--t2)' }}>Decoding transaction from chain…</div>}
+          {err && (
+            <div style={{ background: 'var(--glass)', border: '1px solid var(--border)', borderRadius: 'var(--r-md)', padding: '14px 16px' }}>
+              <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 4 }}>Could not load this transaction</div>
+              <div style={{ fontSize: 11.5, color: 'var(--t2)' }}>{err}. It may be older than the fullnode's retention window, or a demo record. You can still open it on the explorer below.</div>
             </div>
-          </div>
-
-          <div>
-            <div className="eyebrow" style={{ marginBottom: 10 }}>Programmable transaction block · {calls.length} calls</div>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 7 }}>
-              {calls.map((c, i) => (
-                <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 10, background: 'var(--bg-0)', border: '1px solid var(--border)', borderRadius: 'var(--r-sm)', padding: '10px 12px' }}>
-                  <span className="mono" style={{ fontSize: 10, color: 'var(--t2)' }}>#{i + 1}</span>
-                  <span style={{ width: 16, height: 16, borderRadius: 5, background: 'var(--safe-dim)', color: 'var(--safe)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-                    <Icon name="check" size={10} stroke={2.8} /></span>
-                  <span className="mono" style={{ fontSize: 11.5, color: 'var(--t0)', wordBreak: 'break-all' }}>{c.fn}</span>
+          )}
+          {data && (
+            <>
+              <div>
+                <div className="eyebrow" style={{ marginBottom: 4 }}>Overview</div>
+                <div>
+                  {row('Executed by', <span className="mono" style={{ color: 'var(--sui)' }}>{short(data.sender)}</span>)}
+                  {row('Gas used', `${data.gasSui.toFixed(6)} SUI`, true)}
+                  {row('Gas paid by', data.gasOwner === data.sender ? 'signer (self)' : short(data.gasOwner))}
+                  {row('Timestamp', data.timestampMs ? new Date(data.timestampMs).toISOString().replace('T', ' ').slice(0, 19) + ' UTC' : '—')}
                 </div>
-              ))}
-            </div>
-          </div>
+              </div>
 
-          <div>
-            <div className="eyebrow" style={{ marginBottom: 10 }}>Events emitted</div>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 7 }}>
-              {events.map((e, i) => (
-                <div key={i} style={{ background: 'var(--glass)', border: '1px solid var(--border)', borderRadius: 'var(--r-sm)', padding: '10px 12px' }}>
-                  <span className="mono" style={{ fontSize: 11.5, color: 'var(--accent)', fontWeight: 600 }}>{e.type}</span>
-                  <div className="mono" style={{ fontSize: 11, color: 'var(--t1)', marginTop: 4 }}>{e.data}</div>
+              <div>
+                <div className="eyebrow" style={{ marginBottom: 10 }}>Programmable transaction block · {data.calls.length} call{data.calls.length === 1 ? '' : 's'}</div>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 7 }}>
+                  {data.calls.length === 0 && <div style={{ fontSize: 12, color: 'var(--t2)' }}>No Move calls in this transaction.</div>}
+                  {data.calls.map((c, i) => (
+                    <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 10, background: 'var(--bg-0)', border: '1px solid var(--border)', borderRadius: 'var(--r-sm)', padding: '10px 12px' }}>
+                      <span className="mono" style={{ fontSize: 10, color: 'var(--t2)' }}>#{i + 1}</span>
+                      <span style={{ width: 16, height: 16, borderRadius: 5, background: 'var(--safe-dim)', color: 'var(--safe)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                        <Icon name="check" size={10} stroke={2.8} /></span>
+                      <span className="mono" style={{ fontSize: 11.5, color: 'var(--t0)', wordBreak: 'break-all' }}>{c.target}</span>
+                    </div>
+                  ))}
                 </div>
-              ))}
-            </div>
-          </div>
+              </div>
 
-          <button className="btn" style={{ justifyContent: 'center' }} onClick={e => e.preventDefault()}>
+              <div>
+                <div className="eyebrow" style={{ marginBottom: 10 }}>Events emitted · {data.events.length}</div>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 7 }}>
+                  {data.events.length === 0 && <div style={{ fontSize: 12, color: 'var(--t2)' }}>No events emitted.</div>}
+                  {data.events.map((e, i) => (
+                    <div key={i} style={{ background: 'var(--glass)', border: '1px solid var(--border)', borderRadius: 'var(--r-sm)', padding: '10px 12px' }}>
+                      <span className="mono" style={{ fontSize: 11.5, color: 'var(--accent)', fontWeight: 600 }}>{e.type}</span>
+                      {e.data && <div className="mono" style={{ fontSize: 11, color: 'var(--t1)', marginTop: 4, wordBreak: 'break-all' }}>{e.data}</div>}
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {data.balanceChanges.length > 0 && (
+                <div>
+                  <div className="eyebrow" style={{ marginBottom: 10 }}>Balance changes</div>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 7 }}>
+                    {data.balanceChanges.map((b, i) => {
+                      const [sym, dec] = coinMeta(b.coinType)
+                      const amt = Number(b.amount) / 10 ** dec
+                      const up = amt >= 0
+                      return (
+                        <div key={i} style={{ display: 'flex', justifyContent: 'space-between', background: 'var(--glass)', border: '1px solid var(--border)', borderRadius: 'var(--r-sm)', padding: '10px 12px' }}>
+                          <span className="mono" style={{ fontSize: 11.5, color: 'var(--t1)' }}>{short(b.owner)}</span>
+                          <span className="mono" style={{ fontSize: 11.5, fontWeight: 600, color: up ? 'var(--safe)' : 'var(--danger)' }}>{up ? '+' : ''}{amt.toLocaleString(undefined, { maximumFractionDigits: dec })} {sym}</span>
+                        </div>
+                      )
+                    })}
+                  </div>
+                </div>
+              )}
+            </>
+          )}
+
+          <button className="btn" style={{ justifyContent: 'center' }} onClick={() => window.open(explorer, '_blank', 'noopener,noreferrer')}>
             <Icon name="link" size={14} /> View on SuiScan
           </button>
         </div>

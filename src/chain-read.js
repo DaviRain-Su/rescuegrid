@@ -127,3 +127,62 @@ export async function getSummary(owner) {
   const sum = (arr, k) => arr.reduce((s, p) => s + Number(p[k]), 0)
   return { status: 'ok', summary: { active_policies: active.length, total_policies: positions.length, total_authorized: sum(active, 'budget_ceiling'), total_deployed: sum(active, 'spent_amount'), positions } }
 }
+
+// Single transaction detail (chain-authoritative). Decodes a real
+// sui_getTransactionBlock into PTB move-calls, events, gas and metadata.
+export async function getTransaction(digest) {
+  try {
+    const r = await rpc('sui_getTransactionBlock', [digest, {
+      showInput: true, showEffects: true, showEvents: true, showBalanceChanges: true,
+    }])
+    const fx = r.effects || {}
+    const g = fx.gasUsed || {}
+    const gasMist = Number(g.computationCost || 0) + Number(g.storageCost || 0) - Number(g.storageRebate || 0)
+    const ptb = r.transaction?.data?.transaction?.transactions || []
+    const calls = ptb.filter((t) => t.MoveCall).map((t) => {
+      const m = t.MoveCall
+      return { package: m.package, module: m.module, function: m.function, target: `${m.module}::${m.function}`, ok: true }
+    })
+    const events = (r.events || []).map((e) => {
+      const j = e.parsedJson || {}
+      const data = Object.entries(j).map(([k, v]) => `${k}: ${typeof v === 'object' ? JSON.stringify(v) : v}`).join(' · ')
+      return { type: String(e.type).split('::').pop(), fullType: e.type, data }
+    })
+    const balanceChanges = (r.balanceChanges || []).map((b) => ({
+      coinType: b.coinType, amount: b.amount, owner: b.owner?.AddressOwner || null,
+    }))
+    return { status: 'ok', tx: {
+      digest,
+      success: fx.status?.status === 'success',
+      error: fx.status?.error || null,
+      timestampMs: r.timestampMs ? Number(r.timestampMs) : null,
+      checkpoint: r.checkpoint ? Number(r.checkpoint) : null,
+      sender: r.transaction?.data?.sender || null,
+      gasOwner: r.transaction?.data?.gasData?.owner || null,
+      gasSui: gasMist / 1e9,
+      calls, events, balanceChanges,
+    } }
+  } catch (e) {
+    return { status: 'error', message: String(e?.message || e) }
+  }
+}
+
+// Real SUI/USD daily price history (for backtests) via the public CoinGecko API.
+// Testnet DeepBook has too little trade history to backtest against, so we use
+// real SUI market history — which is what a backtest is meant to evaluate.
+const COINGECKO = 'https://api.coingecko.com/api/v3'
+export async function getSuiPriceHistory(days = 30) {
+  try {
+    const r = await fetch(`${COINGECKO}/coins/sui/market_chart?vs_currency=usd&days=${days}`)
+    if (!r.ok) throw new Error(`coingecko ${r.status}`)
+    const j = await r.json()
+    let prices = (j.prices || []).map((p) => Number(p[1])).filter((n) => n > 0)
+    if (prices.length > 40) {
+      const step = Math.ceil(prices.length / 40)
+      prices = prices.filter((_, i) => i % step === 0 || i === prices.length - 1)
+    }
+    return { status: 'ok', prices }
+  } catch (e) {
+    return { status: 'error', message: String(e?.message || e) }
+  }
+}

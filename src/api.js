@@ -111,3 +111,14 @@ export function getBalances(owner) {
 export function buildRevokeTx(owner, wrapperId) {
   return post(`/api/policies/${wrapperId}/revoke`, { owner, confirmed: true })
 }
+
+/** Single tx detail — chain-authoritative, read directly from the fullnode
+ *  (no Worker aggregation needed for a single object). */
+export function getTransaction(digest) {
+  return chainRead.getTransaction(digest)
+}
+
+/** Real SUI/USD price history for backtests (public market data, direct). */
+export function getSuiPriceHistory(days = 30) {
+  return chainRead.getSuiPriceHistory(days)
+}
