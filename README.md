@@ -43,6 +43,7 @@ npm --prefix worker run typecheck   # Worker TypeScript
 cd move/rescuegrid && sui move test # Move tests
 npm run config                      # sanitized Testnet deployment IDs
 npm run demo:loop                   # create -> activate/tick -> revoke live demo evidence
+npm run demo:execute                # strict mode: requires AgentTradeExecuted evidence
 RESCUEGRID_FRONTEND_URL=http://localhost:5175 RESCUEGRID_WORKER_URL=http://localhost:8787 npm run baseline:smoke
 ```
 
@@ -85,6 +86,8 @@ The Worker also exposes `/api/runtime/status` for non-secret cloud agent, signer
 > Agent-key validation path: mission validation used the dedicated Worker-held agent key from `worker/.dev.vars` through secret-safe scripts to create/list/revoke current-run policies on Sui Testnet. Do not print or commit `.dev.vars` values; evidence records only public signer/owner/agent addresses, object IDs, strategy hashes, and tx digests.
 
 > Demo-loop validation path: with the local Worker running and `INTERNAL_AGENT_TICK_TOKEN` + `RESCUEGRID_DEMO_MODE=true` configured, `npm run demo:loop` creates a Testnet policy, activates the Durable Object runtime, forces one internal tick, records either a real execution or the documented funding gate, revokes, then proves the post-revoke tick stops without execution.
+
+> Strict execution validation path: after the BalanceManager is funded with usable DBUSDC/DEEP and `EXECUTION_ENABLED=true`, run `npm run demo:execute`. It uses the same live loop but fails unless the forced tick produces `AgentTradeExecuted`, `execution_claimed=true` and an on-chain spend increase.
 
 > Local daemon scaffold: `npm run daemon -- status` shows the local agent address, chain, registered executor adapters, signer kind, watched policies and log path. `npm run daemon -- tick --wrapper-id <0x...>` runs the same Runtime Core tick path from the local process and writes JSONL activity under `.rescuegrid/daemon/`. It defaults to monitoring only; live submission still requires `--execution-enabled`, a matching deployed agent address and a funded BalanceManager. `--signer-kind local-daemon` signs only from the local daemon runtime with the local `AGENT_KEY`; Mainnet refuses `worker-secret` and requires an external/user-controlled signer mode.
 

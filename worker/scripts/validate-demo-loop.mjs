@@ -6,6 +6,7 @@
 //
 // Usage:
 //   node worker/scripts/validate-demo-loop.mjs [--worker-url http://localhost:8787]
+//   node worker/scripts/validate-demo-loop.mjs --require-execution
 import { randomUUID } from 'node:crypto'
 import { setTimeout as delay } from 'node:timers/promises'
 import { Transaction } from '@mysten/sui/transactions'
@@ -33,17 +34,24 @@ if (args.has('--help') || process.argv.includes('-h')) {
   console.log(`Validate the RescueGrid live demo loop.
 
 Usage:
-  node worker/scripts/validate-demo-loop.mjs [--worker-url http://localhost:8787]
+  node worker/scripts/validate-demo-loop.mjs [--worker-url http://localhost:8787] [--require-execution]
 
 Requires a local Worker with INTERNAL_AGENT_TICK_TOKEN configured and
 RESCUEGRID_DEMO_MODE=true so force_trigger can exercise the agent tick path.
 Runs create -> activate/monitor -> force tick -> revoke -> post-revoke tick.
 The tick leg may produce a real execution or the documented DBUSDC/DEEP funding
-gate; either way no raw secrets are printed.`)
+gate; either way no raw secrets are printed.
+
+Options:
+  --worker-url <url>       Worker URL (default: WORKER_URL or http://localhost:8787)
+  --require-execution      Fail unless the forced tick produces an AgentTradeExecuted
+                           event and spend increase. Use this after DBUSDC/DEEP
+                           funding is available to prove the full PRD execution gate.`)
   process.exit(0)
 }
 
 const workerUrl = String(args.get('--worker-url') || process.env.WORKER_URL || 'http://localhost:8787').replace(/\/$/, '')
+const requireExecution = args.has('--require-execution') || process.env.RESCUEGRID_REQUIRE_EXECUTION === 'true'
 const expectedChain = 'sui:testnet'
 const client = getClient()
 const keypair = loadAgentKeypairFromDevVars()
@@ -131,7 +139,7 @@ async function waitForTx(digest) {
   })
 }
 
-function assertTickLeg(result) {
+function assertTickLeg(result, { requireExecution = false } = {}) {
   if (result.action === 'executed') {
     assert(result.execution_claimed === true, 'Executed tick did not claim execution', result)
     assert(result.tx_digest, 'Executed tick did not return tx_digest', result)
@@ -145,6 +153,12 @@ function assertTickLeg(result) {
   assert(result.action === 'blocked', 'Tick must either execute or hit the documented funding gate', result)
   assert(acceptedGate.some((code) => blockers.has(code)), 'Tick blocked for an unexpected reason', result)
   assert(result.execution_claimed === false, 'Gated tick claimed execution', result)
+  assert(!requireExecution, 'Strict demo execution required, but tick hit a funding/execution gate', {
+    action: result.action,
+    code: result.code,
+    blocker_codes: result.blocker_codes || [],
+    funding: result.funding || null,
+  })
   return 'gated'
 }
 
@@ -183,6 +197,7 @@ console.log(JSON.stringify({
   configured_delegated_agent_address: delegatedAgentAddress,
   strategy_hash: strategy.strategy_hash,
   internal_tick_token_configured: true,
+  require_execution: requireExecution,
 }, null, 2))
 
 const createBuilt = await postJson('/api/policies', {
@@ -237,7 +252,7 @@ const tick = await postJson('/api/agent/tick', {
   wrapper_id: wrapperId,
   force_trigger: true,
 }, { Authorization: `Bearer ${internalTickToken}` })
-const tickOutcome = assertTickLeg(tick)
+const tickOutcome = assertTickLeg(tick, { requireExecution })
 const afterTickWrapper = await readWrapper(client, wrapperId)
 if (tickOutcome === 'gated') {
   assert(beforeTickWrapper?.spent_amount === afterTickWrapper?.spent_amount, 'Gated tick changed wrapper spend', {

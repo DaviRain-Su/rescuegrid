@@ -424,6 +424,7 @@ Passing criteria:
 
 - At least one real Sui Testnet transaction is visible.
 - At least one real Deepbook-related execution is visible, or a documented Testnet blocker is explicitly shown by `npm run demo:loop` with fallback approved before demo.
+- Once DBUSDC/DEEP funding is available, `npm run demo:execute` or `node worker/scripts/validate-demo-loop.mjs --require-execution` must replace the fallback path and fail unless the forced tick proves `AgentTradeExecuted`, `execution_claimed=true` and on-chain spend increase.
 - Revocation is visible both in UI and chain state.
 - No step requires exposing a user private key to the Agent.
 - The deployed agent address shown in preview matches the agent recorded in the Mandate and Wrapper.

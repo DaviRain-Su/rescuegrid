@@ -12,6 +12,7 @@
     "daemon": "node worker/scripts/daemon.mjs",
     "test:live-config": "node src/queries/live-config.test.mjs",
     "demo:loop": "node worker/scripts/validate-demo-loop.mjs",
+    "demo:execute": "node worker/scripts/validate-demo-loop.mjs --require-execution",
     "baseline:smoke": "node scripts/baseline-smoke.mjs"
   },
   "dependencies": {
