@@ -7,7 +7,7 @@ import { bodyLimit } from 'hono/body-limit'
 import { parseIntent } from './parse.js'
 import { strategyHash } from './strategy-core.js'
 import { buildCreatePolicyTx, buildRevokeTx } from './sui-tx.js'
-import { getActivity, listPoliciesByOwner, listActivityByOwner, getOwnerSummary, getMarket, getBalances, readWrapper, readBalanceManagerBalance } from './chain.js'
+import { getActivity, listPoliciesByOwner, listActivityByOwner, getOwnerSummary, getMarket, getBalances, readWrapper, readBalanceManagerBalance, policyEventsToFeedItems } from './chain.js'
 import { getClient, DEPLOYMENT } from './sui-tx.js'
 import { runTick, validateExecutionPlan } from './tick.js'
 import { validateForceTrigger, validateTickAuthorization } from './tick-auth.js'
@@ -163,11 +163,16 @@ app.get('/api/policies/:wrapper_id/activity', async (c) => {
         p.runtime_state_stale = false
       }
     }
+    const policyLabel = shortWrapperId(wrapperId)
+    const chainActivity = policyEventsToFeedItems(result.events, policyLabel)
+    const runtimeFeed = runtimeActivity.map((event) => runtimeEventToFeedItem(event, policyLabel))
+
     return c.json({
       ...result,
       runtime: runtimeState,
       runtime_activity: runtimeActivity,
-      activity: sortActivityItems(runtimeActivity.map((event) => runtimeEventToFeedItem(event, shortWrapperId(wrapperId)))),
+      chain_activity: chainActivity,
+      activity: sortActivityItems([...runtimeFeed, ...chainActivity]),
     }, 200)
   } catch (e) {
     return c.json({ status: 'error', code: 'CHAIN_READ_FAILED', message: String((e as Error).message) }, 502)

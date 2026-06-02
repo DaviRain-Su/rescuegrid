@@ -169,6 +169,8 @@ Error:
 Happy path:
 
 - 返回 MoveGate Mandate snapshot、RescuePolicyWrapper snapshot、runtime state、events。
+- `activity` 合并链上 `PolicyCreated` / `PolicyRevoked` / `AgentTradeExecuted` feed rows 和 Durable Object runtime feed rows，并按 timestamp 倒序。
+- `chain_activity` 单独返回链上 feed rows，便于确认链上审计证据没有被 runtime log 覆盖。
 - budget 数字以字符串返回，避免 JS integer loss。
 - 当链上状态与 Durable Object runtime state 冲突时，链上状态优先，`runtime_state_stale=true`。
 

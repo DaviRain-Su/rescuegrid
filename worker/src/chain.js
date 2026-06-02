@@ -6,6 +6,7 @@
 import { getClient, DEPLOYMENT } from './sui-tx.js'
 import { Transaction } from '@mysten/sui/transactions'
 import { bytesToHex, enrichPolicyFromChain } from './read-surfaces.js'
+import { shortWrapperId } from './runtime-activity.js'
 
 const RG = DEPLOYMENT.rescuegrid
 
@@ -51,6 +52,80 @@ export async function readClockTimestampMs(client) {
   return Number(f.timestamp_ms)
 }
 
+function eventDateParts(timestampMs) {
+  const ts = timestampMs ? Number(timestampMs) : null
+  const d = ts ? new Date(ts) : null
+  return {
+    timestamp_ms: ts ?? 0,
+    t: d ? d.toISOString().slice(11, 19) : '',
+    date: d ? d.toISOString().slice(0, 10) : 'recent',
+  }
+}
+
+export function normalizePolicyEvent(e) {
+  const pj = e?.parsedJson || {}
+  return {
+    type: String(e?.type || '').split('::').pop(),
+    tx: e?.id?.txDigest,
+    timestamp_ms: e?.timestampMs ? Number(e.timestampMs) : null,
+    data: pj,
+  }
+}
+
+export function policyEventToFeedItem(event, policyLabel = shortWrapperId(event?.data?.wrapper_id)) {
+  const pj = event?.data || {}
+  const type = String(event?.type || '')
+  const { t, date, timestamp_ms } = eventDateParts(event?.timestamp_ms)
+  const base = {
+    t,
+    date,
+    policy: policyLabel,
+    tx: event?.tx || null,
+    risk: null,
+    mode: 'cloud',
+    source: 'chain',
+    timestamp_ms,
+    chain_event: type,
+    wrapper_id: pj.wrapper_id || null,
+    mandate_id: pj.mandate_id || null,
+  }
+  if (type === 'PolicyCreated') {
+    return {
+      ...base,
+      kind: 'policy',
+      title: 'Policy Object created',
+      detail: `Budget ${Number(pj.budget_ceiling) / 1e6} USDC · max slip ${Number(pj.max_slippage_bps) / 100}%`,
+      amount: 0,
+    }
+  }
+  if (type === 'AgentTradeExecuted') {
+    return {
+      ...base,
+      kind: 'exec',
+      title: `Agent trade · ${pj.base_amount_received} base`,
+      detail: `Spent ${Number(pj.quote_amount_spent) / 1e6} USDC · slippage ${pj.slippage_bps}bps · spent ${Number(pj.spent_amount_after) / 1e6}/${Number(pj.budget_ceiling) / 1e6}`,
+      amount: -(Number(pj.quote_amount_spent) / 1e6),
+      execution_claimed: true,
+    }
+  }
+  if (type === 'PolicyRevoked') {
+    return {
+      ...base,
+      kind: 'guardian',
+      title: 'Policy revoked by owner',
+      detail: 'Agent authority deleted on-chain',
+      amount: 0,
+    }
+  }
+  return null
+}
+
+export function policyEventsToFeedItems(events, policyLabel) {
+  return (Array.isArray(events) ? events : [])
+    .map((event) => policyEventToFeedItem(event, policyLabel))
+    .filter(Boolean)
+}
+
 export async function queryPolicyEvents(client, wrapperId, max = 100) {
   const out = []
   let cursor = null
@@ -64,12 +139,7 @@ export async function queryPolicyEvents(client, wrapperId, max = 100) {
     for (const e of res.data) {
       const pj = e.parsedJson || {}
       if (pj.wrapper_id && pj.wrapper_id !== wrapperId) continue
-      out.push({
-        type: String(e.type).split('::').pop(),
-        tx: e.id?.txDigest,
-        timestamp_ms: e.timestampMs ? Number(e.timestampMs) : null,
-        data: pj,
-      })
+      out.push(normalizePolicyEvent(e))
       if (out.length >= max) return out
     }
     if (!res.hasNextPage) break
@@ -207,30 +277,13 @@ export async function listActivityByOwner(owner) {
       .map(e => e.parsedJson.wrapper_id),
   )
   // 3) map matching events to feed items
-  const items = []
+  const events = []
   for (const e of raw) {
     const pj = e.parsedJson || {}
     if (!pj.wrapper_id || !ownedWrappers.has(pj.wrapper_id)) continue
-    const ts = e.timestampMs ? Number(e.timestampMs) : null
-    const d = ts ? new Date(ts) : null
-    const t = d ? d.toISOString().slice(11, 19) : ''
-    const date = d ? d.toISOString().slice(0, 10) : 'recent'
-    const short = pj.wrapper_id.slice(0, 6) + '…' + pj.wrapper_id.slice(-4)
-    const type = String(e.type).split('::').pop()
-    if (type === 'PolicyCreated') {
-      items.push({ t, date, kind: 'policy', policy: short, title: 'Policy Object created',
-        detail: `Budget ${Number(pj.budget_ceiling) / 1e6} USDC · max slip ${Number(pj.max_slippage_bps) / 100}%`,
-        amount: 0, tx: e.id?.txDigest, risk: null, mode: 'cloud', source: 'chain', timestamp_ms: ts ?? 0 })
-    } else if (type === 'AgentTradeExecuted') {
-      items.push({ t, date, kind: 'exec', policy: short, title: `Agent trade · ${pj.base_amount_received} base`,
-        detail: `Spent ${Number(pj.quote_amount_spent) / 1e6} USDC · slippage ${pj.slippage_bps}bps · spent ${Number(pj.spent_amount_after) / 1e6}/${Number(pj.budget_ceiling) / 1e6}`,
-        amount: -(Number(pj.quote_amount_spent) / 1e6), tx: e.id?.txDigest, risk: null, mode: 'cloud', source: 'chain', timestamp_ms: ts ?? 0 })
-    } else if (type === 'PolicyRevoked') {
-      items.push({ t, date, kind: 'guardian', policy: short, title: 'Policy revoked by owner',
-        detail: 'Agent authority deleted on-chain', amount: 0, tx: e.id?.txDigest, risk: null, mode: 'cloud', source: 'chain', timestamp_ms: ts ?? 0 })
-    }
+    events.push(normalizePolicyEvent(e))
   }
-  return items
+  return policyEventsToFeedItems(events)
 }
 
 export async function getActivity(wrapperId, nowMs = Date.now()) {

@@ -580,7 +580,10 @@ Response:
     "revoked": false,
     "expires_at_ms": 1780000000000
   },
-  "events": []
+  "events": [],
+  "chain_activity": [],
+  "runtime_activity": [],
+  "activity": []
 }
 ```
 
@@ -589,6 +592,9 @@ Data source rules:
 - `revoked` and `expires_at_ms` come from the MoveGate Mandate.
 - `spent_amount`, `budget_ceiling`, `pool_id`, `max_slippage_bps`, and `strategy_hash` come from the RescuePolicyWrapper.
 - `events` come from chain event queries and include transaction digest from event metadata.
+- `chain_activity` maps those chain events into the dashboard feed format.
+- `runtime_activity` contains Durable Object runtime events.
+- `activity` is the timestamp-sorted merge of `chain_activity` and runtime feed items.
 - `runtime_state` comes from Durable Object state.
 - If chain state conflicts with runtime state, chain state wins and `runtime_state_stale` is true.
 
