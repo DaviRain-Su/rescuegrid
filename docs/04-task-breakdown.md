@@ -87,6 +87,9 @@
 | G2 | Commit | 2h | Demo script | `npm run demo:loop` 覆盖 create -> activate/monitor -> internal tick -> revoke -> post-revoke tick；若 DBUSDC/DEEP 未到位，execute leg 必须明确输出 documented funding gate 且 `execution_claimed=false` |
 | G3 | Commit | 2h | README quickstart | 新用户能按步骤跑起演示 |
 | G4 | Commit | 3h | Final docs + QA pass | 子验收 1：PRD/架构/规格与实际实现保持一致；子验收 2：用浏览器、Worker 日志和链上查询验证完整闭环 |
+| G5 | Commit | 1h | External funding handoff | `npm run funding:request` 输出 public BalanceManager、DBUSDC/DEEP coin type、缺口数量和后续验证命令，不泄漏任何 secret |
+
+Current G5 implementation status: `worker/scripts/funding-handoff.mjs` and root `npm run funding:request` reuse `buildExecutionReadiness` to produce a read-only external funding request. The output includes public agent / BalanceManager ids, DeepBook pool, DBUSDC/DEEP coin types, observed/required/missing amounts, signer readiness, blocker codes and the next `npm run daemon -- status --json` / `npm run demo:execute` verification commands. It does not create policies, submit PTBs or print secrets.
 
 ## Phase H - Post-MVP Composability
 

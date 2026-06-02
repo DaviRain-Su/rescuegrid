@@ -42,6 +42,7 @@ npm --prefix worker test            # backend checks
 npm --prefix worker run typecheck   # Worker TypeScript
 cd move/rescuegrid && sui move test # Move tests
 npm run config                      # sanitized Testnet deployment IDs
+npm run funding:request             # secret-safe external DBUSDC/DEEP funding handoff
 npm run demo:loop                   # create -> activate/tick -> revoke live demo evidence
 npm run demo:execute                # strict mode: preflight funding/signer, then require AgentTradeExecuted
 RESCUEGRID_FRONTEND_URL=http://localhost:5175 RESCUEGRID_WORKER_URL=http://localhost:8787 npm run baseline:smoke
@@ -91,7 +92,7 @@ The Worker also exposes `/api/runtime/status` for non-secret cloud agent, signer
 
 > Local daemon scaffold: `npm run daemon -- status --json` shows the local agent address, chain, registered executor adapters, signer kind, watched policies, log path and best-effort execution readiness using the same preflight helper as `/api/execution/readiness`. `npm run daemon -- policies list --owner <0x...> --json` lists owner policies from the same chain reader and marks which wrappers are currently watched by the daemon; `npm run daemon -- watch sync --owner <0x...> --json` persists active matching wrappers into `.rescuegrid/daemon.json` for later `run`. `npm run daemon -- tick --wrapper-id <0x...>` runs the same Runtime Core tick path from the local process and writes JSONL activity under `.rescuegrid/daemon/`. It defaults to monitoring only; live submission still requires `--execution-enabled`, a local `AGENT_KEY` whose derived public address matches the deployed agent, and a funded BalanceManager. `--signer-kind local-daemon` signs only from the local daemon runtime with the local `AGENT_KEY`; Mainnet refuses `worker-secret` and requires an external/user-controlled signer mode.
 
-> Funding/execution gate: the deployed agent BalanceManager is currently unfunded for execution (`DBUSDC=0`, `DEEP=0` in final validation). Readiness surfaces correctly remain blocked with labels such as `EXECUTION_DISABLED`, `INSUFFICIENT_DBUSDC`, and `INSUFFICIENT_DEEP`. Real DeepBook execution was explicitly deferred/skipped until usable Testnet DBUSDC/DEEP funding exists; this repo must not claim a successful live DeepBook fill yet.
+> Funding/execution gate: the deployed agent BalanceManager is currently unfunded for execution (`DBUSDC=0`, `DEEP=0` in final validation). Readiness surfaces correctly remain blocked with labels such as `EXECUTION_DISABLED`, `INSUFFICIENT_DBUSDC`, and `INSUFFICIENT_DEEP`. `npm run funding:request` produces a secret-safe handoff with public agent / BalanceManager ids, DBUSDC/DEEP coin types, observed balances, missing amounts and the exact verification commands to rerun after external funding. Real DeepBook execution was explicitly deferred/skipped until usable Testnet DBUSDC/DEEP funding exists; this repo must not claim a successful live DeepBook fill yet.
 
 ## Final validation snapshot
 

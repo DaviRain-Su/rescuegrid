@@ -780,6 +780,60 @@ Rules:
 - `execution_claimed` is always false here; only a real tick result with `AgentTradeExecuted` and spend increase can claim execution.
 - The response must not include `AGENT_KEY`, owner key, WaaP session file, permission token or secret values.
 
+### `npm run funding:request`
+
+Builds a read-only external funding handoff from the same execution readiness contract. It does not submit a transaction, does not create a policy, and does not claim execution.
+
+Output:
+
+```json
+{
+  "status": "ok",
+  "purpose": "external_deepbook_testnet_funding_request",
+  "chain": "sui:testnet",
+  "ready_for_strict_execution": false,
+  "agent": {
+    "address": "0x...",
+    "passport_id": "0x...",
+    "balance_manager_id": "0x..."
+  },
+  "deepbook": {
+    "market_id": "SUI_DBUSDC",
+    "pool_id": "0x...",
+    "dbusdc_coin_type": "0x...::DBUSDC::DBUSDC",
+    "deep_coin_type": "0x...::deep::DEEP"
+  },
+  "funding_targets": {
+    "balance_manager": {
+      "id": "0x...",
+      "required_assets": [
+        { "asset": "DBUSDC", "observed": "0", "required": "1", "missing": "1" },
+        { "asset": "DEEP", "observed": "0", "required": "1", "missing": "1" }
+      ]
+    },
+    "agent_gas": {
+      "address": "0x...",
+      "required_assets": [
+        { "asset": "SUI_MIST", "observed": "0", "required": "1", "missing": "1" }
+      ]
+    }
+  },
+  "next_verification": {
+    "readiness_command": "npm run daemon -- status --json",
+    "strict_execution_command": "npm run demo:execute"
+  },
+  "execution_claimed": false
+}
+```
+
+Rules:
+
+- `funding:request` must reuse `buildExecutionReadiness`; it cannot maintain a second funding/signer readiness model.
+- DBUSDC and DEEP targets are the DeepBook BalanceManager balances, not plain wallet balances. Direct wallet transfer is insufficient unless the BalanceManager read reflects the balance.
+- SUI gas target is the agent address.
+- Output may include public addresses and coin types, but must not include `AGENT_KEY`, owner key, internal tick token, WaaP session file, permission token or secret values.
+- `ready_for_strict_execution=true` is only a preflight state; successful execution still requires `npm run demo:execute` to prove `AgentTradeExecuted`, `execution_claimed=true` and spend increase.
+
 ### `GET /api/risk/controls`
 
 Returns Worker-persisted owner runtime risk controls. When `owner` is provided, the Durable Object response is filtered to that owner; unfiltered reads are used only by the internal tick path and runtime core still matches controls against the wrapper owner before blocking.
