@@ -100,6 +100,7 @@
 | H6 | Explore | 3h | Watch-only protocol design | 明确 Bucket、Current、SpringSui、Haedal、Volo、AlphaFi、Kai、Mole、Ondo、KAIO、MatrixDock、Ember、Bluefin Pro、Sudo、DipCoin 的可读状态、redemption/liquidity/issuer/margin 风险和禁止执行边界 |
 | H7 | Commit | 4h | Adapter SDK skeleton | 新 adapter 必须提供 readMarket、planExecution、buildPtb、parseExecutionResult、liquidity gate、volume gate 和 conformance tests |
 | H8 | Commit | 3h | Liquid Sui DEX read adapters | DeepBook、Cetus、Turbos、Momentum、Bluefin Spot 暴露 quote/depth/spread read model 和 SUI/USD-stable spread matrix；非 DeepBook 不得注册 executor |
+| H9 | Commit | 3h | Sui lending read adapters | NAVI、Suilend、Scallop、AlphaLend 暴露 reserve、obligation、health-factor 和 liquidation-buffer read model；不得注册 repay/withdraw/borrow executor |
 
 Current H3 implementation status: `/api/protocols` exposes the Sui protocol coverage registry, and `/api/protocols/watchlist` exposes 31 Sui-only market rows with protocol, venue, market, risk, adapter and data-source metadata. DeepBook is represented as the only configured executor path, but market watch rows keep `execution_enabled=false` and `execution_blocker_code=FUNDING_GATED` until live DBUSDC/DEEP funding is available.
 
@@ -110,6 +111,8 @@ Current H6 implementation status: `/api/protocols/watch-boundaries` exposes 15 S
 Current H7 implementation status: `worker/src/executor-adapter-sdk.js` is the adapter SDK skeleton. It defines the required interface, liquidity/volume gate methods, conformance requirements, `createAdapterGate`, registry construction and unsupported-executor helpers. `worker/src/deepbook-adapter.js` is the first plugin, while `worker/src/executor-adapters.js` only assembles the registered registry. `worker/test/executor-adapter-sdk-test.mjs` and `worker/test/executor-adapters-test.mjs` lock the SDK contract, duplicate-kind rejection, missing-method rejection, DeepBook target support and unsigned PTB build boundary.
 
 Current H8 implementation status: `/api/adapters/dex-reads` exposes 5 Sui-only DEX read adapters: DeepBook order book, Cetus CLMM, Turbos CLMM, Momentum CLMM and Bluefin Spot route aggregator. The surface records 8 supported market rows and a 10-row SUI/USD-stable spread matrix. It intentionally returns read schemas and comparable quote/depth fields, not live computed arbitrage. DeepBook remains the only existing execution adapter and stays `FUNDING_GATED`; every other row is `READ_ONLY_ADAPTER`, `execution_enabled=false` and `autonomous_execution_allowed=false`.
+
+Current H9 implementation status: `/api/adapters/lending-reads` exposes 4 Sui-only lending read adapters: NAVI, Suilend, Scallop and AlphaLend. The surface records 5 supported market rows and a 4-row borrow-health matrix with reserve, obligation, health-factor, liquidation-buffer, oracle freshness and repay dry-run fields. Suilend and Scallop are `READ_ONLY_LENDING_ADAPTER`; NAVI and AlphaLend are `RESEARCH_PENDING_READ_ONLY`. All rows keep `registered_executor=false`, `execution_enabled=false` and `autonomous_execution_allowed=false`.
 
 ## Phase I - Post-MVP Multivenue Expansion
 

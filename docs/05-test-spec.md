@@ -270,6 +270,7 @@ Advisory:
 - Adapter SDK conformance test 必须拒绝缺少 `readMarket`、`planExecution`、`buildPtb`、`parseExecutionResult`、`liquidityGate` 或 `volumeGate` 的 adapter。
 - Adapter SDK registry 必须拒绝重复 `kind`，并通过 `createAdapterGate` 固定 liquidity/volume gate 的公共 shape。
 - Sui DEX read adapter tests must prove `/api/adapters/dex-reads` covers DeepBook, Cetus, Turbos, Momentum and Bluefin Spot with 10 read-only spread matrix rows, while Cetus/Turbos/Momentum/Bluefin never register executor authority.
+- Sui lending read adapter tests must prove `/api/adapters/lending-reads` covers NAVI, Suilend, Scallop and AlphaLend with reserve, obligation and health matrix fields, while no lending protocol registers repay/withdraw/borrow executor authority.
 
 ### ExecutionPlan conformance
 

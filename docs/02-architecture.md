@@ -125,6 +125,7 @@ Runtime Core 是 Cloud Agent 和未来 Local CLI daemon 的共享内核。它不
 - 拒绝未注册的 `executor_kind`，返回 `UNSUPPORTED_EXECUTOR`。
 - 要求 adapter 在构建 PTB 前输出可审计的 `ExecutionPlan`：target id、quote amount、estimated slippage、action type、expected event。
 - DEX read adapters 是独立只读层：`worker/src/sui-dex-read-adapters.js` 暴露 DeepBook/Cetus/Turbos/Momentum/Bluefin Spot 的 quote/depth/spread 字段和 SUI/USD-stable spread matrix，但不注册执行、不构建 PTB。
+- Lending read adapters 是独立只读层：`worker/src/sui-lending-read-adapters.js` 暴露 NAVI/Suilend/Scallop/AlphaLend 的 reserve、obligation、health-factor 和 liquidation-buffer 字段，但不注册 repay/withdraw/borrow 执行。
 
 Post-MVP adapter backlog：
 

@@ -98,6 +98,13 @@ Liquid Sui DEX read adapter status:
 - Every DEX read adapter keeps `execution_enabled=false` and `autonomous_execution_allowed=false`. DeepBook is the only row with an existing execution adapter, and it remains `FUNDING_GATED`; Cetus, Turbos, Momentum and Bluefin Spot are `READ_ONLY_ADAPTER`.
 - DEX read adapters must expose `no_execution_authority_requested` in their read preflight gates. A read adapter cannot become executable without a registered ExecutorAdapter, wrapper target fields and Guardian-readable liquidity/volume/price-impact checks.
 
+Sui lending read adapter status:
+
+- `/api/adapters/lending-reads` is the authoritative Worker read surface for Sui lending reserve and obligation health metadata. It covers NAVI, Suilend, Scallop and AlphaLend.
+- `worker/src/sui-lending-read-adapters.js` defines reserve fields, obligation fields, health-guard fields and a 4-row borrow-health matrix. The rows are schema-only and do not claim live rates, live obligations or repay automation.
+- Every lending read adapter keeps `registered_executor=false`, `execution_enabled=false` and `autonomous_execution_allowed=false`. Suilend and Scallop are `READ_ONLY_LENDING_ADAPTER`; NAVI and AlphaLend are `RESEARCH_PENDING_READ_ONLY`.
+- Lending read adapters must expose `no_execution_authority_requested` plus reserve freshness, obligation freshness, oracle freshness, withdrawal-liquidity and owner-cap/key checks before any future repay, withdraw or borrow PTB can be considered.
+
 Post-MVP adapter candidates:
 
 Adapter inclusion gates:
