@@ -1,18 +1,36 @@
 import assert from 'node:assert/strict'
-import { revokePolicyPreflight } from '../src/policy-api.js'
+import { strategyHash } from '../src/strategy-core.js'
+import { activationPolicyPreflight, revokePolicyPreflight } from '../src/policy-api.js'
 
+const NOW = Date.UTC(2026, 5, 2, 12, 0, 0)
+const STRATEGY = {
+  version: '1',
+  strategy_type: 'risk_response',
+  owner: '0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
+  agent: '0xcccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc',
+  chain: 'sui:testnet',
+  executor_kind: 'deepbook',
+  pool_id: '0xdddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd',
+  budget_coin_type: '0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee::usdc::USDC',
+  budget_ceiling: '500000000',
+  trigger: { metric: 'price_drop_pct', asset: 'SUI', threshold_pct: '8' },
+  execution: { order_type: 'market_or_ioc', max_slippage_bps: 100, max_single_trade_amount: '100000000' },
+  expires_at_ms: NOW + 86_400_000,
+}
 const WRAPPER = {
   wrapper_id: '0x1111111111111111111111111111111111111111111111111111111111111111',
   mandate_id: '0x2222222222222222222222222222222222222222222222222222222222222222',
   owner: '0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
+  strategy_hash: strategyHash(STRATEGY),
 }
 const ACTIVE_MANDATE = {
   id: WRAPPER.mandate_id,
   owner: WRAPPER.owner,
   revoked: false,
-  expires_at_ms: '9999999999999',
+  expires_at_ms: String(NOW + 1_000),
 }
 const REVOKED_MANDATE = { ...ACTIVE_MANDATE, revoked: true }
+const EXPIRED_MANDATE = { ...ACTIVE_MANDATE, expires_at_ms: String(NOW) }
 
 {
   const result = revokePolicyPreflight({ wrapper: null, mandate: null, owner: WRAPPER.owner })
@@ -51,4 +69,58 @@ const REVOKED_MANDATE = { ...ACTIVE_MANDATE, revoked: true }
   assert.equal(result.status, 200)
 }
 
-console.log('\nALL REVOKE API TESTS PASS')
+{
+  const result = activationPolicyPreflight({ wrapper: null, mandate: null, strategy: STRATEGY, nowMs: NOW })
+  assert.equal(result.ok, false)
+  assert.equal(result.status, 404)
+  assert.equal(result.body.code, 'NOT_FOUND')
+}
+
+{
+  const result = activationPolicyPreflight({ wrapper: WRAPPER, mandate: null, strategy: STRATEGY, nowMs: NOW })
+  assert.equal(result.ok, false)
+  assert.equal(result.status, 404)
+  assert.equal(result.body.code, 'MANDATE_NOT_FOUND')
+}
+
+{
+  const result = activationPolicyPreflight({ wrapper: WRAPPER, mandate: REVOKED_MANDATE, strategy: STRATEGY, nowMs: NOW })
+  assert.equal(result.ok, false)
+  assert.equal(result.status, 409)
+  assert.equal(result.body.code, 'POLICY_REVOKED')
+  assert.equal(result.body.runtime_state, 'Revoked')
+}
+
+{
+  const result = activationPolicyPreflight({ wrapper: WRAPPER, mandate: EXPIRED_MANDATE, strategy: STRATEGY, nowMs: NOW })
+  assert.equal(result.ok, false)
+  assert.equal(result.status, 409)
+  assert.equal(result.body.code, 'POLICY_EXPIRED')
+  assert.equal(result.body.runtime_state, 'Expired')
+}
+
+{
+  const result = activationPolicyPreflight({
+    wrapper: WRAPPER,
+    mandate: ACTIVE_MANDATE,
+    strategy: { ...STRATEGY, trigger: { ...STRATEGY.trigger, threshold_pct: '10' } },
+    nowMs: NOW,
+  })
+  assert.equal(result.ok, false)
+  assert.equal(result.status, 422)
+  assert.equal(result.body.code, 'HASH_MISMATCH')
+  assert.equal(result.body.expected_strategy_hash, WRAPPER.strategy_hash)
+}
+
+{
+  const result = activationPolicyPreflight({ wrapper: WRAPPER, mandate: ACTIVE_MANDATE, strategy: STRATEGY, nowMs: NOW })
+  assert.equal(result.ok, true)
+  assert.equal(result.status, 200)
+}
+
+{
+  const result = activationPolicyPreflight({ wrapper: WRAPPER, mandate: ACTIVE_MANDATE, strategy: null, nowMs: NOW })
+  assert.equal(result.ok, true, 'strategy-less activation is allowed but only after wrapper/mandate liveness checks')
+}
+
+console.log('\nALL POLICY API TESTS PASS')

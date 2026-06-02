@@ -22,7 +22,7 @@ import {
 } from './runtime-activity.js'
 import { AGENT_ADDRESS, DEFAULT_TICK_INTERVAL_SECONDS, MAX_ACTIVE_POLICIES_PER_DEPLOYMENT } from './config.js'
 import { getExecutorAdapter, unsupportedExecutor, unsupportedExecutorTarget } from './executor-adapters.js'
-import { revokePolicyPreflight } from './policy-api.js'
+import { activationPolicyPreflight, revokePolicyPreflight } from './policy-api.js'
 import type { ParseDefaults, Strategy } from './types.js'
 
 export interface Env {
@@ -361,6 +361,15 @@ app.post('/api/policies/:wrapper_id/activate', async (c) => {
   // owner hands it to the runtime here.
   let body: { strategy?: Strategy } = {}
   try { body = await c.req.json() } catch { /* activate may carry no body */ }
+  try {
+    const client = getClient()
+    const wrapper = await readWrapper(client, wrapperId)
+    const mandate = wrapper ? await readMandate(client, wrapper.mandate_id) : null
+    const preflight = activationPolicyPreflight({ wrapper, mandate, strategy: body.strategy ?? null })
+    if (!preflight.ok) return c.json(preflight.body, preflight.status as 400)
+  } catch (e) {
+    return c.json({ status: 'error', code: 'CHAIN_READ_FAILED', message: String((e as Error).message) }, 502)
+  }
   const stub = c.env.AGENT_RUNTIME.get(c.env.AGENT_RUNTIME.idFromName(wrapperId))
   const res = await stub.fetch('https://do/activate', {
     method: 'POST',
