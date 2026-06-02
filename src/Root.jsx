@@ -6,9 +6,7 @@ import { Landing } from './components/Landing.jsx'
 const AppBundle = lazy(() => import('./AppBundle.jsx'))
 
 export default function Root() {
-  // cold-loading a deep route (e.g. /markets) skips the landing and goes straight
-  // to the app so the URL is honored; "/" still shows the landing.
-  const [launched, setLaunched] = useState(() => typeof window !== 'undefined' && window.location.pathname !== '/')
+  const [launched, setLaunched] = useState(false)
   if (!launched) return <Landing onLaunch={() => setLaunched(true)} />
   return (
     <Suspense fallback={
