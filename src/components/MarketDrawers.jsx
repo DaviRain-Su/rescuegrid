@@ -115,7 +115,7 @@ export function PoolDrawer({ pool, onClose, onDeploy }) {
                 <div style={{ width: `${100 - basePct}%`, background: 'var(--accent)' }} />
               </div>
               <div style={{ display: 'flex', gap: 20, marginTop: 10 }}>
-                <span style={{ fontSize: 12, color: 'var(--t1)', display: 'inline-flex', alignItems: 'center', gap: 7 }}><span style={{ width: 9, height: 9, borderRadius: 3, background: 'var(--sui)' }} />Base {pool.base.toFixed(1)}%</span>
+                <span style={{ fontSize: 12, color: 'var(--t1)', display: 'inline-flex', alignItems: 'center', gap: 7 }}><span style={{ width: 9, height: 9, borderRadius: 3, background: 'var(--sui)' }} />Supply {pool.base.toFixed(1)}%</span>
                 <span style={{ fontSize: 12, color: 'var(--t1)', display: 'inline-flex', alignItems: 'center', gap: 7 }}><span style={{ width: 9, height: 9, borderRadius: 3, background: 'var(--accent)' }} />Rewards {pool.reward.toFixed(1)}%</span>
               </div>
             </div>
