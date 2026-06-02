@@ -10,6 +10,7 @@ import { buildCreatePolicyTx, buildRevokeTx } from './sui-tx.js'
 import { requireChainDataProvider } from './chain-data-provider.js'
 import { DEPLOYMENT } from './sui-tx.js'
 import { getSuiAdapterCandidateData } from './sui-adapter-candidates.js'
+import { getSuiDexReadAdapterData } from './sui-dex-read-adapters.js'
 import { getSuiProtocolCoverage } from './sui-protocol-registry.js'
 import { getSuiWatchOnlyBoundaryData } from './sui-watch-only-boundaries.js'
 import { getSuiWatchData } from './sui-watch-registry.js'
@@ -266,6 +267,11 @@ app.get('/api/protocols/watchlist', (c) => {
 app.get('/api/adapters/candidates', (c) => {
   const includeResearchPending = c.req.query('include_research_pending') !== 'false'
   return c.json(getSuiAdapterCandidateData({ includeResearchPending }))
+})
+
+app.get('/api/adapters/dex-reads', (c) => {
+  const includeSdkPending = c.req.query('include_sdk_pending') !== 'false'
+  return c.json(getSuiDexReadAdapterData({ includeSdkPending }))
 })
 
 app.get('/api/protocols/watch-boundaries', (c) => {

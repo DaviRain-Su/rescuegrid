@@ -91,6 +91,13 @@ H7 adapter SDK status:
 - `worker/src/executor-adapters.js` is now the registered-adapter assembly point. It still registers only `deepbook`, but future adapters must pass `assertExecutorAdapterConformance` before entering the registry.
 - `worker/test/executor-adapter-sdk-test.mjs` covers the SDK contract, gate shape, duplicate kind rejection and missing-method rejection. `worker/test/executor-adapters-test.mjs` covers the registered DeepBook plugin and target-gated unsigned PTB build.
 
+Liquid Sui DEX read adapter status:
+
+- `/api/adapters/dex-reads` is the authoritative Worker read surface for liquid Sui DEX quote/depth/spread metadata. It covers DeepBook, Cetus, Turbos, Momentum and Bluefin Spot.
+- `worker/src/sui-dex-read-adapters.js` defines one order-book read model, three CLMM read models and one route-aggregator read model. The spread matrix contains 10 SUI/USD-stable pair rows, but rows are schema-only and do not claim live arbitrage.
+- Every DEX read adapter keeps `execution_enabled=false` and `autonomous_execution_allowed=false`. DeepBook is the only row with an existing execution adapter, and it remains `FUNDING_GATED`; Cetus, Turbos, Momentum and Bluefin Spot are `READ_ONLY_ADAPTER`.
+- DEX read adapters must expose `no_execution_authority_requested` in their read preflight gates. A read adapter cannot become executable without a registered ExecutorAdapter, wrapper target fields and Guardian-readable liquidity/volume/price-impact checks.
+
 Post-MVP adapter candidates:
 
 Adapter inclusion gates:

@@ -133,6 +133,15 @@ export function getAdapterCandidates() {
   }))
 }
 
+/** GET /api/adapters/dex-reads — Sui-only DEX quote/depth/spread read model. */
+export function getDexReadAdapters() {
+  return workerGet('/api/adapters/dex-reads').catch((e) => ({
+    status: 'error',
+    code: WORKER_CONFIGURED ? 'WORKER_READ_FAILED' : 'WORKER_NOT_CONFIGURED',
+    message: String(e?.message || e),
+  }))
+}
+
 /** GET /api/protocols/watch-boundaries — watch-only protocol risk boundaries. */
 export function getProtocolWatchBoundaries() {
   return workerGet('/api/protocols/watch-boundaries').catch((e) => ({
