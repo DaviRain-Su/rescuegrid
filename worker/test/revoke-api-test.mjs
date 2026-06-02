@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import { strategyHash } from '../src/strategy-core.js'
-import { activationPolicyPreflight, reconcilePolicyRuntimeState, revokePolicyPreflight } from '../src/policy-api.js'
+import { activationPolicyPreflight, reconcilePolicyListRuntimeState, reconcilePolicyRuntimeState, revokePolicyPreflight } from '../src/policy-api.js'
 
 const NOW = Date.UTC(2026, 5, 2, 12, 0, 0)
 const STRATEGY = {
@@ -156,6 +156,23 @@ const EXPIRED_MANDATE = { ...ACTIVE_MANDATE, expires_at_ms: String(NOW) }
   const reconciled = reconcilePolicyRuntimeState(policy, { runtime_state: 'Inactive' })
   assert.equal(reconciled.runtime_state, 'Monitoring')
   assert.equal(reconciled.runtime_state_stale, false)
+}
+
+{
+  const active = { wrapper_id: WRAPPER.wrapper_id, runtime_state: 'Monitoring', runtime_state_stale: false }
+  const revoked = { wrapper_id: '0x3333333333333333333333333333333333333333333333333333333333333333', runtime_state: 'Revoked', runtime_state_stale: false }
+  const inactive = { wrapper_id: '0x4444444444444444444444444444444444444444444444444444444444444444', runtime_state: 'Monitoring', runtime_state_stale: true }
+  const reconciled = reconcilePolicyListRuntimeState([active, revoked, inactive], {
+    [active.wrapper_id]: { runtime_state: 'Revoked' },
+    [revoked.wrapper_id]: { runtime_state: 'Monitoring' },
+    [inactive.wrapper_id]: { runtime_state: 'Inactive' },
+  })
+  assert.equal(reconciled[0].runtime_state, 'Monitoring')
+  assert.equal(reconciled[0].runtime_state_stale, true)
+  assert.equal(reconciled[1].runtime_state, 'Revoked')
+  assert.equal(reconciled[1].runtime_state_stale, true)
+  assert.equal(reconciled[2].runtime_state, 'Monitoring')
+  assert.equal(reconciled[2].runtime_state_stale, false)
 }
 
 console.log('\nALL POLICY API TESTS PASS')

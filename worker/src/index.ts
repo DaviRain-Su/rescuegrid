@@ -22,7 +22,7 @@ import {
 } from './runtime-activity.js'
 import { AGENT_ADDRESS, DEFAULT_TICK_INTERVAL_SECONDS, MAX_ACTIVE_POLICIES_PER_DEPLOYMENT } from './config.js'
 import { getExecutorAdapter, unsupportedExecutor, unsupportedExecutorTarget } from './executor-adapters.js'
-import { activationPolicyPreflight, reconcilePolicyRuntimeState, revokePolicyPreflight } from './policy-api.js'
+import { activationPolicyPreflight, reconcilePolicyListRuntimeState, reconcilePolicyRuntimeState, revokePolicyPreflight } from './policy-api.js'
 import type { ParseDefaults, Strategy } from './types.js'
 
 export interface Env {
@@ -205,7 +205,13 @@ app.get('/api/policies', async (c) => {
     return c.json({ status: 'error', code: 'BAD_REQUEST', message: 'owner query param required.' }, 400)
   }
   try {
-    return c.json({ status: 'ok', policies: await listPoliciesByOwner(owner) })
+    const policies = await listPoliciesByOwner(owner)
+    const runtimePairs = await Promise.all(policies.map(async (policy: any) => {
+      const runtime = policy.wrapper_id ? await readRuntimeState(c.env, policy.wrapper_id) : null
+      return [policy.wrapper_id, runtime]
+    }))
+    const runtimeByWrapperId = Object.fromEntries(runtimePairs.filter(([wrapperId]) => Boolean(wrapperId)))
+    return c.json({ status: 'ok', policies: reconcilePolicyListRuntimeState(policies, runtimeByWrapperId) })
   } catch (e) {
     return c.json({ status: 'error', code: 'CHAIN_READ_FAILED', message: String((e as Error).message) }, 502)
   }

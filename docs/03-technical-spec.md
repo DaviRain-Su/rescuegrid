@@ -531,6 +531,17 @@ Validation:
 - `strategy_hash` must equal the server recomputed hash.
 - The deployment must have fewer than `MAX_ACTIVE_POLICIES_PER_DEPLOYMENT` active policies, otherwise return `ACTIVE_POLICY_LIMIT_REACHED`.
 
+### `GET /api/policies?owner=0x...`
+
+Returns owner-scoped Policy rows from chain events, enriched by live wrapper/mandate reads and Durable Object runtime state.
+
+Rules:
+
+- The list response must not include demo or local fixture rows.
+- Chain state is authoritative for `status`, `revoked`, `expires_at_ms`, budget and wrapper fields.
+- Durable Object runtime state may update `runtime_state` when it does not conflict with terminal chain state.
+- If chain state and runtime state conflict, chain state wins and the row returns `runtime_state_stale=true`.
+
 ### `POST /api/policies/:wrapper_id/revoke`
 
 Request:

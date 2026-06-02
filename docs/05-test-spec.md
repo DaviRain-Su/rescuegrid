@@ -153,6 +153,15 @@ Error:
 - 活跃 Policy 数达到 `MAX_ACTIVE_POLICIES_PER_DEPLOYMENT` 时返回 `ACTIVE_POLICY_LIMIT_REACHED`。
 - Sui transaction 失败时不激活 Durable Object。
 
+### `GET /api/policies?owner=`
+
+Happy path:
+
+- 返回 owner 的链上 Policy 列表，不混入 demo fixture。
+- 每个 row 使用链上 wrapper/mandate 字段填充 `status`、`revoked`、`expires_at_ms`、budget 和 wrapper 字段。
+- Durable Object runtime state 不冲突时可更新 `runtime_state`。
+- 链上 terminal state 与 runtime state 冲突时，链上状态优先且 row 返回 `runtime_state_stale=true`。
+
 ### `POST /api/policies/:wrapper_id/revoke`
 
 Happy path:

@@ -283,6 +283,11 @@ function PolicyCard({ p, onRevoke, onInspect, onLive, readOnly = false }) {
               <span className="mono" style={{ fontSize: 11, color: 'var(--sui)' }}>{p.id}</span>
               <span className="badge badge-neutral" style={{ fontSize: 9.5, padding: '2px 7px' }}>
                 <Icon name={p.mode === 'cloud' ? 'cloud' : 'cpu'} size={10} />{p.mode}</span>
+              {p.runtimeStateStale && (
+                <span className="badge badge-warn" style={{ fontSize: 9.5, padding: '2px 7px' }}>
+                  <Icon name="alert" size={10} />runtime stale
+                </span>
+              )}
             </div>
           </div>
         </div>

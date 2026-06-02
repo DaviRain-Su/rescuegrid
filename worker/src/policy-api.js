@@ -17,6 +17,13 @@ export function reconcilePolicyRuntimeState(policy, runtimeState) {
   return { ...policy, runtime_state: runtimeValue, runtime_state_stale: false }
 }
 
+export function reconcilePolicyListRuntimeState(policies, runtimeStatesByWrapperId = {}) {
+  return (Array.isArray(policies) ? policies : []).map((policy) => {
+    const wrapperId = policy?.wrapper_id ?? policy?.policy_id
+    return reconcilePolicyRuntimeState(policy, runtimeStatesByWrapperId[wrapperId] ?? null)
+  })
+}
+
 export function activationPolicyPreflight({ wrapper, mandate, strategy, nowMs = Date.now() }) {
   if (!wrapper) {
     return {

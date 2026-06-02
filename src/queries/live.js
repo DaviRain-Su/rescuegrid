@@ -27,7 +27,8 @@ const LIVE_STALE_TIME = 8_000
 const LIVE_REFETCH_INTERVAL = 15_000
 
 export function mapLivePolicy(p, spentUnits = 0, status = 'active', mode = 'cloud') {
-  const safeStatus = ['active', 'revoked', 'expired', 'paused'].includes(status) ? status : 'paused'
+  const chainStatus = p.status || status
+  const safeStatus = ['active', 'revoked', 'expired', 'paused'].includes(chainStatus) ? chainStatus : 'paused'
   return {
     id: p.wrapper_id.slice(0, 6) + '…' + p.wrapper_id.slice(-4),
     _wrapperId: p.wrapper_id,
@@ -44,6 +45,8 @@ export function mapLivePolicy(p, spentUnits = 0, status = 'active', mode = 'clou
     created: '2026-06-02',
     execs: 0,
     owner: p.owner,
+    runtimeState: p.runtime_state || null,
+    runtimeStateStale: Boolean(p.runtime_state_stale),
   }
 }
 
