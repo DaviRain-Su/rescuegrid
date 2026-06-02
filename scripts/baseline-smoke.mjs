@@ -117,6 +117,25 @@ async function main() {
   const workerRoot = await checkJson(`${WORKER_URL}/`)
   assert('worker service reachable on configured URL', workerRoot.ok && workerRoot.status === 200 && workerRoot.json?.service === 'rescuegrid-worker', `${WORKER_URL} status=${workerRoot.status}${workerRoot.error ? ` error=${workerRoot.error}` : ''}`)
 
+  const runtimeStatus = await checkJson(`${WORKER_URL}/api/runtime/status`)
+  const runtime = runtimeStatus.json || {}
+  const signer = runtime.signer || {}
+  const execution = runtime.execution || {}
+  const provider = runtime.chain_data_provider || {}
+  const runtimeText = runtimeStatus.text || ''
+  const secretValues = ['AGENT_KEY', 'INTERNAL_AGENT_TICK_TOKEN']
+    .map((key) => workerEnv.values.get(key))
+    .filter((value) => typeof value === 'string' && value.length >= 8)
+  assert('worker runtime status reachable', runtimeStatus.ok && runtimeStatus.status === 200 && runtime.status === 'ok', `${WORKER_URL}/api/runtime/status status=${runtimeStatus.status}`)
+  assert('runtime status is Sui Testnet', runtime.chain === 'sui:testnet', runtime.chain)
+  assert('runtime status agent matches deployment', runtime.agent?.address === DEPLOYMENT.agent.address, runtime.agent?.address || 'missing')
+  assert('runtime status signer kind is known', Array.isArray(signer.known_signer_kinds) && signer.known_signer_kinds.includes(signer.kind), signer.kind || 'missing')
+  assert('runtime status execution config matches worker env', execution.configured === executionEnabled, `execution.configured=${execution.configured}`)
+  assert('runtime status execution mirrors signer gate', execution.enabled === signer.execution_enabled && execution.mode === signer.kind, `mode=${execution.mode || 'missing'} enabled=${execution.enabled}`)
+  assert('runtime status reports blocker when execution is disabled', execution.enabled === true || typeof execution.blocker_code === 'string', execution.blocker_code || 'missing')
+  assert('runtime status data provider is Worker-first', provider.worker_first === true && typeof provider.kind === 'string', provider.kind || 'missing')
+  assert('runtime status does not leak worker secrets', secretValues.every((value) => !runtimeText.includes(value)), 'secret values absent')
+
   const client = getClient()
   const checkpoint = await client.getLatestCheckpointSequenceNumber()
   assert('Sui Testnet fullnode reachable', Number(checkpoint) > 0, `latest_checkpoint=${checkpoint}`)

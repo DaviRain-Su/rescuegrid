@@ -44,12 +44,13 @@ Broadcast with the dedicated agent key (agent-as-owner for the test):
 
 So create / list / activity / revoke are real on testnet. In the browser, a connected Sui wallet drives the same Worker-first flow (no DBUSDC needed); read-only screens can fall back to direct Sui/DeepBook reads when `VITE_WORKER_URL` is absent.
 
-## Baseline smoke — verified locally (2026-06-02)
+## Baseline smoke — verified locally (2026-06-03)
 
-With Worker `http://localhost:8787` and frontend `http://localhost:5175` running:
+With Worker `http://localhost:8787` and frontend `http://localhost:5173` running:
 
-- `RESCUEGRID_FRONTEND_URL=http://localhost:5175 RESCUEGRID_WORKER_URL=http://localhost:8787 npm run baseline:smoke` passed.
-- Evidence covered deployment id consistency, `.env.local` Worker URL, Worker service root, frontend Vite env, Sui Testnet fullnode, RescueGrid package, agent passport, BalanceManager, DeepBook `SUI_DBUSDC` pool and Testnet indexer.
+- `RESCUEGRID_FRONTEND_URL=http://localhost:5173 RESCUEGRID_WORKER_URL=http://localhost:8787 npm run baseline:smoke` passed.
+- Evidence covered deployment id consistency, `.env.local` Worker URL, Worker service root, `/api/runtime/status`, frontend Vite env, Sui Testnet fullnode, RescueGrid package, agent passport, BalanceManager, DeepBook `SUI_DBUSDC` pool and Testnet indexer.
+- Runtime status evidence covered `sui:testnet`, deployment agent match, known signer kind, execution config mirroring `.dev.vars`, Worker-first data provider and no `AGENT_KEY` / `INTERNAL_AGENT_TICK_TOKEN` value leakage.
 - Funding gate stayed explicit: BalanceManager `DBUSDC_raw=0`, `DEEP_raw=0`, `EXECUTION_ENABLED=false`, and the smoke asserted `EXECUTION_DISABLED` with no execution tx submitted.
 
 ## Known gaps / next
