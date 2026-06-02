@@ -61,6 +61,11 @@ export interface Env {
   SUI_GRAPHQL_URL?: string
   SUI_GRAPHQL_ENDPOINT?: string
   GRAPHQL_URL?: string
+  MONITORING_PROVIDER?: string
+  RESCUEGRID_MONITORING_PROVIDER?: string
+  SUI_GRPC_URL?: string
+  SUI_GRPC_ENDPOINT?: string
+  GRPC_URL?: string
 }
 
 const app = new Hono<{ Bindings: Env }>()

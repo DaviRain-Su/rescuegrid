@@ -718,6 +718,19 @@ Response:
     "graphql_configured": false,
     "worker_first": true
   },
+  "monitoring_provider": {
+    "kind": "timer-polling",
+    "known_provider_kinds": ["timer-polling", "grpc"],
+    "provider_status": "active",
+    "worker_first": true,
+    "tick_driver": "durable-object-alarm",
+    "trigger_source": "timer",
+    "grpc_configured": false,
+    "hot_path": "runtime-core-tick",
+    "execution_hot_path_unchanged": true,
+    "migration_ready": false,
+    "blocker_code": null
+  },
   "runtime": {
     "cloud_worker": true,
     "local_daemon_supported": true,
@@ -739,6 +752,9 @@ Rules:
 - `hardware` and `remote-signer` are explicit external signer modes but must return `UNSUPPORTED_SIGNER` until their adapter spike is validated.
 - Production Mainnet must not use `worker-secret`; it must use an external/user-controlled signer mode.
 - The frontend must treat this endpoint as status evidence only. It cannot infer that execution is allowed unless `execution.enabled=true`.
+- `monitoring_provider.kind=timer-polling` is the default and remains the active MVP tick driver through Durable Object alarms.
+- `MONITORING_PROVIDER=grpc` may report `grpc_configured=true`, but it must keep `provider_status=unavailable`, `blocker_code=GRPC_MONITORING_NOT_IMPLEMENTED` and `execution_hot_path_unchanged=true` until Runtime Core, Durable Object scheduling and replay semantics are explicitly wired and tested.
+- `monitoring_provider` must never expose gRPC endpoint URLs or access tokens.
 
 ### `GET /api/chain-data/status`
 

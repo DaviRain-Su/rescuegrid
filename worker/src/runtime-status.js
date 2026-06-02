@@ -1,4 +1,5 @@
 import { configuredChainDataProviderKind, configuredGraphqlEndpoint } from './chain-data-provider.js'
+import { getMonitoringProviderStatus } from './monitoring-provider.js'
 import { DEPLOYMENT } from './sui-tx.js'
 import { signerAdapterStatus } from './signer-adapters.js'
 
@@ -25,6 +26,7 @@ export function getRuntimeStatus(env = {}, options = {}) {
       graphql_configured: Boolean(configuredGraphqlEndpoint(env)),
       worker_first: true,
     },
+    monitoring_provider: getMonitoringProviderStatus(env),
     runtime: {
       cloud_worker: true,
       local_daemon_supported: true,

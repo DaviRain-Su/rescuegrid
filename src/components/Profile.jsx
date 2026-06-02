@@ -107,6 +107,7 @@ function RuntimeAuthorityStatus({ runtimeStatus }) {
   const signer = runtimeStatus.signer
   const execution = runtimeStatus.execution || {}
   const provider = runtimeStatus.chain_data_provider || {}
+  const monitoring = runtimeStatus.monitoring_provider || {}
   const agent = runtimeStatus.agent || {}
   const runtimeSignerRows = signerHealthRows(runtimeStatus)
   const externalSigner = runtimeSignerRows.find((row) => row.id === 'external-waap-signer' || row.id === 'external-signer')
@@ -144,6 +145,11 @@ function RuntimeAuthorityStatus({ runtimeStatus }) {
       <MetaRow icon="layers" iconColor="var(--t2)" label="Data provider">
         <span className="mono" style={{ fontSize: 11.5, color: 'var(--t1)' }}>
           {provider.kind || 'json-rpc'}{provider.graphql_configured ? ' · graphql configured' : ''}
+        </span>
+      </MetaRow>
+      <MetaRow icon="clock" iconColor={monitoring.provider_status === 'active' ? 'var(--safe)' : 'var(--warn)'} label="Monitoring">
+        <span className={`badge ${monitoring.provider_status === 'active' ? 'badge-safe' : 'badge-warn'}`} style={{ fontSize: 9 }}>
+          {monitoring.kind || 'timer-polling'} · {monitoring.provider_status || 'active'}
         </span>
       </MetaRow>
       {externalSigner && (

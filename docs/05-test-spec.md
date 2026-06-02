@@ -216,11 +216,14 @@ Happy path:
 - `AGENT_KEY` 不是有效 Sui private key 时，`signer.available=false`、`signer.address=null`、`unavailable_code=INVALID_SIGNER_SECRET`，响应仍不得泄漏原始 secret。
 - `AGENT_KEY` 可解析但派生地址不等于部署 agent address 时，`signer.available=false`、`signer.address=<derived public address>`、`signer.expected_address=<deployment agent>`、`unavailable_code=SIGNER_ADDRESS_MISMATCH`。
 - `CHAIN_DATA_PROVIDER=graphql` 且配置 `SUI_GRAPHQL_URL` / `SUI_GRAPHQL_ENDPOINT` 时，返回 `chain_data_provider.kind=graphql` 和 `graphql_configured=true`。
+- 默认返回 `monitoring_provider.kind=timer-polling`、`provider_status=active`、`tick_driver=durable-object-alarm` 和 `execution_hot_path_unchanged=true`。
+- `MONITORING_PROVIDER=grpc` 即使配置 `SUI_GRPC_URL` / `SUI_GRPC_ENDPOINT`，也必须返回 `monitoring_provider.provider_status=unavailable`、`blocker_code=GRPC_MONITORING_NOT_IMPLEMENTED`、`grpc_configured=true` 和 `execution_hot_path_unchanged=true`。
 - `known_signer_kinds` 包含 `worker-secret`、`local-daemon`、`waap`、`hardware` 和 `remote-signer`。
 
 Security / boundary:
 
 - 响应不得包含 `AGENT_KEY`、owner key、WaaP session file、permission token 或任何 secret value。
+- 响应不得包含 gRPC endpoint URL 或 endpoint token。
 - `SIGNER_KIND=waap` 默认必须返回 `UNSUPPORTED_SIGNER`，不能因为文档支持 Sui 就自动打开执行。
 - `SIGNER_KIND=waap` 只有在 `RESCUEGRID_DAEMON_MODE=true`、`RESCUEGRID_WAAP_CLI_ENABLED=true`、`RESCUEGRID_WAAP_SUI_ADDRESS=<deployment agent>` 同时满足时才可报告 `available=true`。
 - `SIGNER_KIND=waap` 在 Cloud Worker runtime 中必须保持 unavailable；`waap-cli` 只能通过 local daemon 注入 runner 调用。
