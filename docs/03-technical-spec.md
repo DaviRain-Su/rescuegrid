@@ -707,6 +707,35 @@ Response:
     "unavailable_detail": "worker AGENT_KEY is unavailable",
     "known_signer_kinds": ["worker-secret", "local-daemon", "waap", "hardware", "remote-signer"]
   },
+  "signer_capabilities": [
+    {
+      "kind": "worker-secret",
+      "selected": true,
+      "runtime_scope": "cloud-worker",
+      "custody_model": "worker-held-agent-key",
+      "available": false,
+      "execution_enabled": false,
+      "cloud_worker_supported": true,
+      "local_daemon_supported": false,
+      "external_approval_required": false,
+      "production_mainnet_allowed": false,
+      "unavailable_code": "EXECUTION_DISABLED"
+    }
+  ],
+  "external_signer": {
+    "kind": "waap",
+    "selected": false,
+    "status": "not_selected",
+    "available": false,
+    "local_daemon_only": true,
+    "cloud_worker_supported": false,
+    "local_daemon_supported": true,
+    "daemon_mode": false,
+    "waap_cli_enabled": false,
+    "submission_runner_configured": false,
+    "permission_token_configured": false,
+    "secrets_returned": false
+  },
   "execution": {
     "configured": false,
     "enabled": false,
@@ -733,8 +762,10 @@ Response:
   },
   "runtime": {
     "cloud_worker": true,
+    "local_daemon": false,
     "local_daemon_supported": true,
-    "mainnet_requires_external_signer": true
+    "mainnet_requires_external_signer": true,
+    "external_signer_supported": true
   }
 }
 ```
@@ -746,8 +777,11 @@ Rules:
 - `worker-secret` is allowed only for Testnet Worker validation and is execution-ready only when `EXECUTION_ENABLED=true`, `AGENT_KEY` is present, the secret is a valid Sui private key, and the derived public address equals `expected_address`.
 - `local-daemon` is available only when `RESCUEGRID_DAEMON_MODE=true`, a local `AGENT_KEY` is present, the secret is valid, and the derived public address equals `expected_address`.
 - Invalid secrets return `INVALID_SIGNER_SECRET`; valid secrets for the wrong address return `SIGNER_ADDRESS_MISMATCH`. Both keep `execution.enabled=false`.
+- `signer_capabilities` is a public capability matrix for the selected runtime and known future signer kinds. It may expose support flags, public addresses, custody model names, runner posture and blocker codes, but no secret values.
+- `external_signer` is the public WaaP posture used by Profile / Risk Center and local daemon status. It must distinguish `not_selected`, `unavailable` and `available`; it must expose whether the CLI is enabled, whether the local submission runner is configured, whether a permission token is configured, and whether the WaaP address matches `expected_address`.
 - `waap` is disabled by default and must return `UNSUPPORTED_SIGNER` unless the runtime is a local daemon with `RESCUEGRID_DAEMON_MODE=true`, `RESCUEGRID_WAAP_CLI_ENABLED=true`, and `RESCUEGRID_WAAP_SUI_ADDRESS` matching `expected_address`.
-- `waap` status may expose only public signer metadata: address, chain, CLI enabled flag and whether a permission token is configured. It must never expose a WaaP session file, permission token value or raw CLI stderr/stdout.
+- `waap` must still return `WAAP_RUNNER_MISSING` unless the local daemon injects the reviewed `waap-cli` submission runner. A configured WaaP address or permission-token posture alone is not execution readiness.
+- `waap` status may expose only public signer metadata: address, chain, CLI enabled flag, runner-configured flag and whether a permission token is configured. It must never expose a WaaP session file, permission token value or raw CLI stderr/stdout.
 - `waap` signing uses a local daemon injected runner that calls `waap-cli send-tx --tx-json <serialized RescueGrid PTB> --chain sui:testnet --json`; the Cloud Worker runtime must not shell out to `waap-cli`. The adapter parses single JSON and newline-delimited JSON output, prefers `event=result`, accepts common Sui digest keys, and maps approval-pending, approval-denied, policy-blocked and timeout states to stable non-success error codes instead of treating them as generic no-digest failures. Runtime tick results must return those states as non-submitted `blocked` rows with `signer_kind`, `approval_state`, `execution_claimed=false`, and no transaction digest unless WaaP actually returned one.
 - `hardware` and `remote-signer` are explicit external signer modes but must return `UNSUPPORTED_SIGNER` until their adapter spike is validated.
 - Production Mainnet must not use `worker-secret`; it must use an external/user-controlled signer mode.

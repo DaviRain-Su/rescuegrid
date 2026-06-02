@@ -3,6 +3,7 @@ import {
   buildExecutionReadiness,
   resolveExecutionReadinessThresholds,
 } from '../src/execution-readiness.js'
+import { getRuntimeStatus } from '../src/runtime-status.js'
 import { SIGNER_KIND_WAAP } from '../src/signer-adapters.js'
 import { DEPLOYMENT } from '../src/sui-tx.js'
 
@@ -102,6 +103,29 @@ function readyRuntimeStatus() {
       EXECUTION_ENABLED: 'true',
     },
     chainData: chainData(),
+  })
+  assert.equal(readiness.signer.kind, SIGNER_KIND_WAAP)
+  assert.equal(readiness.signer.available, false)
+  assert.equal(readiness.blocker_codes.includes('WAAP_RUNNER_MISSING'), true)
+  assert.equal(readiness.funding_ready, true)
+  assert.equal(readiness.execution_ready, false)
+  assert.equal(readiness.execution_claimed, false)
+}
+
+{
+  const env = {
+    SIGNER_KIND: SIGNER_KIND_WAAP,
+    RESCUEGRID_DAEMON_MODE: 'true',
+    RESCUEGRID_WAAP_CLI_ENABLED: 'true',
+    RESCUEGRID_WAAP_SUI_ADDRESS: DEPLOYMENT.agent.address,
+    EXECUTION_ENABLED: 'true',
+  }
+  const readiness = await buildExecutionReadiness({
+    env,
+    chainData: chainData(),
+    runtimeStatus: getRuntimeStatus(env, {
+      waapCliRunner: async () => ({ stdout: JSON.stringify({ digest: '0xready' }) }),
+    }),
   })
   assert.equal(readiness.signer.kind, SIGNER_KIND_WAAP)
   assert.equal(readiness.signer.available, true)

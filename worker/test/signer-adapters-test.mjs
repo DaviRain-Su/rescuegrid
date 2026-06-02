@@ -7,12 +7,15 @@ import {
   SIGNER_CODE_WAAP_ADDRESS_MISSING,
   SIGNER_CODE_WAAP_NO_DIGEST,
   SIGNER_CODE_WAAP_POLICY_BLOCKED,
+  SIGNER_CODE_WAAP_RUNNER_MISSING,
   SIGNER_CODE_WAAP_TIMEOUT,
   SIGNER_KIND_LOCAL_DAEMON,
   SIGNER_KIND_WAAP,
   SIGNER_KIND_WORKER_SECRET,
+  externalSignerPosture,
   resolveSignerAdapter,
   signerAdapterStatus,
+  signerCapabilityMatrix,
   signerExecutionEnabled,
   signerKindFromEnv,
 } from '../src/signer-adapters.js'
@@ -50,6 +53,10 @@ assert.equal(signerExecutionEnabled({ EXECUTION_ENABLED: 'true' }, missingSecret
   assert.equal(status.expected_address, DEPLOYMENT.agent.address)
   assert.equal(status.signer_matches_expected, false)
   assert.equal(status.known_signer_kinds.includes(SIGNER_KIND_WAAP), true)
+  assert.equal(
+    signerCapabilityMatrix({ EXECUTION_ENABLED: 'true' }, { client }).some((row) => row.kind === SIGNER_KIND_WAAP && row.runner_configured === false),
+    true,
+  )
 }
 
 const invalidSecret = resolveSignerAdapter({ EXECUTION_ENABLED: 'true', AGENT_KEY: 'not-a-sui-private-key' }, { client })
@@ -185,6 +192,36 @@ const waapAddressMismatch = resolveSignerAdapter({
 assert.equal(waapAddressMismatch.available, false)
 assert.equal(waapAddressMismatch.unavailable_code, SIGNER_CODE_ADDRESS_MISMATCH)
 await assert.rejects(() => waapAddressMismatch.signAndSubmit(transaction), /does not match/)
+
+const waapRunnerMissing = resolveSignerAdapter({
+  SIGNER_KIND: SIGNER_KIND_WAAP,
+  RESCUEGRID_DAEMON_MODE: 'true',
+  RESCUEGRID_WAAP_CLI_ENABLED: 'true',
+  RESCUEGRID_WAAP_SUI_ADDRESS: signerAddress,
+  RESCUEGRID_WAAP_PERMISSION_TOKEN: 'permission-secret',
+  EXECUTION_ENABLED: 'true',
+}, { client, expectedAgentAddress: signerAddress })
+assert.equal(waapRunnerMissing.available, false)
+assert.equal(waapRunnerMissing.runner_configured, false)
+assert.equal(waapRunnerMissing.unavailable_code, SIGNER_CODE_WAAP_RUNNER_MISSING)
+assert.equal(signerExecutionEnabled({ EXECUTION_ENABLED: 'true' }, waapRunnerMissing), false)
+assert.equal(JSON.stringify(waapRunnerMissing).includes('permission-secret'), false)
+{
+  const posture = externalSignerPosture({
+    SIGNER_KIND: SIGNER_KIND_WAAP,
+    RESCUEGRID_DAEMON_MODE: 'true',
+    RESCUEGRID_WAAP_CLI_ENABLED: 'true',
+    RESCUEGRID_WAAP_SUI_ADDRESS: signerAddress,
+    RESCUEGRID_WAAP_PERMISSION_TOKEN: 'permission-secret',
+    EXECUTION_ENABLED: 'true',
+  }, { expectedAgentAddress: signerAddress })
+  assert.equal(posture.selected, true)
+  assert.equal(posture.status, 'unavailable')
+  assert.equal(posture.submission_runner_configured, false)
+  assert.equal(posture.permission_token_configured, true)
+  assert.equal(posture.unavailable_code, SIGNER_CODE_WAAP_RUNNER_MISSING)
+  assert.equal(JSON.stringify(posture).includes('permission-secret'), false)
+}
 
 const waapCalls = []
 const waapTx = {

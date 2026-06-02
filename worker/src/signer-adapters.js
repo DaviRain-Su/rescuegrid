@@ -306,17 +306,22 @@ function waapSignerStatus(env, expectedAddress) {
 }
 
 function waapSignerAdapter(env, expectedAddress, waapCliRunner) {
-  const status = waapSignerStatus(env, expectedAddress)
+  const baseStatus = waapSignerStatus(env, expectedAddress)
+  const runnerConfigured = typeof waapCliRunner === 'function'
+  const status = baseStatus.available && !runnerConfigured
+    ? {
+        ...baseStatus,
+        available: false,
+        unavailable_code: SIGNER_CODE_WAAP_RUNNER_MISSING,
+        unavailable_detail: 'waap signer runner is not configured for this runtime',
+      }
+    : baseStatus
   return {
     kind: SIGNER_KIND_WAAP,
+    runner_configured: runnerConfigured,
     ...status,
     async signAndSubmit(transaction) {
       if (!status.available) throw new Error(status.unavailable_detail || 'waap signer is unavailable')
-      if (typeof waapCliRunner !== 'function') {
-        const error = new Error('waap signer runner is not configured for this runtime')
-        error.code = SIGNER_CODE_WAAP_RUNNER_MISSING
-        throw error
-      }
       const txJson = serializeTxJsonForWaap(transaction, expectedAddress)
       const chain = envString(env, 'RESCUEGRID_WAAP_CHAIN', 'WAAP_CHAIN', 'RESCUEGRID_CHAIN') || 'sui:testnet'
       let result
@@ -380,5 +385,108 @@ export function signerAdapterStatus(env, options = {}) {
     unavailable_code: adapter.available ? null : adapter.unavailable_code,
     unavailable_detail: adapter.available ? null : adapter.unavailable_detail,
     known_signer_kinds: KNOWN_SIGNER_KINDS,
+  }
+}
+
+function signerRuntimeScope(kind) {
+  if (kind === SIGNER_KIND_WORKER_SECRET) return 'cloud-worker'
+  if (kind === SIGNER_KIND_LOCAL_DAEMON) return 'local-daemon'
+  return 'external-signer'
+}
+
+function signerCustodyModel(kind) {
+  if (kind === SIGNER_KIND_WORKER_SECRET) return 'worker-held-agent-key'
+  if (kind === SIGNER_KIND_LOCAL_DAEMON) return 'local-agent-key'
+  if (kind === SIGNER_KIND_WAAP) return 'external-policy-signer'
+  if (kind === SIGNER_KIND_HARDWARE) return 'owner-controlled-hardware'
+  if (kind === SIGNER_KIND_REMOTE) return 'remote-signer-service'
+  return 'unknown'
+}
+
+function signerCapabilities(kind) {
+  if (kind === SIGNER_KIND_WORKER_SECRET) {
+    return {
+      cloud_worker_supported: true,
+      local_daemon_supported: false,
+      external_approval_required: false,
+      production_mainnet_allowed: false,
+    }
+  }
+  if (kind === SIGNER_KIND_LOCAL_DAEMON) {
+    return {
+      cloud_worker_supported: false,
+      local_daemon_supported: true,
+      external_approval_required: false,
+      production_mainnet_allowed: false,
+    }
+  }
+  if (kind === SIGNER_KIND_WAAP) {
+    return {
+      cloud_worker_supported: false,
+      local_daemon_supported: true,
+      external_approval_required: true,
+      production_mainnet_allowed: false,
+    }
+  }
+  return {
+    cloud_worker_supported: false,
+    local_daemon_supported: false,
+    external_approval_required: true,
+    production_mainnet_allowed: false,
+  }
+}
+
+export function signerCapabilityMatrix(env = {}, options = {}) {
+  const selectedKind = signerKindFromEnv(env)
+  return KNOWN_SIGNER_KINDS.map((kind) => {
+    const scopedEnv = { ...env, SIGNER_KIND: kind }
+    const adapter = resolveSignerAdapter(scopedEnv, options)
+    return {
+      kind,
+      selected: kind === selectedKind,
+      runtime_scope: signerRuntimeScope(kind),
+      custody_model: signerCustodyModel(kind),
+      address: adapter.address,
+      expected_address: adapter.expected_address,
+      signer_matches_expected: Boolean(adapter.signer_matches_expected),
+      available: Boolean(adapter.available),
+      execution_enabled: signerExecutionEnabled(scopedEnv, adapter),
+      unavailable_code: adapter.available ? null : adapter.unavailable_code,
+      unavailable_detail: adapter.available ? null : adapter.unavailable_detail,
+      runner_configured: adapter.runner_configured === undefined ? null : Boolean(adapter.runner_configured),
+      ...signerCapabilities(kind),
+    }
+  })
+}
+
+export function externalSignerPosture(env = {}, options = {}) {
+  const expectedAddress = options.expectedAgentAddress || DEPLOYMENT.agent.address
+  const selectedKind = signerKindFromEnv(env)
+  const scopedEnv = { ...env, SIGNER_KIND: SIGNER_KIND_WAAP }
+  const adapter = resolveSignerAdapter(scopedEnv, { ...options, expectedAgentAddress: expectedAddress })
+  const address = envString(env, 'RESCUEGRID_WAAP_SUI_ADDRESS', 'WAAP_SUI_ADDRESS')
+  const selected = selectedKind === SIGNER_KIND_WAAP
+  const available = selected ? Boolean(adapter.available) : false
+  return {
+    kind: SIGNER_KIND_WAAP,
+    selected,
+    status: available ? 'available' : selected ? 'unavailable' : 'not_selected',
+    available,
+    local_daemon_only: true,
+    cloud_worker_supported: false,
+    local_daemon_supported: true,
+    daemon_mode: env?.RESCUEGRID_DAEMON_MODE === 'true',
+    waap_cli_enabled: boolEnv(env, 'RESCUEGRID_WAAP_CLI_ENABLED', 'WAAP_CLI_ENABLED'),
+    submission_runner_configured: typeof options.waapCliRunner === 'function',
+    waap_chain: envString(env, 'RESCUEGRID_WAAP_CHAIN', 'WAAP_CHAIN', 'RESCUEGRID_CHAIN') || 'sui:testnet',
+    waap_rpc_configured: Boolean(envString(env, 'RESCUEGRID_WAAP_RPC', 'WAAP_RPC')),
+    permission_token_configured: Boolean(envString(env, 'RESCUEGRID_WAAP_PERMISSION_TOKEN', 'WAAP_PERMISSION_TOKEN')),
+    address: address || null,
+    expected_address: expectedAddress,
+    signer_matches_expected: Boolean(address && address === expectedAddress),
+    unavailable_code: adapter.available ? null : adapter.unavailable_code,
+    unavailable_detail: adapter.available ? null : adapter.unavailable_detail,
+    approval_state: available ? 'ready_for_approval' : selected ? 'unavailable' : 'not_selected',
+    secrets_returned: false,
   }
 }

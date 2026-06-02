@@ -1,11 +1,14 @@
 import { configuredChainDataProviderKind, configuredGraphqlEndpoint } from './chain-data-provider.js'
 import { getMonitoringProviderStatus } from './monitoring-provider.js'
 import { DEPLOYMENT } from './sui-tx.js'
-import { signerAdapterStatus } from './signer-adapters.js'
+import { externalSignerPosture, signerAdapterStatus, signerCapabilityMatrix } from './signer-adapters.js'
 
 export function getRuntimeStatus(env = {}, options = {}) {
   const signer = signerAdapterStatus(env, options)
+  const signerCapabilities = signerCapabilityMatrix(env, options)
+  const externalSigner = externalSignerPosture(env, options)
   const chainDataProviderKind = configuredChainDataProviderKind(env)
+  const daemonMode = env.RESCUEGRID_DAEMON_MODE === 'true'
   return {
     status: 'ok',
     chain: 'sui:testnet',
@@ -15,6 +18,8 @@ export function getRuntimeStatus(env = {}, options = {}) {
       passport_id: DEPLOYMENT.agent.passport_id,
     },
     signer,
+    signer_capabilities: signerCapabilities,
+    external_signer: externalSigner,
     execution: {
       configured: env.EXECUTION_ENABLED === 'true',
       enabled: signer.execution_enabled,
@@ -28,9 +33,11 @@ export function getRuntimeStatus(env = {}, options = {}) {
     },
     monitoring_provider: getMonitoringProviderStatus(env),
     runtime: {
-      cloud_worker: true,
+      cloud_worker: !daemonMode,
+      local_daemon: daemonMode,
       local_daemon_supported: true,
       mainnet_requires_external_signer: true,
+      external_signer_supported: true,
     },
   }
 }

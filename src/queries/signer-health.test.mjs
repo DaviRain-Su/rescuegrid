@@ -61,6 +61,10 @@ const waapCloud = {
     local_daemon_supported: true,
     mainnet_requires_external_signer: true,
   },
+  external_signer: {
+    kind: 'waap',
+    submission_runner_configured: false,
+  },
 }
 
 const waapCloudRows = signerHealthRows(waapCloud, fallback)
@@ -68,6 +72,7 @@ const waapExternalCloud = waapCloudRows.find((row) => row.id === 'external-waap-
 assert.equal(waapExternalCloud.status, 'offline')
 assert.equal(waapExternalCloud.warning, true)
 assert.match(waapExternalCloud.detail, /Cloud Worker cannot shell out to waap-cli/)
+assert.match(waapExternalCloud.detail, /submission runner missing/)
 assert.equal(signerWarningRows(waapCloud, fallback).length, 2)
 
 const waapDaemon = {
@@ -92,6 +97,7 @@ const waapDaemon = {
   external_signer: {
     kind: 'waap',
     permission_token_configured: true,
+    submission_runner_configured: true,
   },
 }
 
@@ -100,6 +106,7 @@ const waapExternalDaemon = waapDaemonRows.find((row) => row.id === 'external-waa
 assert.equal(waapDaemonRows.find((row) => row.id === 'runtime-signer').status, 'ok')
 assert.equal(waapExternalDaemon.status, 'ok')
 assert.match(waapExternalDaemon.detail, /permission token configured/)
+assert.match(waapExternalDaemon.detail, /submission runner configured/)
 assert.doesNotMatch(waapExternalDaemon.detail, /AGENT_KEY|WAAP_PERMISSION_TOKEN|tok_live_[A-Za-z0-9_-]+/i)
 assert.equal(signerWarningRows(waapDaemon, fallback).length, 0)
 

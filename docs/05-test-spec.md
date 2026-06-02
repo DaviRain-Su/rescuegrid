@@ -222,15 +222,17 @@ Happy path:
 - 默认返回 `monitoring_provider.kind=timer-polling`、`provider_status=active`、`tick_driver=durable-object-alarm` 和 `execution_hot_path_unchanged=true`。
 - `MONITORING_PROVIDER=grpc` 即使配置 `SUI_GRPC_URL` / `SUI_GRPC_ENDPOINT`，也必须返回 `monitoring_provider.provider_status=unavailable`、`blocker_code=GRPC_MONITORING_NOT_IMPLEMENTED`、`grpc_configured=true` 和 `execution_hot_path_unchanged=true`。
 - `known_signer_kinds` 包含 `worker-secret`、`local-daemon`、`waap`、`hardware` 和 `remote-signer`。
+- `signer_capabilities` 必须覆盖所有 known signer kinds，返回 selected、runtime_scope、custody_model、support flags、available / execution_enabled、runner posture 和 blocker code；不得因为某个 signer kind 出现在 capability matrix 里就暗示它可执行。
+- `external_signer.kind=waap` 必须返回 selected、status、local_daemon_only、waap_cli_enabled、submission_runner_configured、permission_token_configured、address / expected_address 和 public blocker code。
 
 Security / boundary:
 
 - 响应不得包含 `AGENT_KEY`、owner key、WaaP session file、permission token 或任何 secret value。
 - 响应不得包含 gRPC endpoint URL 或 endpoint token。
 - `SIGNER_KIND=waap` 默认必须返回 `UNSUPPORTED_SIGNER`，不能因为文档支持 Sui 就自动打开执行。
-- `SIGNER_KIND=waap` 只有在 `RESCUEGRID_DAEMON_MODE=true`、`RESCUEGRID_WAAP_CLI_ENABLED=true`、`RESCUEGRID_WAAP_SUI_ADDRESS=<deployment agent>` 同时满足时才可报告 `available=true`。
+- `SIGNER_KIND=waap` 只有在 `RESCUEGRID_DAEMON_MODE=true`、`RESCUEGRID_WAAP_CLI_ENABLED=true`、`RESCUEGRID_WAAP_SUI_ADDRESS=<deployment agent>` 且 runtime 注入了本地 `waap-cli` submission runner 时才可报告 `available=true`。
 - `SIGNER_KIND=waap` 在 Cloud Worker runtime 中必须保持 unavailable；`waap-cli` 只能通过 local daemon 注入 runner 调用。
-- `SIGNER_KIND=waap` 地址缺失必须返回 `WAAP_ADDRESS_MISSING`；地址不匹配必须返回 `SIGNER_ADDRESS_MISMATCH`。
+- `SIGNER_KIND=waap` 地址缺失必须返回 `WAAP_ADDRESS_MISSING`；地址不匹配必须返回 `SIGNER_ADDRESS_MISMATCH`；地址匹配但未注入 runner 必须返回 `WAAP_RUNNER_MISSING`。
 - WaaP submit 测试必须证明 adapter 先把 RescueGrid PTB serialize 成 `tx_json`，把 sender 固定为部署 agent address，再交给 runner；不得调用 Sui SDK keypair signer。
 - WaaP submit 测试必须覆盖单 JSON 与 newline-delimited JSON 输出；多行输出优先使用 `event=result`，并能从 `digest`、`txDigest`、`transactionDigest`、`txHash` 或 `hash` 中提取 Sui digest。
 - WaaP submit 测试必须把 `approval_pending` / `approval_denied` / `policy_blocked` / timeout 映射为 `WAAP_APPROVAL_PENDING`、`WAAP_APPROVAL_DENIED`、`WAAP_POLICY_BLOCKED`、`WAAP_TIMEOUT`，不能把等待审批或策略拒绝误报为成功。
@@ -621,7 +623,8 @@ Passing criteria:
 These tests are not MVP gates, but they define the composability target.
 
 - `rescuegrid daemon run` loads local agent config and starts periodic ticks.
-- `rescuegrid daemon status --json` shows agent address, chain, registered adapters, watched policies and best-effort execution readiness using the same funding/signer blocker model as `/api/execution/readiness`.
+- `rescuegrid daemon status --json` shows agent address, chain, registered adapters, watched policies, public external signer posture and best-effort execution readiness using the same funding/signer blocker model as `/api/execution/readiness`.
+- WaaP daemon readiness must pass only when `--waap-cli-enabled`, matching `--waap-sui-address`, the local submission runner and funding thresholds are all ready; a matching address without runner stays blocked as `WAAP_RUNNER_MISSING`.
 - `rescuegrid daemon policies list --owner <0x...> --json` reads the owner's chain-authoritative policies through the same ChainDataProvider boundary, returns wrapper / mandate / status / budget fields, and marks whether each wrapper is in the daemon watched set.
 - `rescuegrid daemon watch list|add|remove|sync` persists the local watched set in daemon config; `watch sync --owner <0x...>` adds only active policies whose Mandate agent matches the deployed RescueGrid agent, skipping revoked/expired or mismatched-agent wrappers.
 - daemon uses the same Runtime Core and ExecutorAdapter registry as Cloud Agent.

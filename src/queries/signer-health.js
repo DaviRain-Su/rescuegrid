@@ -57,6 +57,12 @@ function tokenPostureLabel(value) {
   return null
 }
 
+function runnerPostureLabel(value) {
+  if (value === true) return 'submission runner configured'
+  if (value === false) return 'submission runner missing'
+  return null
+}
+
 function externalSignerRow(runtimeStatus, signer, execution) {
   const runtime = runtimeStatus?.runtime || {}
   const external = runtimeStatus?.external_signer || runtime.external_signer || null
@@ -86,6 +92,7 @@ function externalSignerRow(runtimeStatus, signer, execution) {
     !isWaap && runtime.local_daemon_supported ? 'local daemon can attach an external signer later' : null,
     runtime.mainnet_requires_external_signer ? 'mainnet requires external signer' : null,
     tokenPostureLabel(tokenConfigured),
+    runnerPostureLabel(external?.submission_runner_configured),
     isExternalSelected ? signer?.unavailable_detail : null,
   ])
 

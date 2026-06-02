@@ -13,7 +13,9 @@ import { runTick } from '../src/tick.js'
 import { runtimeCoreStatus } from '../src/runtime-core.js'
 import { requireChainDataProvider } from '../src/chain-data-provider.js'
 import { buildExecutionReadiness } from '../src/execution-readiness.js'
+import { getRuntimeStatus } from '../src/runtime-status.js'
 import {
+  externalSignerPosture,
   KNOWN_SIGNER_KINDS,
   SIGNER_KIND_WAAP,
   SIGNER_KIND_WORKER_SECRET,
@@ -208,6 +210,7 @@ function daemonConfigFileShape(config, watchedPolicies = config.watched_policies
 
 export function daemonStatus(config, { executionReadiness = null } = {}) {
   const runtimeCore = runtimeCoreStatus()
+  const externalSigner = externalSignerPosture(runtimeEnv(config), { waapCliRunner: runWaapCliSendTx })
   const status = {
     status: 'ok',
     chain: config.chain,
@@ -223,6 +226,7 @@ export function daemonStatus(config, { executionReadiness = null } = {}) {
     tick_interval_ms: config.tick_interval_ms,
     log_path: config.log_path,
     external_signer: {
+      ...externalSigner,
       waap_cli_enabled: Boolean(config.waap_cli_enabled),
       waap_sui_address: config.waap_sui_address || null,
       waap_chain: config.waap_chain || config.chain,
@@ -252,9 +256,11 @@ function runtimeEnv(config) {
 }
 
 export async function daemonExecutionReadiness(config, { chainData = null } = {}) {
+  const env = runtimeEnv(config)
   return buildExecutionReadiness({
-    env: runtimeEnv(config),
-    chainData: chainData || requireChainDataProvider(runtimeEnv(config)),
+    env,
+    chainData: chainData || requireChainDataProvider(env),
+    runtimeStatus: getRuntimeStatus(env, { waapCliRunner: runWaapCliSendTx }),
   })
 }
 
