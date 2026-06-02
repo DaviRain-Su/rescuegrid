@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict'
 import { parseIntent } from '../../core/strategy.js'
+import { DEPLOYMENT } from '../src/sui-tx.js'
 
 const OWNER = '0x1111111111111111111111111111111111111111111111111111111111111111'
 const TEXT = 'When SUI drops more than 8%, deploy a 500 USDC rescue grid'
@@ -10,6 +11,13 @@ const NOW = Date.UTC(2026, 5, 2, 15, 30, 0)
   assert.equal(parsed.status, 'ok')
   assert.equal(parsed.strategy.executor_kind, 'deepbook')
   assert.ok(parsed.ptb_preview.some((line) => line.includes('deepbook executor adapter')))
+}
+
+{
+  const parsed = parseIntent('When DEEP drops more than 8%, deploy a 500 USDC rescue grid', OWNER, {}, NOW)
+  assert.equal(parsed.status, 'ok')
+  assert.equal(parsed.strategy.pool_id, DEPLOYMENT.deepbook.pools.DEEP_DBUSDC.pool_id)
+  assert.equal(parsed.strategy.executor_kind, 'deepbook')
 }
 
 {

@@ -6,7 +6,7 @@ import { readWrapper, readMandate, readBalanceManagerBalance, readClockTimestamp
 import { DEPLOYMENT } from './sui-tx.js'
 import { keypairFromWorkerEnv } from './secret-safe-signer.js'
 import { buildFundingReadiness } from './read-surfaces.js'
-import { EXECUTOR_KIND_DEEPBOOK, getExecutorAdapter, unsupportedExecutor } from './executor-adapters.js'
+import { EXECUTOR_KIND_DEEPBOOK, getExecutorAdapter, unsupportedExecutor, unsupportedExecutorTarget } from './executor-adapters.js'
 
 export const EXECUTION_BLOCKER_LABELS = {
   EXECUTION_DISABLED: 'Execution disabled',
@@ -26,6 +26,7 @@ export const EXECUTION_BLOCKER_LABELS = {
   INVALID_AUTHORIZATION: 'Invalid authorization',
   FORCE_TRIGGER_DISABLED: 'Force trigger disabled',
   UNSUPPORTED_EXECUTOR: 'Unsupported executor',
+  UNSUPPORTED_EXECUTOR_TARGET: 'Unsupported executor target',
 }
 
 function blockerLabel(code) {
@@ -182,12 +183,38 @@ export async function validateExecutionPlan(client, {
   proposed,
   nowMs = undefined,
   expectedAgentId,
-  expectedPoolId,
+  executorKind = EXECUTOR_KIND_DEEPBOOK,
 }) {
+  const adapter = getExecutorAdapter(executorKind)
+  if (!adapter) {
+    return {
+      ...unsupportedExecutor(executorKind),
+      wrapper_id: wrapperId,
+      mandate_id: mandateId ?? null,
+      construction_path: 'Worker/API non-executing plan validation',
+      submitted: false,
+      execution_claimed: false,
+    }
+  }
+
   const wrapper = await readWrapper(client, wrapperId)
   if (!wrapper) return { action: 'error', code: 'WRAPPER_NOT_FOUND', detail: 'Wrapper not found on-chain.', execution_claimed: false }
+  const plan = adapter.planExecution({ wrapper, proposed })
+  if (!plan.target_supported) {
+    return {
+      ...unsupportedExecutorTarget(executorKind, wrapper.pool_id),
+      wrapper_id: wrapperId,
+      mandate_id: mandateId ?? wrapper.mandate_id,
+      construction_path: 'Worker/API non-executing plan validation',
+      submitted: false,
+      execution_claimed: false,
+      execution_plan: plan,
+    }
+  }
+
   const clockMs = nowMs ?? await readClockTimestampMs(client)
   if (!Number.isFinite(clockMs)) return { action: 'error', code: 'CLOCK_UNAVAILABLE', detail: 'Sui Clock timestamp was not readable.', execution_claimed: false }
+  const expectedPoolId = adapter.targetId(wrapper)
 
   if (mandateId && mandateId !== wrapper.mandate_id) {
     const mandate = { id: mandateId, revoked: false, expires_at_ms: String(clockMs + 1), agent: wrapper.agent }
@@ -210,6 +237,8 @@ export async function validateExecutionPlan(client, {
       chain_time_source: 'sui_clock_object_0x6',
       submitted: false,
       execution_claimed: false,
+      executor_kind: executorKind,
+      execution_plan: plan,
     }
   }
 
@@ -236,6 +265,8 @@ export async function validateExecutionPlan(client, {
     chain_time_source: 'sui_clock_object_0x6',
     submitted: false,
     execution_claimed: false,
+    executor_kind: executorKind,
+    execution_plan: plan,
   }
 }
 
@@ -319,6 +350,7 @@ export async function runTick(env, p) {
 
   const expectedPoolId = adapter.targetId(wrapper)
   const plan = adapter.planExecution({ wrapper, mandate, proposed, nowMs, market: p.market })
+  if (!plan.target_supported) return { ...unsupportedExecutorTarget(executorKind, wrapper.pool_id), wrapper_id: p.wrapperId, mandate_id: wrapper.mandate_id }
   const decision = decideTick({ wrapper, mandate, triggerMet, proposed, nowMs, executionEnabled, expectedAgentId: DEPLOYMENT.agent.address, expectedPoolId })
   if (decision.action !== 'execute') return { ...decision, wrapper_id: p.wrapperId, mandate_id: wrapper.mandate_id }
 

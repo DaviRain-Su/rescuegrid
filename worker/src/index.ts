@@ -22,7 +22,7 @@ import {
 } from './runtime-activity.js'
 import { AGENT_ADDRESS } from './config.js'
 import { DEFAULT_TICK_INTERVAL_SECONDS } from './config.js'
-import { getExecutorAdapter, unsupportedExecutor } from './executor-adapters.js'
+import { getExecutorAdapter, unsupportedExecutor, unsupportedExecutorTarget } from './executor-adapters.js'
 import type { ParseDefaults, Strategy } from './types.js'
 
 export interface Env {
@@ -123,6 +123,10 @@ app.post('/api/policies', async (c) => {
   if (strategy.agent !== AGENT_ADDRESS) return c.json({ status: 'error', code: 'AGENT_MISMATCH', message: 'strategy.agent != deployment agent.' }, 422)
   if (!getExecutorAdapter(strategy.executor_kind)) {
     return c.json({ status: 'error', code: 'UNSUPPORTED_EXECUTOR', message: unsupportedExecutor(strategy.executor_kind).detail }, 422)
+  }
+  const adapter = getExecutorAdapter(strategy.executor_kind)
+  if (adapter && !adapter.supportsTarget(strategy.pool_id)) {
+    return c.json({ status: 'error', code: 'UNSUPPORTED_EXECUTOR_TARGET', message: unsupportedExecutorTarget(strategy.executor_kind, strategy.pool_id).detail }, 422)
   }
 
   // recompute hash from the canonical strategy (no strategy_hash field inside)
@@ -360,6 +364,7 @@ app.post('/api/execution/validate-plan', async (c) => {
   let body: {
     wrapper_id?: string
     mandate_id?: string
+    executor_kind?: string
     proposed?: {
       pool_id?: string
       amount?: string | number
@@ -404,7 +409,7 @@ app.post('/api/execution/validate-plan', async (c) => {
       agent_id: proposed.agent_id,
     },
     expectedAgentId: DEPLOYMENT.agent.address,
-    expectedPoolId: DEPLOYMENT.deepbook.pools.SUI_DBUSDC.pool_id,
+    executorKind: body.executor_kind || 'deepbook',
   })
   return c.json({ status: 'ok', ...result })
 })

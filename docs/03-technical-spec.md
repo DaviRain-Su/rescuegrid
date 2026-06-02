@@ -54,6 +54,7 @@ type ExecutorKind = 'deepbook';
 type ExecutionPlan = {
   executor_kind: ExecutorKind;
   target_id: string;
+  target_supported: boolean;
   action_type: number;
   quote_amount: string;
   estimated_slippage_bps: number;
@@ -62,6 +63,7 @@ type ExecutionPlan = {
 
 interface ExecutorAdapter {
   kind: ExecutorKind;
+  supportsTarget(target_id: string): boolean;
   readMarket(policy: PolicySnapshot): Promise<MarketSnapshot>;
   planExecution(policy: PolicySnapshot, strategy: StructuredStrategy, market: MarketSnapshot): Promise<ExecutionPlan>;
   buildPtb(plan: ExecutionPlan, auth: MoveGateAuthContext): Promise<Transaction>;
@@ -73,6 +75,7 @@ Rules:
 
 - MVP registers only `deepbook`.
 - `/api/intents/parse` must reject unknown `executor_kind` with `UNSUPPORTED_EXECUTOR`.
+- `/api/policies` and `/api/execution/validate-plan` must reject or block any target that is not supported by the selected adapter with `UNSUPPORTED_EXECUTOR_TARGET` before producing a signable transaction.
 - The adapter must return an `ExecutionPlan` before any PTB is signed.
 - Guardian checks run against the `ExecutionPlan`; an adapter cannot submit directly.
 - `quote_amount`, `estimated_slippage_bps`, `target_id`, and `action_type` must match the values encoded in the PTB.

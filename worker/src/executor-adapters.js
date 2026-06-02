@@ -18,12 +18,30 @@ export function unsupportedExecutor(kind) {
   }
 }
 
+export function unsupportedExecutorTarget(kind, targetId) {
+  return {
+    action: 'blocked',
+    code: 'UNSUPPORTED_EXECUTOR_TARGET',
+    blocker_code: 'UNSUPPORTED_EXECUTOR_TARGET',
+    blocker_label: 'Unsupported executor target',
+    blocker_codes: ['UNSUPPORTED_EXECUTOR_TARGET'],
+    blocker_labels: ['Unsupported executor target'],
+    readiness_state: 'blocked',
+    execution_claimed: false,
+    detail: `Executor adapter ${kind || 'unknown'} does not support target ${targetId || 'unknown'}.`,
+  }
+}
+
 function findDeepbookPool(poolId) {
   return Object.values(DEPLOYMENT.deepbook.pools).find((pool) => pool.pool_id === poolId) || null
 }
 
 export const deepbookAdapter = {
   kind: EXECUTOR_KIND_DEEPBOOK,
+
+  supportsTarget(targetId) {
+    return !!findDeepbookPool(targetId)
+  },
 
   targetId(wrapper) {
     return wrapper.pool_id
@@ -34,6 +52,7 @@ export const deepbookAdapter = {
     return {
       executor_kind: EXECUTOR_KIND_DEEPBOOK,
       target_id: wrapper.pool_id,
+      target_supported: !!pool,
       pool_id: wrapper.pool_id,
       pool,
       action_type: DEPLOYMENT.rescuegrid.action_deepbook_rescue,
