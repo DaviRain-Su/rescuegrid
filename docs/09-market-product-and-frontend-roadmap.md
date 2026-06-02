@@ -265,7 +265,7 @@ Required row details:
 - budget impact;
 - retry/failure state.
 
-Implementation status: `src/components/Views.jsx` now treats activity as an audit ledger instead of a simple feed. Each row is normalized with inferred strategy, Sui venue, status, Guardian block state, human approval state and tx/order identifiers, then filtered by strategy, venue, status and tx/order/policy search on top of the existing event/outcome chips. Expanded rows show reason, input snapshot, execution plan, Guardian result, tx digest, venue order id, PnL impact, budget impact and retry/failure state.
+Implementation status: `src/components/Views.jsx` now treats activity as an audit ledger instead of a simple feed. Each row is normalized with inferred strategy, Sui venue, status, Guardian block state, signer block state, human approval state and tx/order identifiers, then filtered by strategy, venue, status, signer block and tx/order/policy search on top of the existing event/outcome chips. Expanded rows show reason, input snapshot, execution plan, Guardian result, signer kind, approval state, signer blocker codes, tx digest, venue order id, PnL impact, budget impact and retry/failure state.
 
 ### H. Sui Accounts / Integrations
 
@@ -359,7 +359,7 @@ Reasoning:
 - ChainDataProvider and GraphQL migration.
 - Seal/Walrus private strategy records.
 - SignerAdapter / local daemon / WaaP-style external signer.
-- Current signer status transparency is implemented in Profile and Risk Center via `/api/runtime/status`; the local-daemon WaaP CLI boundary is now test-covered and visible in the UI, and runtime activity preserves signer approval blockers (`signer_kind`, `approval_state`, `WAAP_APPROVAL_*`). Live WaaP session approval/privilege UX and production execution remain future work.
+- Current signer status transparency is implemented in Profile and Risk Center via `/api/runtime/status`; the local-daemon WaaP CLI boundary is now test-covered and visible in the UI, and runtime activity preserves signer approval blockers (`signer_kind`, `approval_state`, `WAAP_APPROVAL_*`). Agent Activity can filter signer blocks and exposes signer kind, approval state and signer blocker codes in expanded rows. Live WaaP session approval/privilege UX and production execution remain future work.
 - Cross-venue inventory rebalancing.
 - Strategy marketplace with copy/follow and vault-like UX.
 

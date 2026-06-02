@@ -65,6 +65,27 @@ function evidenceRowsFor(a) {
   }))
 }
 
+function signerBlockerCodesFor(a) {
+  return (a.blocker_codes || [])
+    .map((code) => String(code))
+    .filter((code) => /^WAAP_|^SIGNER_|^INVALID_SIGNER_SECRET$|^UNSUPPORTED_SIGNER$/.test(code))
+}
+
+function signerEvidenceRowsFor(a) {
+  const rows = []
+  const signerCodes = signerBlockerCodesFor(a)
+  if (a.signer_kind) {
+    rows.push({ label: 'Signer', value: a.signer_kind, color: 'var(--sui)' })
+  }
+  if (a.approval_state) {
+    rows.push({ label: 'Approval state', value: a.approval_state, color: 'var(--warn)' })
+  }
+  if (signerCodes.length > 0) {
+    rows.push({ label: 'Signer code', value: signerCodes.join(', '), color: 'var(--danger)' })
+  }
+  return rows
+}
+
 function evidenceValue(value) {
   return value == null || value === '' ? '-' : String(value)
 }
@@ -168,6 +189,7 @@ function makeLedgerRow(a, i, lookup) {
   const approval = approvalOfActivity(a)
   const ids = txOrOrderId(a)
   const hasGuardianBlock = outcome === 'blocked' || evidenceRowsFor(a).length > 0
+  const hasSignerBlock = signerEvidenceRowsFor(a).length > 0
   return {
     activity: a,
     key: a.id || a.dedupe_key || ids.txId || `${a.t}-${a.title}-${i}`,
@@ -177,6 +199,7 @@ function makeLedgerRow(a, i, lookup) {
     venue,
     approval,
     hasGuardianBlock,
+    hasSignerBlock,
     plannedExecuted: outcome === 'executed' ? 'executed' : outcome === 'blocked' ? 'blocked' : 'planned',
     ...ids,
   }
@@ -258,6 +281,7 @@ export function ActivityView({ activity, policies = [], onTx, live = false, load
       || (statusFilter === 'approval' && row.approval === 'required')
       || (statusFilter === 'tx' && Boolean(row.txId || row.orderId))
       || (statusFilter === 'guardian' && row.hasGuardianBlock)
+      || (statusFilter === 'signer' && row.hasSignerBlock)
     const idOk = !normalizedIdQuery || [row.txId, row.orderId, a.id, a.dedupe_key, a.wrapper_id, a.mandate_id, a.policy, a.title]
       .filter(Boolean)
       .some((v) => String(v).toLowerCase().includes(normalizedIdQuery))
@@ -338,6 +362,7 @@ export function ActivityView({ activity, policies = [], onTx, live = false, load
             <option value="all">All statuses</option>
             {statusOptions.map(([id, label]) => <option key={id} value={id}>{label}</option>)}
             <option value="guardian">Guardian block</option>
+            <option value="signer">Signer block</option>
             <option value="approval">Human approval</option>
             <option value="tx">Has tx/order id</option>
           </FilterSelect>
@@ -371,6 +396,7 @@ export function ActivityView({ activity, policies = [], onTx, live = false, load
               const ex = expand(a)
               const oc = OUTCOME[ex.oc]
               const evidenceRows = ex.oc === 'blocked' ? evidenceRowsFor(a) : []
+              const signerRows = signerEvidenceRowsFor(a)
               return (
                 <div key={key} style={{ borderTop: i ? '1px solid var(--border)' : 'none' }}>
                   <div onClick={() => setOpen(isOpen ? null : key)} style={{ display: 'flex', gap: 14, padding: '15px 18px', alignItems: 'flex-start', cursor: 'pointer', background: isOpen ? 'var(--glass)' : 'transparent', transition: 'background .12s' }}>
@@ -383,6 +409,7 @@ export function ActivityView({ activity, policies = [], onTx, live = false, load
                         <span className="badge" style={{ fontSize: 9, background: `color-mix(in srgb, ${oc.c} 14%, transparent)`, color: oc.c }}><span className="dot"></span>{oc.label}</span>
                         <span className="badge badge-neutral" style={{ fontSize: 9 }}>{row.strategy.label}</span>
                         <span className="badge badge-sui" style={{ fontSize: 9 }}>{row.venue}</span>
+                        {signerRows.length > 0 && <span className="badge badge-neutral" style={{ fontSize: 9 }}><Icon name="wallet" size={10} />{a.signer_kind || 'signer'}</span>}
                         {row.approval === 'required' && <span className="badge badge-warn" style={{ fontSize: 9 }}><Icon name="eye" size={10} />approval</span>}
                         {a.mode && <ModeBadge mode={a.mode} />}
                       </div>
@@ -435,6 +462,19 @@ export function ActivityView({ activity, policies = [], onTx, live = false, load
                           </div>
                         </div>
                       )}
+                      {signerRows.length > 0 && (
+                        <div style={{ gridColumn: '1 / -1', padding: '12px 14px', borderRadius: 'var(--r-sm)', background: 'var(--warn-dim)', border: '1px solid rgba(255,194,75,0.28)' }}>
+                          <span className="eyebrow" style={{ fontSize: 8.5, display: 'block', marginBottom: 8 }}>Signer evidence</span>
+                          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, minmax(120px, 1fr))', gap: 8 }}>
+                            {signerRows.map((row) => (
+                              <div key={row.label} style={{ minWidth: 0, padding: '9px 10px', borderRadius: 7, background: 'var(--bg-0)', border: '1px solid var(--border)' }}>
+                                <div className="eyebrow" style={{ fontSize: 7.5 }}>{row.label}</div>
+                                <div className="mono" title={String(row.value)} style={{ fontSize: 10.8, color: row.color, fontWeight: 700, marginTop: 4, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{row.value}</div>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
                       <div>
                         <span className="eyebrow" style={{ fontSize: 8.5, display: 'block', marginBottom: 8 }}>Input snapshot</span>
                         <div style={{ display: 'flex', flexDirection: 'column', gap: 7 }}>
@@ -462,7 +502,8 @@ export function ActivityView({ activity, policies = [], onTx, live = false, load
                           ['Tx digest', row.txId ? compactId(row.txId) : 'none', row.txId ? 'var(--sui)' : 'var(--t2)'],
                           ['Venue order id', row.orderId ? compactId(row.orderId) : 'none', row.orderId ? 'var(--accent)' : 'var(--t2)'],
                           ['Ledger status', row.status.label, oc.c],
-                          ['Human approval', row.approval === 'required' ? 'required' : 'not required', row.approval === 'required' ? 'var(--warn)' : 'var(--t2)'],
+                          ['Signer', a.signer_kind || 'none', a.signer_kind ? 'var(--sui)' : 'var(--t2)'],
+                          ['Human approval', a.approval_state || (row.approval === 'required' ? 'required' : 'not required'), row.approval === 'required' ? 'var(--warn)' : 'var(--t2)'],
                         ].map(([k, v, c]) => (
                           <div key={k} style={{ padding: '10px 12px', borderRadius: 'var(--r-sm)', background: 'var(--glass)', border: '1px solid var(--border)', minWidth: 0 }}>
                             <div className="eyebrow" style={{ fontSize: 8 }}>{k}</div>
