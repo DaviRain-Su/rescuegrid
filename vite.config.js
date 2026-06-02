@@ -1,10 +1,11 @@
 import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
+import tailwindcss from '@tailwindcss/vite'
 
 // RescueGrid dashboard — single-page React app
 export default defineConfig({
   base: process.env.VITE_BASE_URL || '/',
-  plugins: [react()],
+  plugins: [react(), tailwindcss()],
   server: { port: 5173 },
   build: {
     rollupOptions: {
