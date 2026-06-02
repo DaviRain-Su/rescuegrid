@@ -74,6 +74,11 @@ function readJsonFile(path) {
   return JSON.parse(readFileSync(path, 'utf8'))
 }
 
+function writeJsonFile(path, value) {
+  mkdirSync(dirname(path), { recursive: true })
+  writeFileSync(path, `${JSON.stringify(value, null, 2)}\n`)
+}
+
 function readLocalAgentKey() {
   if (process.env.AGENT_KEY) return process.env.AGENT_KEY
   try {
@@ -110,6 +115,21 @@ export function resolveDaemonConfig({ flags = new Map(), env = process.env } = {
 
 function validSuiAddress(value) {
   return typeof value === 'string' && /^0x[0-9a-fA-F]+$/.test(value)
+}
+
+function validateWrapperIds(wrapperIds) {
+  if (!wrapperIds.length) {
+    throw Object.assign(new Error('watch command requires --wrapper-id <0x...> or --wrapper-ids <0x...,...>.'), {
+      code: 'NO_WRAPPER_IDS',
+    })
+  }
+  for (const wrapperId of wrapperIds) {
+    if (!validSuiAddress(wrapperId)) {
+      throw Object.assign(new Error(`Invalid wrapper id: ${wrapperId}`), {
+        code: 'BAD_WRAPPER_ID',
+      })
+    }
+  }
 }
 
 export function validateDaemonConfig(config, { requirePolicies = false } = {}) {
@@ -150,6 +170,20 @@ export function validateDaemonConfig(config, { requirePolicies = false } = {}) {
     }
   }
   return { ok: true }
+}
+
+function daemonConfigFileShape(config, watchedPolicies = config.watched_policies) {
+  return {
+    chain: config.chain,
+    owner_address: config.owner_address || undefined,
+    agent_address: config.agent_address,
+    signer_kind: config.signer_kind,
+    execution_enabled: Boolean(config.execution_enabled),
+    demo_mode: Boolean(config.demo_mode),
+    tick_interval_ms: config.tick_interval_ms,
+    watched_policies: [...new Set(watchedPolicies)],
+    log_path: config.log_path,
+  }
 }
 
 export function daemonStatus(config, { executionReadiness = null } = {}) {
@@ -235,6 +269,66 @@ export async function daemonPolicyList(config, { chainData = null } = {}) {
     watched_count: rows.filter((row) => row.watched).length,
     unsupported_agent_count: rows.filter((row) => row.agent && !row.agent_matches).length,
     policies: rows,
+  }
+}
+
+export function daemonWatchList(config) {
+  return {
+    status: 'ok',
+    config_path: config.config_path,
+    count: config.watched_policies.length,
+    watched_policies: config.watched_policies,
+  }
+}
+
+export function daemonWatchAdd(config, wrapperIds) {
+  validateWrapperIds(wrapperIds)
+  const before = new Set(config.watched_policies)
+  const watchedPolicies = [...new Set([...config.watched_policies, ...wrapperIds])]
+  writeJsonFile(config.config_path, daemonConfigFileShape(config, watchedPolicies))
+  return {
+    status: 'ok',
+    action: 'watch_add',
+    config_path: config.config_path,
+    added: wrapperIds.filter((wrapperId) => !before.has(wrapperId)),
+    count: watchedPolicies.length,
+    watched_policies: watchedPolicies,
+  }
+}
+
+export function daemonWatchRemove(config, wrapperIds) {
+  validateWrapperIds(wrapperIds)
+  const remove = new Set(wrapperIds)
+  const watchedPolicies = config.watched_policies.filter((wrapperId) => !remove.has(wrapperId))
+  writeJsonFile(config.config_path, daemonConfigFileShape(config, watchedPolicies))
+  return {
+    status: 'ok',
+    action: 'watch_remove',
+    config_path: config.config_path,
+    removed: config.watched_policies.filter((wrapperId) => remove.has(wrapperId)),
+    count: watchedPolicies.length,
+    watched_policies: watchedPolicies,
+  }
+}
+
+export async function daemonWatchSync(config, { chainData = null } = {}) {
+  const list = await daemonPolicyList(config, { chainData })
+  const activeMatching = list.policies
+    .filter((policy) => policy.status === 'active' && policy.agent_matches && policy.wrapper_id)
+    .map((policy) => policy.wrapper_id)
+  const watchedPolicies = [...new Set([...config.watched_policies, ...activeMatching])]
+  writeJsonFile(config.config_path, daemonConfigFileShape(config, watchedPolicies))
+  return {
+    status: 'ok',
+    action: 'watch_sync',
+    config_path: config.config_path,
+    owner: list.owner,
+    scanned_count: list.count,
+    synced_count: activeMatching.length,
+    added: activeMatching.filter((wrapperId) => !config.watched_policies.includes(wrapperId)),
+    skipped_count: list.count - activeMatching.length,
+    count: watchedPolicies.length,
+    watched_policies: watchedPolicies,
   }
 }
 
@@ -356,12 +450,24 @@ function printPolicyList(value, json = false) {
   })
 }
 
+function printWatchResult(value, json = false) {
+  if (json) {
+    console.log(JSON.stringify(value, null, 2))
+    return
+  }
+  console.log(`${value.action || 'watch_list'}: ${value.watched_policies.join(',') || '(none)'}`)
+}
+
 function help() {
   console.log(`RescueGrid local daemon.
 
 Usage:
   node worker/scripts/daemon.mjs status [--json]
   node worker/scripts/daemon.mjs policies list --owner <0x...> [--json]
+  node worker/scripts/daemon.mjs watch list [--json]
+  node worker/scripts/daemon.mjs watch add --wrapper-id <0x...>[,<0x...>] [--json]
+  node worker/scripts/daemon.mjs watch remove --wrapper-id <0x...>[,<0x...>] [--json]
+  node worker/scripts/daemon.mjs watch sync --owner <0x...> [--json]
   node worker/scripts/daemon.mjs tick --wrapper-id <0x...> [--demo-mode --force-trigger] [--execution-enabled]
   node worker/scripts/daemon.mjs run --wrapper-id <0x...>[,<0x...>] [--max-ticks <n>] [--interval-ms 60000]
   node worker/scripts/daemon.mjs logs [--limit 20] [--json]
@@ -407,6 +513,31 @@ export async function main(argv = process.argv.slice(2)) {
       return 0
     } catch (e) {
       print({ status: 'error', code: e?.code || 'POLICY_LIST_FAILED', message: e?.message || String(e) }, true)
+      return 1
+    }
+  }
+  if (command === 'watch' || command === 'watch list') {
+    printWatchResult(daemonWatchList(config), json)
+    return 0
+  }
+  if (command === 'watch add' || command === 'watch remove') {
+    try {
+      const wrapperIds = splitList(flags.get('--wrapper-id') || flags.get('--wrapper-ids'))
+      printWatchResult(command === 'watch add'
+        ? daemonWatchAdd(config, wrapperIds)
+        : daemonWatchRemove(config, wrapperIds), json)
+      return 0
+    } catch (e) {
+      print({ status: 'error', code: e?.code || 'WATCH_UPDATE_FAILED', message: e?.message || String(e) }, true)
+      return 1
+    }
+  }
+  if (command === 'watch sync') {
+    try {
+      printWatchResult(await daemonWatchSync(config), json)
+      return 0
+    } catch (e) {
+      print({ status: 'error', code: e?.code || 'WATCH_SYNC_FAILED', message: e?.message || String(e) }, true)
       return 1
     }
   }

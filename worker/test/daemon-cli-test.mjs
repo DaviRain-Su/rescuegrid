@@ -7,6 +7,10 @@ import {
   daemonExecutionReadiness,
   daemonPolicyList,
   daemonStatus,
+  daemonWatchAdd,
+  daemonWatchList,
+  daemonWatchRemove,
+  daemonWatchSync,
   parseDaemonArgs,
   readDaemonLogs,
   resolveDaemonConfig,
@@ -106,6 +110,64 @@ try {
   await assert.rejects(
     () => daemonPolicyList({ ...config, owner_address: '' }, { chainData: { async listPoliciesByOwner() { return [] } } }),
     /requires --owner/,
+  )
+
+  const watchList = daemonWatchList(config)
+  assert.equal(watchList.count, 1)
+  assert.deepEqual(watchList.watched_policies, ['0xabc123'])
+
+  const watchAdded = daemonWatchAdd(config, ['0xdef456', '0xabc123'])
+  assert.deepEqual(watchAdded.added, ['0xdef456'])
+  assert.deepEqual(watchAdded.watched_policies, ['0xabc123', '0xdef456'])
+  const addedConfig = resolveDaemonConfig({ flags: new Map([['--config', configPath]]), env: {} })
+  assert.deepEqual(addedConfig.watched_policies, ['0xabc123', '0xdef456'])
+
+  const watchRemoved = daemonWatchRemove(addedConfig, ['0xabc123'])
+  assert.deepEqual(watchRemoved.removed, ['0xabc123'])
+  assert.deepEqual(watchRemoved.watched_policies, ['0xdef456'])
+  const removedConfig = resolveDaemonConfig({ flags: new Map([['--config', configPath]]), env: {} })
+  assert.deepEqual(removedConfig.watched_policies, ['0xdef456'])
+
+  const watchSynced = await daemonWatchSync(removedConfig, {
+    chainData: {
+      async listPoliciesByOwner(owner) {
+        assert.equal(owner, DEPLOYMENT.agent.address)
+        return [
+          {
+            wrapper_id: '0xaaa111',
+            mandate_id: '0xmandate1',
+            owner,
+            agent: DEPLOYMENT.agent.address,
+            status: 'active',
+          },
+          {
+            wrapper_id: '0xbbb222',
+            mandate_id: '0xmandate2',
+            owner,
+            agent: DEPLOYMENT.agent.address,
+            status: 'revoked',
+          },
+          {
+            wrapper_id: '0xccc333',
+            mandate_id: '0xmandate3',
+            owner,
+            agent: '0x2222222222222222222222222222222222222222222222222222222222222222',
+            status: 'active',
+          },
+        ]
+      },
+    },
+  })
+  assert.deepEqual(watchSynced.added, ['0xaaa111'])
+  assert.equal(watchSynced.synced_count, 1)
+  assert.equal(watchSynced.skipped_count, 2)
+  assert.deepEqual(watchSynced.watched_policies, ['0xdef456', '0xaaa111'])
+  const syncedConfig = resolveDaemonConfig({ flags: new Map([['--config', configPath]]), env: {} })
+  assert.deepEqual(syncedConfig.watched_policies, ['0xdef456', '0xaaa111'])
+
+  assert.throws(
+    () => daemonWatchAdd(config, []),
+    /requires --wrapper-id/,
   )
 
   assert.deepEqual(validateDaemonConfig(config, { requirePolicies: true }), { ok: true })

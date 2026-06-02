@@ -145,7 +145,7 @@ Post-MVP adapter backlog：
 - 管理本地 agent key 或外部 signer 引用，私钥不进入 Cloud Worker。
 - 轮询或订阅 Policy 状态，执行与 Cloud Agent 相同的 Runtime Core。
 - 使用同一 ExecutorAdapter registry 构建 PTB。
-- 提供 `status`、`policies list`、`tick`、`logs`、`stop` 等操作入口；`status --json` 复用 `worker/src/execution-readiness.js`，与 Worker `/api/execution/readiness` 保持同一套 signer/funding blocker 语义；`policies list --owner <0x...>` 通过同一 ChainDataProvider 读取 owner 的链上 policy 列表，并标记哪些 wrapper 已在本地 watched set 中。
+- 提供 `status`、`policies list`、`watch list/add/remove/sync`、`tick`、`logs`、`stop` 等操作入口；`status --json` 复用 `worker/src/execution-readiness.js`，与 Worker `/api/execution/readiness` 保持同一套 signer/funding blocker 语义；`policies list --owner <0x...>` 通过同一 ChainDataProvider 读取 owner 的链上 policy 列表，并标记哪些 wrapper 已在本地 watched set 中；`watch sync --owner <0x...>` 只把 active 且 agent 匹配的 wrapper 持久化进本地 daemon config。
 
 CLI daemon 是 Local Mode 的必要载体。没有长期进程，本地 Agent 无法可靠执行 tick、错误恢复、重试退避和日志持久化。
 

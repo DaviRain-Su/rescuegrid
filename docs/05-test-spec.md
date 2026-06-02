@@ -452,6 +452,7 @@ These tests are not MVP gates, but they define the composability target.
 - `rescuegrid daemon run` loads local agent config and starts periodic ticks.
 - `rescuegrid daemon status --json` shows agent address, chain, registered adapters, watched policies and best-effort execution readiness using the same funding/signer blocker model as `/api/execution/readiness`.
 - `rescuegrid daemon policies list --owner <0x...> --json` reads the owner's chain-authoritative policies through the same ChainDataProvider boundary, returns wrapper / mandate / status / budget fields, and marks whether each wrapper is in the daemon watched set.
+- `rescuegrid daemon watch list|add|remove|sync` persists the local watched set in daemon config; `watch sync --owner <0x...>` adds only active policies whose Mandate agent matches the deployed RescueGrid agent, skipping revoked/expired or mismatched-agent wrappers.
 - daemon uses the same Runtime Core and ExecutorAdapter registry as Cloud Agent.
 - daemon refuses to run when the local agent address does not match the Policy Mandate agent.
 - daemon writes local activity logs and can recover after restart without double-submitting an already confirmed action.
