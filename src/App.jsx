@@ -8,6 +8,7 @@ import { useCurrentAccount, useCurrentWallet, useSuiClient, useSignAndExecuteTra
 import { RG } from './data.js'
 import deployment from '../core/deployment.js'
 import {
+  ENOKI_CONFIGURED,
   WORKER_CONFIGURED,
   parseIntent,
   buildPolicyTx,
@@ -622,7 +623,7 @@ export default function App({ onExit }) {
   if (!authed) return (
     <>
       <div className="app-bg"></div>
-      <ZkLogin onAuth={handleAuth} onBackToLanding={onExit} workerConfigured={WORKER_CONFIGURED} />
+      <ZkLogin onAuth={handleAuth} onBackToLanding={onExit} workerConfigured={WORKER_CONFIGURED} enokiConfigured={ENOKI_CONFIGURED} />
     </>
   )
 

@@ -505,10 +505,12 @@ MVP desktop viewport:
 
 - Dashboard loads without console errors.
 - Login shows owner address.
+- Sign-in lists standard Sui wallets and, when Enoki is registered, the Google zkLogin wallet; Enoki wallets must not be filtered out by the standard-wallet list.
 - Intent input accepts the sample strategy.
 - If Worker intent parsing returns an error or the Worker parse request fails, the strategy builder shows an explicit parse error card instead of silently presenting demo data as a live parse result.
 - Preview panel shows all critical policy parameters.
 - Confirm flow creates Policy and updates state.
+- `npm run test:auth-wallets` covers the frontend sign-in option contract: standard wallets and Enoki wallets are split, Google zkLogin gets a visible "Continue with Google" label, Enoki-only availability is not reported as "no wallet", and configured-but-not-mounted Enoki shows a provider-loading state.
 - `npm run test:wallet-flow` covers the frontend wallet orchestration contract with a mock signer: parse -> build `tx_json` -> wallet sign -> `waitForTransaction(showObjectChanges/showEvents)` -> require `PolicyCreated.wrapper_id` -> activate runtime, plus revoke build -> wallet sign.
 - Activity view shows events and budget within one 5 second polling interval after chain state changes.
 - Revoke button changes state to revoked within one 5 second polling interval.
@@ -582,6 +584,6 @@ These tests are not MVP gates, but they define the composability target.
 Before implementation starts, resolve and update `docs/03-technical-spec.md` if needed:
 
 - Exact Sui Testnet pool id and coin decimals.
-- Exact zkLogin SDK flow and test provider.
+- Live Enoki OAuth click-through evidence for the configured Google zkLogin provider.
 - Exact Deepbook call shape for the selected pool.
 - Exact adapter package boundary between Worker and future CLI daemon.

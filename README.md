@@ -40,6 +40,7 @@ npm run config
 npm run build                       # production build → dist/
 npm --prefix worker test            # backend checks
 npm --prefix worker run typecheck   # Worker TypeScript
+npm run test:auth-wallets           # sign-in wallet / Enoki option contract
 npm run test:wallet-flow            # mock wallet create/revoke orchestration
 cd move/rescuegrid && sui move test # Move tests
 npm run config                      # sanitized Testnet deployment IDs
@@ -77,7 +78,7 @@ Hit **Simulate flash crash** (top right): SUI drops −8.4%, the risk gauge spik
 By default the app runs **self-contained in demo mode** (mock data, simulated sign-in). To run it against the real Sui Testnet backend:
 
 1. Start the Worker on `http://localhost:8787` and set `VITE_WORKER_URL=http://localhost:8787` in `.env.local`.
-2. **Sign in with a Sui wallet** — install [Slush](https://slush.app) (or any standard Sui wallet), switch it to **Testnet**, and grab test SUI from the faucet. No signups, no API keys. The sign-in screen shows a "Connect <wallet>" button.
+2. **Sign in with a Sui wallet** — install [Slush](https://slush.app) (or any standard Sui wallet), switch it to **Testnet**, and grab test SUI from the faucet. No signups, no API keys. The sign-in screen shows a "Connect <wallet>" button. If `VITE_ENOKI_API_KEY` and `VITE_GOOGLE_CLIENT_ID` are configured, the same sign-in screen also exposes "Continue with Google" through Enoki zkLogin.
 
 With a connected wallet + Worker URL, **New strategy → Sign & deploy** parses via the Worker, builds the unsigned `create_policy` transaction in the Worker, you sign it in your wallet, and the policy's Durable Object runtime is registered. Live policy list, summary, market, balances, activity, and revoke are Worker-first; if the Worker is unavailable, read-only views fall back to direct Sui/DeepBook reads. The no-wallet Worker read surface is an explicit **Open Worker read-only** sign-in option, not an automatic dashboard jump. Creating/revoking costs only the ~0.01 SUI MoveGate fee + gas; no DBUSDC needed.
 
@@ -89,7 +90,7 @@ The Worker also exposes `/api/runtime/status` for non-secret cloud agent, signer
 
 > ChainDataProvider validation path: `npm run chain-data:status -- --json` prints the selected read provider, transport and fallback read model without live GraphQL probing. Add `--probe` for a bounded clock/schema/events read, and use `--provider graphql --endpoint <url> --owner <0x...> --wrapper-id <0x...> --json` to compare GraphQL owner-policy/activity output against JSON-RPC. The script is read-only and redacts endpoint URLs and signer secrets.
 
-**zkLogin (optional):** if you'd rather use Google zkLogin, also set `VITE_ENOKI_API_KEY` (Enoki public key from [portal.enoki.mystenlabs.com](https://portal.enoki.mystenlabs.com)) and `VITE_GOOGLE_CLIENT_ID` (Google OAuth Web client, registered in the Enoki portal). Then "Continue with Google" performs real zkLogin. Wallet login needs none of this.
+**zkLogin (optional):** if you'd rather use Google zkLogin, also set `VITE_ENOKI_API_KEY` (Enoki public key from [portal.enoki.mystenlabs.com](https://portal.enoki.mystenlabs.com)) and `VITE_GOOGLE_CLIENT_ID` (Google OAuth Web client, registered in the Enoki portal). The app registers the Enoki Google wallet and surfaces "Continue with Google" on the sign-in screen; `npm run test:auth-wallets` covers the wallet/Enoki option contract. Wallet login needs none of this.
 
 > Agent-key validation path: mission validation used the dedicated Worker-held agent key from `worker/.dev.vars` through secret-safe scripts to create/list/revoke current-run policies on Sui Testnet. Do not print or commit `.dev.vars` values; evidence records only public signer/owner/agent addresses, object IDs, strategy hashes, and tx digests.
 

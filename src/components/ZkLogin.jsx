@@ -8,8 +8,9 @@ import { useWallets, useConnectWallet, useCurrentAccount } from '@mysten/dapp-ki
 import { isEnokiWallet } from '@mysten/enoki'
 import { Icon, Logo } from './primitives.jsx'
 import { Button } from '@heroui/react'
+import { authStatusLine, enokiWalletLabel, missingWalletMessage, splitAuthWallets } from '../queries/auth-wallets.js'
 
-export function ZkLogin({ onAuth, onBackToLanding, workerConfigured = false }) {
+export function ZkLogin({ onAuth, onBackToLanding, workerConfigured = false, enokiConfigured = false }) {
   const [loading, setLoading] = useState(null)
   const wallets = useWallets()
   const { mutate: connect } = useConnectWallet()
@@ -20,8 +21,9 @@ export function ZkLogin({ onAuth, onBackToLanding, workerConfigured = false }) {
     if (account) onAuth('wallet', account.address)
   }, [account, onAuth])
 
-  // standard Sui wallets (Slush, Sui Wallet, …) — no credentials needed
-  const standardWallets = wallets.filter(w => !isEnokiWallet(w))
+  const { standardWallets, enokiWallets } = splitAuthWallets(wallets, isEnokiWallet)
+  const missingMessage = missingWalletMessage({ standardWallets, enokiWallets, enokiConfigured })
+  const statusLine = authStatusLine({ standardWallets, enokiWallets, workerConfigured, enokiConfigured })
 
   const connectWallet = (w) => {
     setLoading(w.name)
@@ -75,13 +77,34 @@ export function ZkLogin({ onAuth, onBackToLanding, workerConfigured = false }) {
                 {w.icon && <img src={w.icon} alt="" width={22} height={22} style={{ borderRadius: 6 }} />}
                 {loading === w.name ? <><Icon name="refresh" size={15} style={{ animation: 'spin 1s linear infinite' }} /> Connecting…</> : `Connect ${w.name}`}
               </Button>
-            )) : (
+            )) : missingMessage && (
               <div style={{ display: 'flex', gap: 10, padding: '13px 16px', borderRadius: 'var(--r-md)', border: '1px dashed var(--border-hi)', color: 'var(--t2)', fontSize: 13, lineHeight: 1.45 }}>
                 <span style={{ flexShrink: 0 }}><Icon name="wallet" size={18} /></span>
-                <span>No Sui wallet detected. Install <a href="https://slush.app" target="_blank" rel="noreferrer" style={{ color: 'var(--accent)' }}>Slush</a>, switch it to <strong style={{ color: 'var(--t1)' }}>Testnet</strong>, then reload.</span>
+                {enokiConfigured
+                  ? <span>{missingMessage}</span>
+                  : <span>No Sui wallet detected. Install <a href="https://slush.app" target="_blank" rel="noreferrer" style={{ color: 'var(--accent)' }}>Slush</a>, switch it to <strong style={{ color: 'var(--t1)' }}>Testnet</strong>, then reload.</span>}
               </div>
             )}
           </div>
+
+          {enokiWallets.length > 0 && (
+            <>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 12, margin: '16px 0' }}>
+                <div style={{ flex: 1, height: 1, background: 'var(--border)' }} />
+                <span className="eyebrow">zkLogin</span>
+                <div style={{ flex: 1, height: 1, background: 'var(--border)' }} />
+              </div>
+
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                {enokiWallets.map(w => (
+                  <Button key={w.name} onPress={() => connectWallet(w)} isDisabled={!!loading} fullWidth
+                    className="rg-btn-2 justify-center" startContent={w.icon ? <img src={w.icon} alt="" width={18} height={18} style={{ borderRadius: 6 }} /> : <Icon name="shield" size={15} />}>
+                    {loading === w.name ? <><Icon name="refresh" size={15} style={{ animation: 'spin 1s linear infinite' }} /> Connecting...</> : enokiWalletLabel(w)}
+                  </Button>
+                ))}
+              </div>
+            </>
+          )}
 
           <div style={{ display: 'flex', alignItems: 'center', gap: 12, margin: '16px 0' }}>
             <div style={{ flex: 1, height: 1, background: 'var(--border)' }} />
@@ -100,12 +123,8 @@ export function ZkLogin({ onAuth, onBackToLanding, workerConfigured = false }) {
             </Button>
           )}
 
-          <div style={{ marginTop: 14, fontSize: 11, color: standardWallets.length > 0 ? 'var(--safe)' : 'var(--t2)', fontFamily: 'var(--f-mono)' }}>
-            {standardWallets.length > 0
-              ? '● Sui wallet ready · testnet — real on-chain sign-in'
-              : workerConfigured
-                ? '○ no wallet — choose demo mock data or Worker read-only'
-                : '○ no wallet — demo runs on mock data'}
+          <div style={{ marginTop: 14, fontSize: 11, color: standardWallets.length > 0 || enokiWallets.length > 0 ? 'var(--safe)' : 'var(--t2)', fontFamily: 'var(--f-mono)' }}>
+            {statusLine}
           </div>
 
           <div style={{ display: 'flex', alignItems: 'center', gap: 12, margin: '24px 0' }}>

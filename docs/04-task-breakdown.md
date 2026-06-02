@@ -50,7 +50,7 @@
 | ID | Type | Estimate | Task | Acceptance |
 | --- | --- | --- | --- | --- |
 | D1 | Commit | 2h | 初始化前端 app | 本地 dev server 可打开 dashboard |
-| D2 | Commit | 3h | 实现 zkLogin 登录 UI | 能显示 owner address |
+| D2 | Commit | 3h | 实现 zkLogin 登录 UI | 标准 Sui wallet 和 Enoki Google zkLogin 都能作为登录入口，连接后能显示 owner address |
 | D3 | Commit | 3h | 实现 intent input + preview panel | 能展示结构化策略、warnings、PTB preview |
 | D4 | Commit | 3h | 实现 policy status view | 展示 budget、spent、risk score、runtime state |
 | D5 | Commit | 2h | 实现 revoke flow | 用户确认后发起 revoke API |

@@ -12,6 +12,7 @@
     "daemon": "node worker/scripts/daemon.mjs",
     "test:live-config": "node src/queries/live-config.test.mjs",
     "test:signer-health": "node src/queries/signer-health.test.mjs",
+    "test:auth-wallets": "node src/queries/auth-wallets.test.mjs",
     "test:wallet-flow": "node src/queries/wallet-flow.test.mjs",
     "funding:request": "node worker/scripts/funding-handoff.mjs",
     "funding:watch": "node worker/scripts/funding-watch.mjs",
