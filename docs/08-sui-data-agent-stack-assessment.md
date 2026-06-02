@@ -41,7 +41,7 @@ Recommended direction:
 5. Reserve gRPC for low-latency agent monitoring once live execution matters.
 6. Use Archival Store-backed providers for historical activity, strategy performance, and judge/demo replay.
 
-Implementation status: J1 is partially implemented in `worker/src/chain-data-provider.js`. The default `JsonRpcChainDataProvider` wraps the current SuiClient/JSON-RPC path and is now used by Worker read endpoints, `runTick` and Durable Object price monitoring. `GraphqlChainDataProvider` remains a planned provider behind the same Worker contract; do not move GraphQL reads into the browser.
+Implementation status: J1/J2 are partially implemented in `worker/src/chain-data-provider.js`. The default `JsonRpcChainDataProvider` wraps the current SuiClient/JSON-RPC path and is used by Worker read endpoints, `runTick` and Durable Object price monitoring. `GraphqlChainDataProvider` now exists as a read-only spike behind the same Worker contract: it can read wrapper/mandate object snapshots, policy-module events, owner policy lists, owner activity and owner summary through an injected GraphQL transport or `SUI_GRAPHQL_URL` / `SUI_GRAPHQL_ENDPOINT`. It is not the default provider, and balance, gas and DeepBook market reads still fall back to JSON-RPC until the exact Sui GraphQL schemas are verified against the latest docs.
 
 Do not wire the frontend directly to GraphQL as the main production path. The Worker should stay the read contract so frontend, local daemon, and future operator console see the same state semantics.
 
@@ -172,8 +172,9 @@ Near-term implementation:
 
 1. Keep current Worker-first API.
 2. Add `ChainDataProvider` abstraction.
-3. Plan GraphQL migration before **July 31, 2026**.
-4. Keep direct frontend chain reads as dev fallback only.
+3. Validate the `GraphqlChainDataProvider` queries against the current Sui GraphQL schema before enabling it outside tests.
+4. Plan GraphQL migration before **July 31, 2026**.
+5. Keep direct frontend chain reads as dev fallback only.
 
 Post-MVP architecture:
 

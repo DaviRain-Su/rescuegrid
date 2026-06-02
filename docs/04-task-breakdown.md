@@ -144,6 +144,8 @@ Phase J is based on [`docs/08-sui-data-agent-stack-assessment.md`](08-sui-data-a
 | J7 | Explore | 4h | WaaP/external signer adapter design | Draft `SignerAdapter` for `worker-secret`, `local-daemon`, `waap`, `hardware`, `remote-signer`; validate whether `waap-cli send-tx --tx-json ... --chain sui:testnet` can sign a Guardian-approved RescueGrid PTB; require security review before production submission |
 | J8 | Commit | 1h | Sui Agent Skills setup note | Add recommended Sui skills to engineering setup for data access, PTBs, Move tests, publish and frontend dApp Kit workflows |
 
+Current J1/J2 implementation status: `worker/src/chain-data-provider.js` now keeps `JsonRpcChainDataProvider` as the default Worker read provider and adds a configurable `GraphqlChainDataProvider` spike. The GraphQL provider supports wrapper/mandate object snapshots, policy-module events, owner policy lists, owner activity and owner summary through an injected transport or `SUI_GRAPHQL_URL` / `SUI_GRAPHQL_ENDPOINT`; balance, gas and DeepBook market reads still fall back to JSON-RPC. `worker/test/chain-data-provider-test.mjs` compares the GraphQL-shaped fixture output against the current Worker read shapes. Real endpoint enablement still requires validating the query shape against the latest Sui GraphQL schema.
+
 ## Phase K - Post-MVP Product Breadth and Frontend Design
 
 Phase K is based on [`docs/09-market-product-and-frontend-roadmap.md`](09-market-product-and-frontend-roadmap.md). It turns market research into design and implementation backlog. It is not a hackathon dependency, but it should guide the next product demo because the current UI still reads as one rescue strategy rather than a composable DeFi agent platform.
