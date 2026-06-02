@@ -2,6 +2,7 @@
    RescueGrid — shared components & helpers
    =========================================================== */
 import { useState, useEffect, useRef, useMemo } from 'react'
+import { Liveline } from 'liveline'
 
 /* ---------- color helper ---------- */
 export function hexToRgba(hex, a) {
@@ -74,30 +75,32 @@ export function fmtUsd(n, dp = 2) {
   return n.toLocaleString('en-US', { minimumFractionDigits: dp, maximumFractionDigits: dp })
 }
 
-/* ---------- sparkline ---------- */
+/* ---------- sparkline (Liveline-powered) ---------- */
+// canvas can't read CSS vars; resolve var(--x) to a concrete hex.
+function resolveCssColor(c, fallback = '#2EE6CE') {
+  if (typeof c !== 'string') return fallback
+  if (!c.startsWith('var(')) return c
+  if (typeof window === 'undefined') return fallback
+  const name = c.slice(4, -1).trim()
+  const v = getComputedStyle(document.documentElement).getPropertyValue(name).trim()
+  return v || fallback
+}
+
 export function Sparkline({ data, w = 120, h = 36, color = 'var(--accent)', fill = true, strokeW = 1.8 }) {
-  const min = Math.min(...data), max = Math.max(...data)
-  const rng = max - min || 1
-  const pts = data.map((v, i) => {
-    const x = (i / (data.length - 1)) * w
-    const y = h - ((v - min) / rng) * (h - 4) - 2
-    return [x, y]
-  })
-  const line = pts.map((p, i) => (i ? 'L' : 'M') + p[0].toFixed(1) + ' ' + p[1].toFixed(1)).join(' ')
-  const area = line + ` L${w} ${h} L0 ${h} Z`
-  const gid = useMemo(() => 'sg' + Math.random().toString(36).slice(2, 7), [])
+  if (!data || data.length < 2) return <div style={{ width: w, height: h }} />
+  const nowSec = Math.floor(Date.now() / 1000)
+  const series = data.map((v, i) => ({ time: nowSec - (data.length - 1 - i), value: v }))
+  const value = series[series.length - 1].value
   return (
-    <svg width={w} height={h} style={{ display: 'block', overflow: 'visible' }}>
-      <defs>
-        <linearGradient id={gid} x1="0" y1="0" x2="0" y2="1">
-          <stop offset="0%" stopColor={color} stopOpacity="0.28" />
-          <stop offset="100%" stopColor={color} stopOpacity="0" />
-        </linearGradient>
-      </defs>
-      {fill && <path d={area} fill={`url(#${gid})`} />}
-      <path d={line} fill="none" stroke={color} strokeWidth={strokeW} strokeLinejoin="round" strokeLinecap="round" />
-      <circle cx={pts[pts.length - 1][0]} cy={pts[pts.length - 1][1]} r="2.6" fill={color} />
-    </svg>
+    <div style={{ width: w, height: h }}>
+      <Liveline
+        data={series} value={value} theme="dark" color={resolveCssColor(color)}
+        fill={fill} lineWidth={strokeW}
+        grid={false} badge={false} momentum={false} scrub={false} pulse={false}
+        padding={{ top: 3, right: 3, bottom: 3, left: 3 }}
+        style={{ width: '100%', height: '100%' }}
+      />
+    </div>
   )
 }
 
