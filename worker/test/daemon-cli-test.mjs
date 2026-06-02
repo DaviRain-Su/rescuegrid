@@ -5,6 +5,7 @@ import { tmpdir } from 'node:os'
 import {
   appendDaemonLog,
   daemonExecutionReadiness,
+  daemonPolicyList,
   daemonStatus,
   parseDaemonArgs,
   readDaemonLogs,
@@ -24,6 +25,7 @@ try {
     tick_interval_ms: 12_345,
     watched_policies: ['0xabc123'],
     log_path: logPath,
+    owner_address: DEPLOYMENT.agent.address,
   }))
 
   const parsed = parseDaemonArgs(['status', '--config', configPath, '--json'])
@@ -33,6 +35,7 @@ try {
 
   const config = resolveDaemonConfig({ flags: parsed.flags, env: {} })
   assert.equal(config.chain, 'sui:testnet')
+  assert.equal(config.owner_address, DEPLOYMENT.agent.address)
   assert.equal(config.agent_address, DEPLOYMENT.agent.address)
   assert.equal(config.signer_kind, 'worker-secret')
   assert.equal(config.tick_interval_ms, 12_345)
@@ -41,6 +44,7 @@ try {
 
   const status = daemonStatus(config)
   assert.equal(status.status, 'ok')
+  assert.equal(status.owner_address, DEPLOYMENT.agent.address)
   assert.equal(status.agent_address, DEPLOYMENT.agent.address)
   assert.deepEqual(status.registered_adapters, ['deepbook'])
   assert.equal(Object.hasOwn(status.runtime_core.boundaries, 'policy_reader'), true)
@@ -66,6 +70,43 @@ try {
   const statusWithReadiness = daemonStatus(config, { executionReadiness })
   assert.equal(statusWithReadiness.execution_readiness.signer.kind, 'waap')
   assert.equal(statusWithReadiness.execution_readiness.execution_claimed, false)
+
+  const policyList = await daemonPolicyList(config, {
+    chainData: {
+      async listPoliciesByOwner(owner) {
+        assert.equal(owner, DEPLOYMENT.agent.address)
+        return [
+          {
+            wrapper_id: '0xabc123',
+            mandate_id: '0xmandate',
+            owner,
+            agent: DEPLOYMENT.agent.address,
+            status: 'active',
+            runtime_state: 'Monitoring',
+            runtime_state_stale: false,
+            pool_id: DEPLOYMENT.deepbook.pools.SUI_DBUSDC.pool_id,
+            budget_coin_type: DEPLOYMENT.deepbook.dbusdc_coin_type,
+            budget_ceiling: '50000000',
+            spent_amount: '0',
+            expires_at_ms: '1770000000000',
+            strategy_hash: '0xhash',
+          },
+        ]
+      },
+    },
+  })
+  assert.equal(policyList.status, 'ok')
+  assert.equal(policyList.owner, DEPLOYMENT.agent.address)
+  assert.equal(policyList.count, 1)
+  assert.equal(policyList.watched_count, 1)
+  assert.equal(policyList.policies[0].watched, true)
+  assert.equal(policyList.policies[0].agent_matches, true)
+  assert.equal(policyList.policies[0].budget_ceiling, '50000000')
+
+  await assert.rejects(
+    () => daemonPolicyList({ ...config, owner_address: '' }, { chainData: { async listPoliciesByOwner() { return [] } } }),
+    /requires --owner/,
+  )
 
   assert.deepEqual(validateDaemonConfig(config, { requirePolicies: true }), { ok: true })
 

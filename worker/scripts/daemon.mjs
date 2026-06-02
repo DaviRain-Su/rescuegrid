@@ -95,6 +95,7 @@ export function resolveDaemonConfig({ flags = new Map(), env = process.env } = {
   return {
     config_path: configPath,
     chain: String(flags.get('--chain') || env.RESCUEGRID_CHAIN || fileConfig.chain || 'sui:testnet'),
+    owner_address: String(flags.get('--owner') || flags.get('--owner-address') || env.RESCUEGRID_OWNER_ADDRESS || fileConfig.owner_address || ''),
     agent_address: String(flags.get('--agent-address') || env.RESCUEGRID_AGENT_ADDRESS || fileConfig.agent_address || DEPLOYMENT.agent.address),
     signer_kind: String(flags.get('--signer-kind') || env.SIGNER_KIND || env.RESCUEGRID_SIGNER_KIND || fileConfig.signer_kind || SIGNER_KIND_WORKER_SECRET),
     execution_enabled: boolFlag(flags, '--execution-enabled', env.EXECUTION_ENABLED === 'true' || fileConfig.execution_enabled === true),
@@ -105,6 +106,10 @@ export function resolveDaemonConfig({ flags = new Map(), env = process.env } = {
     log_path: resolve(String(flags.get('--log') || env.RESCUEGRID_DAEMON_LOG || fileConfig.log_path || DEFAULT_LOG_PATH)),
     watched_policies: [...new Set(watchedPolicies)],
   }
+}
+
+function validSuiAddress(value) {
+  return typeof value === 'string' && /^0x[0-9a-fA-F]+$/.test(value)
 }
 
 export function validateDaemonConfig(config, { requirePolicies = false } = {}) {
@@ -130,6 +135,9 @@ export function validateDaemonConfig(config, { requirePolicies = false } = {}) {
       actual_agent: config.agent_address,
     }
   }
+  if (config.owner_address && !validSuiAddress(config.owner_address)) {
+    return { ok: false, code: 'BAD_OWNER_ADDRESS', message: `Invalid owner address: ${config.owner_address}` }
+  }
   if (config.force_trigger && !config.demo_mode) {
     return { ok: false, code: 'FORCE_TRIGGER_DISABLED', message: 'force_trigger requires --demo-mode or RESCUEGRID_DEMO_MODE=true.' }
   }
@@ -149,6 +157,7 @@ export function daemonStatus(config, { executionReadiness = null } = {}) {
   const status = {
     status: 'ok',
     chain: config.chain,
+    owner_address: config.owner_address || null,
     agent_address: config.agent_address,
     signer_kind: config.signer_kind,
     execution_enabled: config.execution_enabled,
@@ -179,6 +188,54 @@ export async function daemonExecutionReadiness(config, { chainData = null } = {}
     env: runtimeEnv(config),
     chainData: chainData || requireChainDataProvider(runtimeEnv(config)),
   })
+}
+
+function publicPolicyRow(policy, config) {
+  const wrapperId = policy.wrapper_id || policy.policy_id || null
+  const agent = policy.agent || null
+  return {
+    wrapper_id: wrapperId,
+    mandate_id: policy.mandate_id || null,
+    owner: policy.owner || null,
+    agent,
+    agent_matches: agent === config.agent_address,
+    watched: wrapperId ? config.watched_policies.includes(wrapperId) : false,
+    status: policy.status || null,
+    runtime_state: policy.runtime_state || null,
+    runtime_state_stale: Boolean(policy.runtime_state_stale),
+    pool_id: policy.pool_id || null,
+    budget_coin_type: policy.budget_coin_type || null,
+    budget_ceiling: policy.budget_ceiling == null ? null : String(policy.budget_ceiling),
+    spent_amount: policy.spent_amount == null ? null : String(policy.spent_amount),
+    expires_at_ms: policy.expires_at_ms == null ? null : String(policy.expires_at_ms),
+    strategy_hash: policy.strategy_hash || null,
+  }
+}
+
+export async function daemonPolicyList(config, { chainData = null } = {}) {
+  if (!config.owner_address) {
+    throw Object.assign(new Error('policies list requires --owner <0x...> or owner_address in daemon config.'), {
+      code: 'OWNER_REQUIRED',
+    })
+  }
+  if (!validSuiAddress(config.owner_address)) {
+    throw Object.assign(new Error(`Invalid owner address: ${config.owner_address}`), {
+      code: 'BAD_OWNER_ADDRESS',
+    })
+  }
+  const provider = chainData || requireChainDataProvider({})
+  const policies = await provider.listPoliciesByOwner(config.owner_address)
+  const rows = policies.map((policy) => publicPolicyRow(policy, config))
+  return {
+    status: 'ok',
+    chain: config.chain,
+    owner: config.owner_address,
+    agent_address: config.agent_address,
+    count: rows.length,
+    watched_count: rows.filter((row) => row.watched).length,
+    unsupported_agent_count: rows.filter((row) => row.agent && !row.agent_matches).length,
+    policies: rows,
+  }
 }
 
 async function daemonStatusWithReadiness(config) {
@@ -277,11 +334,34 @@ function print(value, json = false) {
   }
 }
 
+function printPolicyList(value, json = false) {
+  if (json) {
+    console.log(JSON.stringify(value, null, 2))
+    return
+  }
+  if (!value.policies.length) {
+    console.log(`No policies for ${value.owner}`)
+    return
+  }
+  value.policies.forEach((row) => {
+    console.log(JSON.stringify({
+      wrapper_id: row.wrapper_id,
+      status: row.status,
+      runtime_state: row.runtime_state,
+      watched: row.watched,
+      agent_matches: row.agent_matches,
+      budget_ceiling: row.budget_ceiling,
+      spent_amount: row.spent_amount,
+    }))
+  })
+}
+
 function help() {
   console.log(`RescueGrid local daemon.
 
 Usage:
   node worker/scripts/daemon.mjs status [--json]
+  node worker/scripts/daemon.mjs policies list --owner <0x...> [--json]
   node worker/scripts/daemon.mjs tick --wrapper-id <0x...> [--demo-mode --force-trigger] [--execution-enabled]
   node worker/scripts/daemon.mjs run --wrapper-id <0x...>[,<0x...>] [--max-ticks <n>] [--interval-ms 60000]
   node worker/scripts/daemon.mjs logs [--limit 20] [--json]
@@ -292,7 +372,7 @@ Config file:
   ${DEFAULT_CONFIG_PATH}
 
 Supported fields:
-  chain, agent_address, signer_kind, execution_enabled, demo_mode,
+  chain, owner_address, agent_address, signer_kind, execution_enabled, demo_mode,
   tick_interval_ms, watched_policies, log_path`)
 }
 
@@ -320,6 +400,15 @@ export async function main(argv = process.argv.slice(2)) {
   if (command === 'logs') {
     print(readDaemonLogs(config.log_path, integerFlag(flags, '--limit', 20)), json)
     return 0
+  }
+  if (command === 'policies' || command === 'policies list') {
+    try {
+      printPolicyList(await daemonPolicyList(config), json)
+      return 0
+    } catch (e) {
+      print({ status: 'error', code: e?.code || 'POLICY_LIST_FAILED', message: e?.message || String(e) }, true)
+      return 1
+    }
   }
   if (command === 'tick') {
     const rows = []
