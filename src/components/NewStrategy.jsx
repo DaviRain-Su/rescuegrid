@@ -5,7 +5,8 @@ import { useState } from 'react'
 import { useCurrentAccount } from '@mysten/dapp-kit'
 import { RG } from '../data.js'
 import { Icon, Sparkline } from './primitives.jsx'
-import { parseIntent } from '../../core/strategy.js'
+import { WORKER_CONFIGURED, parseIntent as parseWorkerIntent } from '../api.js'
+import { parseIntent as parseLocalIntent } from '../../core/strategy.js'
 
 function Stepper({ step, steps }) {
   return (
@@ -61,6 +62,7 @@ export function NewStrategy({ onDone, mode, setMode }) {
   const [slip, setSlip] = useState(1.2)
   const [expiry, setExpiry] = useState(14)
   const [livePreview, setLivePreview] = useState(null)
+  const [livePreviewSource, setLivePreviewSource] = useState(null)
   const account = useCurrentAccount()
   const live = !!account
   const steps = ['Intent', 'Review', 'Policy', 'Deploy']
@@ -82,10 +84,21 @@ export function NewStrategy({ onDone, mode, setMode }) {
     const sc = classify(text)
     const m = PARSED[sc].meta
     if (live) {
-      // real Worker parse (structured strategy + hash + PTB preview + Guardian)
-      try { setLivePreview(parseIntent(text, account.address)) } catch { setLivePreview(null) }
+      // Worker-first parse; local parser is only a fallback when no Worker URL is configured.
+      try {
+        const preview = WORKER_CONFIGURED
+          ? await parseWorkerIntent(account.address, text)
+          : parseLocalIntent(text, account.address)
+        setLivePreview(preview)
+        setLivePreviewSource(WORKER_CONFIGURED ? 'Worker' : 'local fallback')
+      } catch {
+        setLivePreview(null)
+        setLivePreviewSource(null)
+      }
     } else {
       await new Promise(r => setTimeout(r, 1400))
+      setLivePreview(null)
+      setLivePreviewSource(null)
     }
     setParsing(false)
     setScenario(sc)
@@ -140,15 +153,15 @@ export function NewStrategy({ onDone, mode, setMode }) {
       {/* STEP 1 — review: parsed intent + PTB + guardian */}
       {step === 1 && (
         <div className="fade-up" style={{ display: 'flex', flexDirection: 'column', gap: 18 }}>
-          {/* D3: real Worker parse when live — what you preview is what you sign */}
+          {/* D3: Worker parse when configured; local preview is read-only fallback. */}
           {livePreview?.status === 'ok' && (
             <div className="card" style={{ padding: 18, borderColor: 'var(--accent)' }}>
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                   <span style={{ color: 'var(--accent)' }}><Icon name="link" size={16} /></span>
-                  <div className="card-title">On-chain parse · Worker</div>
+                  <div className="card-title">{livePreviewSource === 'Worker' ? 'On-chain parse · Worker' : 'Local preview'}</div>
                 </div>
-                <span className="badge badge-accent"><span className="dot pulse"></span>live · testnet</span>
+                <span className="badge badge-accent"><span className="dot pulse"></span>{livePreviewSource === 'Worker' ? 'worker · testnet' : 'fallback · no worker'}</span>
               </div>
               <div className="mono" style={{ fontSize: 10.5, color: 'var(--t2)', wordBreak: 'break-all', marginBottom: 10 }}>
                 strategy_hash {livePreview.strategy_hash}

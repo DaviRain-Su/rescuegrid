@@ -325,5 +325,10 @@ Production hardening backlog:
 - Direct owner emergency revoke script.
 - Multi-agent key rotation.
 - Local CLI daemon with same Runtime Core, Policy, Guardian and ExecutorAdapter interfaces.
+- Optional `PiWorkerAgentRuntime` adapter for operator console and local/cloud agent-session parity; see [`docs/07-pi-worker-assessment.md`](07-pi-worker-assessment.md). It must not receive `AGENT_KEY` until a separate security review passes.
 - Adapter SDK for CDPM / Cetus DLMM, Scallop and Kai integrations.
+- Multivenue control plane for Sui, EVM, Solana, Hyperliquid and CEX venue accounts; see [`docs/06-post-mvp-multivenue-roadmap.md`](06-post-mvp-multivenue-roadmap.md).
+- Settlement adapters for LI.FI, deBridge and native venue transfers, used for inventory rebalancing rather than hot-path execution.
 - Mainnet deployment checklist and audit.
+
+Multivenue expansion must preserve the MVP security boundary: adapters propose `ExecutionPlan`s, Guardian approves or blocks, and each venue keeps its own authority model. Sui can enforce policy on-chain through Move objects; EVM, Solana, Hyperliquid and CEX integrations need venue-specific account wrappers, modules, delegates, agent wallets, subaccounts or API keys. RescueGrid should unify strategy, risk and activity, not pretend every venue has identical custody or enforcement semantics.

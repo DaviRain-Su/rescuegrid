@@ -12,6 +12,7 @@ A running snapshot of what is built and how it was verified. Demo-facing summary
 | **Move package** `rescuegrid::policy` | ✅ deployed | `sui move test` 8/8; published `0x92f6e3…bb78` |
 | **Worker API** (Cloudflare + Hono) | ✅ all endpoints | 23 unit checks + `wrangler dev` smoke + on-chain dry-run |
 | **Sign-in** | ✅ | Sui wallet (Slush/std, no creds) primary; Enoki zkLogin optional |
+| **Frontend ↔ Worker contract** | ✅ wired | live reads are Worker-first with direct-chain fallback; create/revoke use Worker-built unsigned txs |
 | **Live write loop** (create / list / revoke) | ✅ **verified on-chain** | real policy created (`9SQWkBne…`) + revoked (`Gzniih…`); endpoints return live data; post-revoke reads `Revoked` |
 | **Live execution** (Deepbook order) | 🟡 gated | builders + dry-run; blocked on testnet DBUSDC funding |
 
@@ -38,10 +39,10 @@ Broadcast with the dedicated agent key (agent-as-owner for the test):
 - Worker endpoints returned it live: `/api/policies?owner=` (1), `/api/activity?owner=` (PolicyCreated), `/api/policies/:id/activity` (`Monitoring`, spent 0).
 - `revoke_policy` → tx `GzniihEkpUNJG3dr1K1e5J3f5YWJ75B6yBnYMvmWEfmg` → `PolicyRevoked`; post-revoke reads `revoked:true` / `runtime_state: Revoked`, activity = 2 events.
 
-So create / list / activity / revoke are real on testnet. In the browser, a connected Sui wallet drives the same flow (no DBUSDC needed).
+So create / list / activity / revoke are real on testnet. In the browser, a connected Sui wallet drives the same Worker-first flow (no DBUSDC needed); read-only screens can fall back to direct Sui/DeepBook reads when `VITE_WORKER_URL` is absent.
 
 ## Known gaps / next
 
 1. **DBUSDC funding** — the only true remaining gap, and **self-funding is confirmed impossible** on this testnet: DBUSDC `mint` is TreasuryCap-gated (cap not public), DEEP `mint` returns `FunctionNotFound` on the current package, and a SUI→DBUSDC swap needs DEEP for taker fees (a zero-DEEP swap fills 0 even with a live bid). Needs an **external DBUSDC source** (DeepBook-team faucet, or an address that already holds DBUSDC/DEEP). Once the agent BalanceManager holds DBUSDC: flip `EXECUTION_ENABLED=true` and replay the execution PTB (`worker/src/deepbook.js` `buildExecutionTx`).
-2. **Browser wallet click-through** — connect Slush (testnet) and run create/revoke from the UI (the on-chain txs above prove the underlying path; UI uses the same builders via dapp-kit).
+2. **Browser wallet click-through** — connect Slush (testnet) and run create/revoke from the UI against `VITE_WORKER_URL` (the on-chain txs above prove the underlying Worker path; the current UI now uses Worker-built txs again).
 3. **zkLogin live test** (optional) — only if using Enoki instead of a wallet.

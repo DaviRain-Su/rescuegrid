@@ -29,8 +29,8 @@
 | B3 | Explore | 2h | 核验 zkLogin 最新接入流程 | 记录 dashboard 登录最小链路和 SDK 版本 |
 | B4 | Explore | 2h | 核验 Cloudflare Durable Object alarm/runtime 限制 | 记录 tick 周期、持久状态、部署配置 |
 | B5 | Explore | 2h | 验证 MoveGate AuthToken + Deepbook + RescuePolicyWrapper + ActionReceipt 同一 PTB 可组合性 | 仅当 B0 结论为 MoveGate 可用时执行；最小脚本能构建包含 authorize_action → Deepbook swap → record_agent_trade/create_success_receipt 的 PTB |
-| B6 | Explore | 1h | pi-worker 快速浏览 | 判断是否值得深度验证 |
-| B7 | Explore | 2h | pi-worker 深度验证 | 仅当 B6 结论为可复用时运行示例或测试，决定直接复用、参考实现或不引入 |
+| B6 | Explore | 1h | pi-worker 快速浏览 | 已产出 [`docs/07-pi-worker-assessment.md`](07-pi-worker-assessment.md)：可作为 operator/agent-session layer，不替换 MVP deterministic Worker hot path |
+| B7 | Explore | 2h | pi-worker 深度验证 | 仅当需要 operator console 或 local/cloud agent parity 时运行 terminal-agent 示例；验收为读策略状态和 proposal-only strategy draft，不接触 `AGENT_KEY` |
 | B8 | Explore | 2h | LeafSheep/CDPM adapter feasibility note | 明确它只能作为 Post-MVP Sui mainnet PositionManager adapter 参考，不进入 MVP critical path |
 
 ## Phase C - Move Package
@@ -98,6 +98,21 @@
 | H4 | Explore | 3h | Scallop/Kai adapter design | 明确 lending market/vault target constraints、stale-state pre-step、redeem sizing 和 hot-potato ticket 约束 |
 | H5 | Commit | 4h | Adapter SDK skeleton | 新 adapter 必须提供 readMarket、planExecution、buildPtb、parseExecutionResult 和 conformance tests |
 
+## Phase I - Post-MVP Multivenue Expansion
+
+Phase I is a product expansion track, not a hackathon dependency. Planning baseline: [`docs/06-post-mvp-multivenue-roadmap.md`](06-post-mvp-multivenue-roadmap.md).
+
+| ID | Type | Estimate | Task | Acceptance |
+| --- | --- | --- | --- | --- |
+| I1 | Explore | 4h | VenueAccount data model spike | 明确 Sui policy、EVM smart account、Solana delegate、Hyperliquid API wallet、CEX subaccount/API key 的统一字段和差异字段 |
+| I2 | Explore | 4h | Hyperliquid adapter feasibility | 核验 API wallet、subaccount/vault、nonce、expiresAfter、TWAP、leverage/margin、revocation UX，产出 paper-trade adapter spec |
+| I3 | Explore | 4h | OKX/Binance CEX adapter safety model | 明确 trade-only key、IP allow-list、subaccount、no-withdraw 默认、order id evidence、local signer 或 signer service 边界 |
+| I4 | Explore | 4h | LI.FI settlement adapter feasibility | 核验 quote/status/chains/tokens/tools endpoints、Sui/Solana/EVM 覆盖、失败恢复和 API rate limits；只作为再平衡/settlement adapter |
+| I5 | Explore | 4h | deBridge settlement adapter feasibility | 核验 DLN route、order tracking、cancel/reclaim、hooks、success-required/non-atomic 行为；只作为再平衡/settlement adapter |
+| I6 | Commit | 4h | StrategyMandate v2 draft spec | 明确 `venue_scope`、`settlement_scope`、per-venue budget、bridge fee/ETA、human-confirm action set 和 mandate hash |
+| I7 | Commit | 4h | ActivityEvent v2 draft spec | 支持 chain tx、CEX order id、Hyperliquid cloid、bridge order id、quote id、partial/recoverable 状态 |
+| I8 | Explore | 4h | Cross-venue inventory model | 明确预置库存、再平衡阈值、桥不进 hot path、套利只从 paper/tiny-size 开始 |
+
 ## Hackathon Critical Path
 
 MVP 任务清单约 76h（含 B8 feasibility note 和 E9 adapter registry），Phase H 约 18h 且不进入 hackathon critical path。单人 hackathon 应优先跑最小可演示闭环。Critical path 只保留证明 Sub-track 2 的必要任务：
@@ -110,7 +125,7 @@ MVP 任务清单约 76h（含 B8 feasibility note 和 E9 adapter registry），P
 6. D2-D5：Dashboard 只做登录、preview、status、revoke 的最小 UI。
 7. G1、G2、G4：跑通配置、demo script 和最终验证。
 
-Polish 可延后：D1 的完整视觉打磨、D6 的细粒度空状态、B7 pi-worker 深度验证、B8 LeafSheep/CDPM 深度验证、F4 幂等增强、Phase H、Post-MVP browser QA。
+Polish 可延后：D1 的完整视觉打磨、D6 的细粒度空状态、B7 pi-worker 深度验证、B8 LeafSheep/CDPM 深度验证、F4 幂等增强、Phase H、Phase I、Post-MVP browser QA。
 
 如果 B0 发现 MoveGate 不适合，退回到独立实现 RescuePolicy Object（回退为旧版 Phase C 估计 14h）。
 
@@ -127,6 +142,7 @@ Polish 可延后：D1 的完整视觉打磨、D6 的细粒度空状态、B7 pi-w
 9. Dashboard D5 needs E3 or the final revoke API shape before real-chain testing.
 10. Demo Hardening starts only after one Testnet transaction is confirmed.
 11. Post-MVP adapters depend on Runtime Core + adapter registry; they must not be implemented by branching Deepbook-specific runtime code.
+12. Phase I depends on Phase H adapter boundaries and must not change hackathon MVP acceptance.
 
 ## Stop Conditions
 

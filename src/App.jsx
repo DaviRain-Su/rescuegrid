@@ -3,13 +3,20 @@
    =========================================================== */
 import { useState, useEffect, useRef } from 'react'
 import { useCurrentAccount, useCurrentWallet, useSuiClient, useSignAndExecuteTransaction, useDisconnectWallet } from '@mysten/dapp-kit'
+import { Transaction } from '@mysten/sui/transactions'
 import { RG } from './data.js'
-// Owner writes are fully client-side: shared core parses the intent, the
-// frontend builds the PTB, the wallet signs. Reads go straight to chain.
-// No Worker required for either — the Worker is only the cloud-agent runtime.
-import { parseIntent } from '../core/strategy.js'
-import { buildCreatePolicyTx, buildRevokeTx } from './ptb.js'
-import { listPolicies, getActivity as listActivity, getSummary, getMarket, getBalances } from './chain-read.js'
+import {
+  WORKER_CONFIGURED,
+  parseIntent,
+  buildPolicyTx,
+  activatePolicy,
+  buildRevokeTx,
+  listPolicies,
+  listActivity,
+  getSummary,
+  getMarket,
+  getBalances,
+} from './api.js'
 import { Icon, Logo, Token, hexToRgba } from './components/primitives.jsx'
 import { ZkLogin } from './components/ZkLogin.jsx'
 import { Dashboard } from './components/Dashboard.jsx'
@@ -64,13 +71,13 @@ export default function App({ onExit }) {
   const timers = useRef([])
   const notifId = useRef(100)
 
-  // Live mode: real zkLogin account + configured Worker -> on-chain writes.
+  // Live mode: connected Sui account. Reads are Worker-first with direct-chain
+  // fallback; writes require Worker-built transactions.
   const account = useCurrentAccount()
   const { currentWallet } = useCurrentWallet()
   const suiClient = useSuiClient()
   const { mutateAsync: signAndExec } = useSignAndExecuteTransaction()
   const { mutate: disconnect } = useDisconnectWallet()
-  // reads are live whenever a wallet is connected (direct chain reads, no Worker)
   const liveMode = !!account
   const owner = account?.address || RG.user.addr
   const ownerShort = account ? owner.slice(0, 6) + '…' + owner.slice(-4) : RG.user.handle
@@ -197,12 +204,13 @@ export default function App({ onExit }) {
 
   const handleRevoke = async (id) => {
     if (liveMode) {
+      if (!WORKER_CONFIGURED) { showToast('Revoke needs the Worker — set VITE_WORKER_URL and run it', 'var(--warn)'); return }
       const pol = policies.find(p => p.id === id)
-      const wid = pol?._wrapperId, mid = pol?._mandateId
-      if (!wid || !mid) { showToast('Missing wrapper/mandate id for this policy', 'var(--danger)'); return }
+      const wid = pol?._wrapperId || id
       try {
-        const tx = buildRevokeTx({ wrapperId: wid, mandateId: mid, ownerAddress: owner })
-        await signAndExec({ transaction: tx })
+        const built = await buildRevokeTx(owner, wid)
+        if (built.status !== 'ok') { showToast(`Revoke build failed: ${built.message || built.code}`, 'var(--danger)'); return }
+        await signAndExec({ transaction: Transaction.from(built.tx_json) })
         showToast('Policy revoked on-chain — agent authority deleted', 'var(--danger)')
         pushNotif('policy', 'Policy revoked on-chain')
         setTimeout(() => refreshLivePolicies(), 1500)
@@ -239,14 +247,19 @@ export default function App({ onExit }) {
     showToast('Agents resumed — policies restored to prior state', 'var(--accent)')
   }
 
-  // Live create-policy, fully client-side: core parses the intent -> frontend
-  // builds the create_policy PTB -> the wallet signs it. No Worker.
+  // Live create-policy: Worker parse -> Worker builds unsigned create_policy PTB
+  // -> wallet signs -> Worker activates the Durable Object runtime.
   const deployLive = async (text, meta) => {
     try {
-      const parsed = parseIntent(text || `When SUI drops more than 8%, deploy a ${meta.budget} USDC rescue grid`, owner)
+      const parsed = await parseIntent(owner, text || `When SUI drops more than 8%, deploy a ${meta.budget} USDC rescue grid`)
       if (parsed.status !== 'ok') { showToast(`Parse failed: ${parsed.message || parsed.code}`, 'var(--danger)'); return false }
-      const tx = buildCreatePolicyTx({ strategy: { ...parsed.strategy, strategy_hash: parsed.strategy_hash }, ownerAddress: owner })
-      await signAndExec({ transaction: tx })
+      const built = await buildPolicyTx(owner, parsed.strategy, parsed.strategy_hash)
+      if (built.status !== 'ok') { showToast(`Build failed: ${built.message || built.code}`, 'var(--danger)'); return false }
+      const signed = await signAndExec({ transaction: Transaction.from(built.tx_json) })
+      const res = await suiClient.waitForTransaction({ digest: signed.digest, options: { showObjectChanges: true, showEvents: true } })
+      const ev = (res.events || []).find(e => String(e.type).endsWith('::policy::PolicyCreated'))
+      const wrapperId = ev?.parsedJson?.wrapper_id
+      if (wrapperId) await activatePolicy(wrapperId).catch(() => {})
       showToast('Policy created on-chain — agent authorized within limits', 'var(--accent)')
       pushNotif('policy', `Policy deployed on-chain · ${meta.name}`)
       setView('policies')
@@ -259,7 +272,10 @@ export default function App({ onExit }) {
   }
 
   const deployPolicy = (meta = { name: 'SUI Crash Rescue Grid', strategy: 'rescue-grid', budget: 500, scope: 'SUI/USDC', slip: 1.2 }, text) => {
-    if (liveMode) { deployLive(text, meta); return }
+    if (liveMode) {
+      if (!WORKER_CONFIGURED) { showToast('On-chain deploy needs the Worker — set VITE_WORKER_URL and run it', 'var(--warn)'); return }
+      deployLive(text, meta); return
+    }
     const np = { id: '0x' + Math.random().toString(16).slice(2, 6) + '…' + Math.random().toString(16).slice(2, 6),
       name: meta.name, strategy: meta.strategy, status: 'active', mode, budgetCap: meta.budget, budgetUsed: 0,
       scope: [meta.scope], maxSlippage: meta.slip, expires: '2026-06-14T00:00:00Z', created: '2026-06-01', execs: 0 }
