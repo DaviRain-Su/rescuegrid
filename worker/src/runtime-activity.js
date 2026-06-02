@@ -53,6 +53,20 @@ function normalizeStringArray(value) {
   return Array.isArray(value) ? value.map(String).filter(Boolean) : []
 }
 
+function normalizeEvidenceRows(value) {
+  return Array.isArray(value)
+    ? value.filter(Boolean).map((row) => ({
+        code: row.code ? String(row.code) : row.blocker_code ? String(row.blocker_code) : null,
+        label: row.label ? String(row.label) : row.asset ? String(row.asset) : null,
+        holder: row.holder ? String(row.holder) : null,
+        asset: row.asset ? String(row.asset) : null,
+        observed: row.observed != null ? String(row.observed) : row.observed_balance != null ? String(row.observed_balance) : null,
+        required: row.required != null ? String(row.required) : row.threshold != null ? String(row.threshold) : null,
+        usable: row.usable === true,
+      }))
+    : []
+}
+
 function txDigestOf(value) {
   return value?.tx_digest || value?.tx || null
 }
@@ -96,6 +110,10 @@ export function runtimeEventFromTickResult(result, { wrapperId, nowMs = Date.now
   const code = result?.code || result?.blocker_code || null
   const blockerCodes = normalizeStringArray(result?.blocker_codes || (code ? [code] : []))
   const blockerLabels = normalizeStringArray(result?.blocker_labels)
+  const funding = result?.funding || null
+  const blockers = normalizeEvidenceRows(funding?.blockers || result?.blockers)
+  const executionBlockers = normalizeEvidenceRows(funding?.execution_blockers || result?.execution_blockers || blockers)
+  const fundingCriteria = normalizeEvidenceRows(funding?.criteria || result?.funding_criteria || result?.criteria)
   const detail = String(result?.detail || (blockerLabels.length ? blockerLabels.join('; ') : meta.detail))
   const txDigest = result?.tx_digest || result?.tx || null
   const eventWrapperId = wrapperId || result?.wrapper_id || null
@@ -124,6 +142,10 @@ export function runtimeEventFromTickResult(result, { wrapperId, nowMs = Date.now
     spend_before: result?.spend_before || null,
     spend_after: result?.spend_after || null,
     balances: result?.balances || null,
+    funding,
+    blockers,
+    execution_blockers: executionBlockers,
+    funding_criteria: fundingCriteria,
   }
 }
 
@@ -182,6 +204,10 @@ export function runtimeEventToFeedItem(event, policyLabel = shortWrapperId(event
     tx_digest: event?.tx_digest || event?.tx || null,
     blocker_codes: normalizeStringArray(event?.blocker_codes),
     blocker_labels: normalizeStringArray(event?.blocker_labels),
+    blockers: normalizeEvidenceRows(event?.blockers),
+    execution_blockers: normalizeEvidenceRows(event?.execution_blockers),
+    funding_criteria: normalizeEvidenceRows(event?.funding_criteria),
+    balances: event?.balances || null,
     execution_claimed: Boolean(event?.execution_claimed),
     execution_success_evidence: Boolean(event?.execution_success_evidence),
   }

@@ -45,11 +45,32 @@ const NOW = Date.UTC(2026, 5, 2, 13, 0, 0)
     code: 'INSUFFICIENT_DBUSDC',
     blocker_codes: ['INSUFFICIENT_DBUSDC', 'INSUFFICIENT_DEEP'],
     blocker_labels: ['Insufficient DBUSDC', 'Insufficient DEEP'],
+    funding: {
+      blockers: [
+        { code: 'INSUFFICIENT_DBUSDC', label: 'BalanceManager DBUSDC below required threshold', asset: 'DBUSDC', observed: '0', required: '100000' },
+      ],
+      execution_blockers: [
+        { code: 'EXECUTION_DISABLED', label: 'Execution disabled', observed: 'false', required: 'true' },
+        { code: 'INSUFFICIENT_DBUSDC', label: 'BalanceManager DBUSDC below required threshold', asset: 'DBUSDC', observed: '0', required: '100000' },
+      ],
+      criteria: [
+        { asset: 'DBUSDC', holder: '0xbm', observed_balance: '0', threshold: '100000', blocker_code: 'INSUFFICIENT_DBUSDC', usable: false },
+      ],
+    },
     execution_claimed: false,
   }, { wrapperId: WRAPPER, nowMs: NOW + 1 })
   const feed = runtimeEventToFeedItem(event)
   assert.equal(feed.kind, 'guardian')
   assert.deepEqual(feed.blocker_codes, ['INSUFFICIENT_DBUSDC', 'INSUFFICIENT_DEEP'])
+  assert.equal(feed.blockers[0].observed, '0')
+  assert.equal(feed.blockers[0].required, '100000')
+  assert.equal(feed.execution_blockers[0].code, 'EXECUTION_DISABLED')
+  assert.equal(feed.execution_blockers[0].observed, 'false')
+  assert.equal(feed.execution_blockers[0].required, 'true')
+  assert.equal(feed.funding_criteria[0].code, 'INSUFFICIENT_DBUSDC')
+  assert.equal(feed.funding_criteria[0].asset, 'DBUSDC')
+  assert.equal(feed.funding_criteria[0].observed, '0')
+  assert.equal(feed.funding_criteria[0].required, '100000')
   assert.equal(feed.execution_claimed, false)
 }
 

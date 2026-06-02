@@ -50,6 +50,25 @@ function resolveSourceMeta(source, live) {
       }
 }
 
+function evidenceRowsFor(a) {
+  const structured = Array.isArray(a.execution_blockers) && a.execution_blockers.length
+    ? a.execution_blockers
+    : Array.isArray(a.blockers) && a.blockers.length
+      ? a.blockers
+      : []
+  if (structured.length) return structured
+  return (a.blocker_codes || []).map((code, i) => ({
+    code,
+    label: a.blocker_labels?.[i] || code,
+    observed: null,
+    required: null,
+  }))
+}
+
+function evidenceValue(value) {
+  return value == null || value === '' ? '-' : String(value)
+}
+
 export function ActivityView({ activity, onTx, live = false, loading = false, source = null }) {
   const [filter, setFilter] = useState('all')
   const [open, setOpen] = useState(null)
@@ -159,6 +178,7 @@ export function ActivityView({ activity, onTx, live = false, loading = false, so
               const isOpen = open === key
               const ex = expand(a)
               const oc = OUTCOME[ex.oc]
+              const evidenceRows = ex.oc === 'blocked' ? evidenceRowsFor(a) : []
               return (
                 <div key={key} style={{ borderTop: i ? '1px solid var(--border)' : 'none' }}>
                   <div onClick={() => setOpen(isOpen ? null : key)} style={{ display: 'flex', gap: 14, padding: '15px 18px', alignItems: 'flex-start', cursor: 'pointer', background: isOpen ? 'var(--glass)' : 'transparent', transition: 'background .12s' }}>
@@ -196,6 +216,29 @@ export function ActivityView({ activity, onTx, live = false, loading = false, so
                         <span className="eyebrow" style={{ fontSize: 8.5, display: 'block', marginBottom: 5 }}>Why the agent did this</span>
                         {ex.reason}
                       </div>
+                      {evidenceRows.length > 0 && (
+                        <div style={{ gridColumn: '1 / -1', padding: '12px 14px', borderRadius: 'var(--r-sm)', background: 'var(--danger-dim)', border: '1px solid rgba(255,84,112,0.28)' }}>
+                          <span className="eyebrow" style={{ fontSize: 8.5, display: 'block', marginBottom: 8 }}>Block evidence</span>
+                          <div style={{ display: 'grid', gridTemplateColumns: 'minmax(120px,1fr) minmax(90px,0.8fr) minmax(90px,0.8fr)', gap: 8 }}>
+                            {evidenceRows.map((row, j) => (
+                              <Fragment key={`${row.code || row.label || 'block'}-${j}`}>
+                                <div style={{ minWidth: 0 }}>
+                                  <div className="mono" style={{ fontSize: 10.5, color: 'var(--danger)', fontWeight: 700, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{row.code || 'BLOCKED'}</div>
+                                  <div style={{ fontSize: 10.5, color: 'var(--t1)', marginTop: 2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{row.label || row.asset || 'Execution blocked'}</div>
+                                </div>
+                                <div>
+                                  <div className="eyebrow" style={{ fontSize: 7.5 }}>Observed</div>
+                                  <div className="mono" style={{ fontSize: 10.5, color: 'var(--t0)', marginTop: 2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{evidenceValue(row.observed)}</div>
+                                </div>
+                                <div>
+                                  <div className="eyebrow" style={{ fontSize: 7.5 }}>Required</div>
+                                  <div className="mono" style={{ fontSize: 10.5, color: 'var(--t0)', marginTop: 2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{evidenceValue(row.required)}</div>
+                                </div>
+                              </Fragment>
+                            ))}
+                          </div>
+                        </div>
+                      )}
                       <div>
                         <span className="eyebrow" style={{ fontSize: 8.5, display: 'block', marginBottom: 8 }}>Input snapshot</span>
                         <div style={{ display: 'flex', flexDirection: 'column', gap: 7 }}>
