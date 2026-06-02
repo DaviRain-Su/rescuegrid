@@ -165,6 +165,16 @@ export function getBalances(owner) {
   return read(`/api/balances?owner=${owner}`, () => chainRead.getBalances(owner))
 }
 
+/** GET /api/execution/readiness — cloud/local agent execution preflight, no secrets. */
+export function getExecutionReadiness() {
+  return workerGet('/api/execution/readiness').catch((e) => ({
+    status: 'error',
+    code: WORKER_CONFIGURED ? 'WORKER_READ_FAILED' : 'WORKER_NOT_CONFIGURED',
+    message: String(e?.message || e),
+    funding: null,
+  }))
+}
+
 /** GET /api/runtime/status — Worker agent/signer/provider status, no secrets. */
 export function getRuntimeStatus() {
   return workerGet('/api/runtime/status').catch((e) => ({

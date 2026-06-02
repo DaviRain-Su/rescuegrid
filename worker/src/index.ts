@@ -17,7 +17,8 @@ import { getSuiWatchOnlyBoundaryData } from './sui-watch-only-boundaries.js'
 import { getSuiWatchData } from './sui-watch-registry.js'
 import { runTick, validateExecutionPlan } from './tick.js'
 import { validateForceTrigger, validateTickAuthorization, validateTickBody } from './tick-auth.js'
-import { buildFundingReadiness, parseIntentWithStability, resolveFundingThresholds } from './read-surfaces.js'
+import { parseIntentWithStability } from './read-surfaces.js'
+import { buildExecutionReadiness } from './execution-readiness.js'
 import {
   appendRuntimeActivity,
   runtimeErrorEvent,
@@ -131,6 +132,24 @@ app.get('/', (c) => c.json({ service: 'rescuegrid-worker', agent: AGENT_ADDRESS,
 
 app.get('/api/runtime/status', (c) => {
   return c.json(getRuntimeStatus(c.env))
+})
+
+app.get('/api/execution/readiness', async (c) => {
+  try {
+    const chainData = chainDataProvider(c.env)
+    const readiness = await buildExecutionReadiness({
+      env: c.env,
+      chainData,
+      requested: {
+        dbusdc_threshold: c.req.query('dbusdc_threshold'),
+        deep_threshold: c.req.query('deep_threshold'),
+        sui_gas_threshold: c.req.query('sui_gas_threshold'),
+      },
+    })
+    return c.json(readiness)
+  } catch (e) {
+    return c.json({ status: 'error', code: 'CHAIN_READ_FAILED', message: String((e as Error).message) }, 502)
+  }
 })
 
 // ── E2: parse natural-language intent into a structured strategy ──────────
@@ -329,36 +348,19 @@ app.get('/api/balances', async (c) => {
   }
   try {
     const chainData = chainDataProvider(c.env)
-    const [holdings, dbusdcBalance, deepBalance, suiBalance] = await Promise.all([
+    const [holdings, executionReadiness] = await Promise.all([
       chainData.getBalances(owner),
-      chainData.readBalanceManagerBalance(DEPLOYMENT.deepbook.dbusdc_coin_type),
-      chainData.readBalanceManagerBalance(DEPLOYMENT.deepbook.deep_coin_type),
-      chainData.getAgentSuiGasBalance(DEPLOYMENT.agent.address),
+      buildExecutionReadiness({
+        env: c.env,
+        chainData,
+        requested: {
+          dbusdc_threshold: c.req.query('dbusdc_threshold'),
+          deep_threshold: c.req.query('deep_threshold'),
+          sui_gas_threshold: c.req.query('sui_gas_threshold'),
+        },
+      }),
     ])
-    const thresholds = resolveFundingThresholds({
-      configured: {
-        DBUSDC: c.env.REQUIRED_DBUSDC_BALANCE,
-        DEEP: c.env.REQUIRED_DEEP_BALANCE,
-        SUI_MIST: c.env.REQUIRED_AGENT_SUI_GAS_MIST,
-      },
-      requested: {
-        DBUSDC: c.req.query('dbusdc_threshold'),
-        DEEP: c.req.query('deep_threshold'),
-        SUI_MIST: c.req.query('sui_gas_threshold'),
-      },
-    }) as Record<string, { required: string; configured: string; requested: string | null; source: string }>
-    const funding = buildFundingReadiness({
-      agentAddress: DEPLOYMENT.agent.address,
-      balanceManagerId: DEPLOYMENT.agent.balance_manager_id,
-      dbusdcBalance: dbusdcBalance.toString(),
-      deepBalance: deepBalance.toString(),
-      suiBalanceMist: String(suiBalance.totalBalance ?? '0'),
-      executionEnabled: c.env.EXECUTION_ENABLED === 'true',
-      requiredDbusdcBalance: thresholds.DBUSDC.required,
-      requiredDeepBalance: thresholds.DEEP.required,
-      requiredSuiGasMist: thresholds.SUI_MIST.required,
-      thresholdMetadata: thresholds,
-    })
+    const funding = executionReadiness.funding
     return c.json({
       status: 'ok',
       owner,
@@ -371,8 +373,10 @@ app.get('/api/balances', async (c) => {
       },
       sui_gas: { holder: DEPLOYMENT.agent.address, balance_mist: funding.balances.SUI_MIST },
       funding,
+      execution_readiness: executionReadiness,
       readiness_state: funding.readiness_state,
       ready: funding.ready,
+      execution_ready: executionReadiness.execution_ready,
       blockers: funding.blockers,
       blocker_labels: funding.blocker_labels,
       blocker_codes: funding.blocker_codes,

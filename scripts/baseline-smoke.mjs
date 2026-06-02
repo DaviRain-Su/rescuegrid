@@ -136,6 +136,16 @@ async function main() {
   assert('runtime status data provider is Worker-first', provider.worker_first === true && typeof provider.kind === 'string', provider.kind || 'missing')
   assert('runtime status does not leak worker secrets', secretValues.every((value) => !runtimeText.includes(value)), 'secret values absent')
 
+  const executionReadinessStatus = await checkJson(`${WORKER_URL}/api/execution/readiness`)
+  const executionReadiness = executionReadinessStatus.json || {}
+  const readinessText = executionReadinessStatus.text || ''
+  assert('worker execution readiness reachable', executionReadinessStatus.ok && executionReadinessStatus.status === 200 && executionReadiness.status === 'ok', `${WORKER_URL}/api/execution/readiness status=${executionReadinessStatus.status}`)
+  assert('execution readiness is Sui Testnet DeepBook scope', executionReadiness.chain === 'sui:testnet' && executionReadiness.scope?.executor_kind === 'deepbook', executionReadiness.scope?.executor_kind || 'missing')
+  assert('execution readiness reports deployment BalanceManager', executionReadiness.agent?.balance_manager_id === DEPLOYMENT.agent.balance_manager_id, executionReadiness.agent?.balance_manager_id || 'missing')
+  assert('execution readiness mirrors runtime signer gate', executionReadiness.execution?.enabled === execution.enabled && executionReadiness.signer?.kind === signer.kind, `kind=${executionReadiness.signer?.kind || 'missing'} enabled=${executionReadiness.execution?.enabled}`)
+  assert('execution readiness does not claim execution success', executionReadiness.execution_claimed === false, 'readiness is preflight only')
+  assert('execution readiness does not leak worker secrets', secretValues.every((value) => !readinessText.includes(value)), 'secret values absent')
+
   const client = getClient()
   const checkpoint = await client.getLatestCheckpointSequenceNumber()
   assert('Sui Testnet fullnode reachable', Number(checkpoint) > 0, `latest_checkpoint=${checkpoint}`)
@@ -180,6 +190,7 @@ async function main() {
   })
   assert('execution-disabled gate blocks live execution', gateDecision.action === 'blocked' && gateDecision.code === 'EXECUTION_DISABLED', gateDecision.code)
   assert('unfunded BalanceManager is not execution-ready', dbusdcBalance === 0n || deepBalance === 0n, 'funding blocker remains explicit; no execution tx submitted')
+  assert('Worker readiness endpoint exposes the same funding gate', executionReadiness.execution_ready === false && Array.isArray(executionReadiness.blocker_codes) && executionReadiness.blocker_codes.length > 0, (executionReadiness.blocker_codes || []).join(','))
 
   if (failures > 0) {
     console.log(`Baseline smoke failed: ${failures} check(s) failed.`)

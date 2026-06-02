@@ -12,8 +12,7 @@ import { setTimeout as delay } from 'node:timers/promises'
 import { Transaction } from '@mysten/sui/transactions'
 import { strategyHash } from '../src/strategy-core.js'
 import { getClient, readPolicyCreated, DEPLOYMENT } from '../src/sui-tx.js'
-import { readBalanceManagerBalance, readMandate, readWrapper } from '../src/chain.js'
-import { buildFundingReadiness } from '../src/read-surfaces.js'
+import { readMandate, readWrapper } from '../src/chain.js'
 import { loadAgentKeypairFromDevVars, readWorkerDevVar } from './agent-key-loader.mjs'
 
 const args = new Map()
@@ -168,57 +167,29 @@ function assertTickLeg(result, { requireExecution = false } = {}) {
 
 async function strictExecutionPreflight(strategy) {
   if (!requireExecution) return null
-  let runtimeStatus
-  let funding
   try {
-    const [status, dbusdcBalance, deepBalance, suiBalance] = await Promise.all([
-      getJson('/api/runtime/status'),
-      readBalanceManagerBalance(client, DEPLOYMENT.deepbook.dbusdc_coin_type),
-      readBalanceManagerBalance(client, DEPLOYMENT.deepbook.deep_coin_type),
-      client.getBalance({ owner: DEPLOYMENT.agent.address, coinType: '0x2::sui::SUI' }),
-    ])
-    runtimeStatus = status
-    funding = buildFundingReadiness({
-      agentAddress: DEPLOYMENT.agent.address,
-      balanceManagerId: DEPLOYMENT.agent.balance_manager_id,
-      dbusdcBalance: dbusdcBalance.toString(),
-      deepBalance: deepBalance.toString(),
-      suiBalanceMist: String(suiBalance.totalBalance ?? '0'),
-      executionEnabled: runtimeStatus.execution?.enabled === true,
-      requiredDbusdcBalance: strategy.execution.max_single_trade_amount,
-      requiredDeepBalance: '1',
-      requiredSuiGasMist: '1',
-    })
+    const readiness = await getJson(
+      `/api/execution/readiness?dbusdc_threshold=${encodeURIComponent(strategy.execution.max_single_trade_amount)}&deep_threshold=1&sui_gas_threshold=1`,
+    )
+    const evidence = {
+      execution: readiness.execution,
+      signer: readiness.signer,
+      funding: {
+        balances: readiness.funding?.balances,
+        thresholds: readiness.funding?.thresholds,
+        execution_ready: readiness.execution_ready,
+        execution_blocker_codes: readiness.blocker_codes,
+        funding_blocker_codes: readiness.funding_blocker_codes,
+      },
+    }
+    assert(readiness.execution_ready === true, 'Strict demo execution preflight failed before policy creation', evidence)
+    return evidence
   } catch (e) {
     fail('Strict demo execution preflight failed before policy creation', {
       code: 'STRICT_PREFLIGHT_READ_FAILED',
       detail: e?.message || String(e),
     })
   }
-
-  const evidence = {
-    execution: {
-      configured: runtimeStatus.execution?.configured === true,
-      enabled: runtimeStatus.execution?.enabled === true,
-      mode: runtimeStatus.execution?.mode ?? null,
-      blocker_code: runtimeStatus.execution?.blocker_code ?? null,
-    },
-    signer: {
-      kind: runtimeStatus.signer?.kind ?? null,
-      available: runtimeStatus.signer?.available === true,
-      execution_enabled: runtimeStatus.signer?.execution_enabled === true,
-      unavailable_code: runtimeStatus.signer?.unavailable_code ?? null,
-    },
-    funding: {
-      balances: funding.balances,
-      thresholds: funding.thresholds,
-      execution_ready: funding.execution_ready,
-      execution_blocker_codes: funding.execution_blocker_codes,
-      funding_blocker_codes: funding.blocker_codes,
-    },
-  }
-  assert(funding.execution_ready === true, 'Strict demo execution preflight failed before policy creation', evidence)
-  return evidence
 }
 
 async function cleanupRevokeCreatedPolicy(wrapperId) {

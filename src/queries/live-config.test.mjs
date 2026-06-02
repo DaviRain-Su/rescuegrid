@@ -10,7 +10,7 @@ import {
 
 const owner = '0x1111111111111111111111111111111111111111111111111111111111111111'
 const mode = 'cloud'
-const resources = ['policies', 'activity', 'summary', 'market', 'balances', 'runtime-status']
+const resources = ['policies', 'activity', 'summary', 'market', 'balances', 'runtime-status', 'execution-readiness']
 
 assert.equal(LIVE_REFETCH_INTERVAL, 5_000)
 assert.equal(LIVE_STALE_TIME, 5_000)

@@ -136,6 +136,8 @@ export function buildFundingReadiness({
   requiredDeepBalance = '1',
   requiredSuiGasMist = '1',
   thresholdMetadata = {},
+  executionBlockerCode = 'EXECUTION_DISABLED',
+  executionBlockerLabel = 'Execution disabled',
 }) {
   const balances = {
     DBUSDC: numericString(dbusdcBalance),
@@ -187,7 +189,7 @@ export function buildFundingReadiness({
   }
   const blockers = []
   if (!executionEnabled) {
-    blockers.push({ code: 'EXECUTION_DISABLED', label: 'Execution disabled', observed: 'false', required: 'true' })
+    blockers.push({ code: executionBlockerCode || 'EXECUTION_DISABLED', label: executionBlockerLabel || 'Execution disabled', observed: 'false', required: 'true' })
   }
   for (const row of criteria) {
     if (row.usable) continue
@@ -198,7 +200,8 @@ export function buildFundingReadiness({
     }
     blockers.push({ code: row.blocker_code, label: labels[row.blocker_code], holder: row.holder, asset: row.asset, observed: row.observed_balance, required: row.threshold })
   }
-  const fundingBlockers = blockers.filter((b) => b.code !== 'EXECUTION_DISABLED')
+  const executionGateCode = executionBlockerCode || 'EXECUTION_DISABLED'
+  const fundingBlockers = blockers.filter((b) => b.code !== executionGateCode)
   const fundingReady = fundingBlockers.length === 0
   const executionReady = blockers.length === 0
 

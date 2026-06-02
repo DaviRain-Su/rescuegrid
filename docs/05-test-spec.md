@@ -223,6 +223,22 @@ Security / boundary:
 - `execution.enabled` 只有在 signer available 且 `EXECUTION_ENABLED=true` 时才为 true。
 - Profile / Accounts UI 必须把 status 作为可见状态展示，不能把 `execution_configured=true` 当成可执行。
 
+### `GET /api/execution/readiness`
+
+Happy path:
+
+- 返回 `chain=sui:testnet`、`scope.executor_kind=deepbook`、`scope.market_id=SUI_DBUSDC`、部署 agent address、BalanceManager id 和 AgentPassport id。
+- 返回 runtime signer/status evidence、BalanceManager DBUSDC/DEEP、agent SUI gas、thresholds、funding blockers 和 execution blockers。
+- 当 `EXECUTION_ENABLED=false` 或 signer unavailable 时，`execution_ready=false` 且 `blocker_codes` 包含执行 blocker。
+- 当 BalanceManager 缺少 DBUSDC/DEEP 或 agent 缺少 SUI gas 时，`funding_ready=false` 且 `funding_blocker_codes` 包含对应资产 blocker。
+- `dbusdc_threshold`、`deep_threshold`、`sui_gas_threshold` 请求参数只能提高本次检查门槛，不能低于 Worker 配置的 minimum。
+
+Security / boundary:
+
+- 响应不得包含 `AGENT_KEY`、owner key、WaaP session file、permission token 或任何 secret value。
+- `execution_claimed` 必须始终为 `false`；只有实际 tick 返回 `AgentTradeExecuted` + spend increase 才能声明执行成功。
+- `npm run demo:execute` strict preflight 必须使用该 endpoint，而不是维护第二套资金/签名判断。
+
 ### `POST /api/agent/tick`
 
 Happy path:

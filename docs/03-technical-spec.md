@@ -733,6 +733,49 @@ Rules:
 - Production Mainnet must not use `worker-secret`; it must use an external/user-controlled signer mode.
 - The frontend must treat this endpoint as status evidence only. It cannot infer that execution is allowed unless `execution.enabled=true`.
 
+### `GET /api/execution/readiness`
+
+Returns the combined execution preflight for cloud agent, local daemon and UI surfaces. This endpoint is read-only and must not submit a transaction or claim execution success.
+
+Response:
+
+```json
+{
+  "status": "ok",
+  "chain": "sui:testnet",
+  "scope": {
+    "executor_kind": "deepbook",
+    "market_id": "SUI_DBUSDC",
+    "pool_id": "0x...",
+    "budget_coin_type": "0x...::DBUSDC::DBUSDC"
+  },
+  "agent": {
+    "address": "0x...",
+    "balance_manager_id": "0x...",
+    "passport_id": "0x..."
+  },
+  "signer": { "kind": "worker-secret", "available": false },
+  "execution": { "configured": false, "enabled": false, "blocker_code": "EXECUTION_DISABLED" },
+  "funding": {
+    "funding_ready": false,
+    "execution_ready": false,
+    "balances": { "DBUSDC": "0", "DEEP": "0", "SUI_MIST": "0" },
+    "execution_blocker_codes": ["EXECUTION_DISABLED", "INSUFFICIENT_DBUSDC", "INSUFFICIENT_DEEP"]
+  },
+  "ready": false,
+  "execution_ready": false,
+  "execution_claimed": false
+}
+```
+
+Rules:
+
+- `ready` / `execution_ready` are true only when signer execution is enabled and DBUSDC, DEEP and SUI gas thresholds are satisfied.
+- Query parameters `dbusdc_threshold`, `deep_threshold` and `sui_gas_threshold` may raise the required threshold for a strict demo or future policy, but they cannot weaken configured minimums.
+- `/api/balances` may include the same `funding` and `execution_readiness` object for Profile compatibility, but callers that need execution preflight should prefer this endpoint.
+- `execution_claimed` is always false here; only a real tick result with `AgentTradeExecuted` and spend increase can claim execution.
+- The response must not include `AGENT_KEY`, owner key, WaaP session file, permission token or secret values.
+
 ### `GET /api/risk/controls`
 
 Returns Worker-persisted owner runtime risk controls. When `owner` is provided, the Durable Object response is filtered to that owner; unfiltered reads are used only by the internal tick path and runtime core still matches controls against the wrapper owner before blocking.
