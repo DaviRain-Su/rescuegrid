@@ -8,11 +8,12 @@
     "dev": "wrangler dev",
     "deploy": "wrangler deploy",
     "typecheck": "tsc --noEmit",
+    "daemon": "node scripts/daemon.mjs",
     "test:hash": "node test/hash-vectors.mjs",
     "test:guardian": "node test/guardian-test.mjs",
     "test:tick": "node test/tick-test.mjs",
     "demo:loop": "node scripts/validate-demo-loop.mjs",
-    "test": "node test/hash-vectors.mjs && node test/parse-intent-test.mjs && node test/guardian-test.mjs && node test/tick-test.mjs && node test/tick-auth-test.mjs && node test/read-surfaces-test.mjs && node test/runtime-activity-test.mjs && node test/policy-event-feed-test.mjs && node test/active-policy-limit-test.mjs && node test/revoke-api-test.mjs && node test/executor-adapters-test.mjs && node test/secret-safe-signer-test.mjs && node test/signer-adapters-test.mjs && node test/validate-policy-loop-cli-test.mjs"
+    "test": "node test/hash-vectors.mjs && node test/parse-intent-test.mjs && node test/guardian-test.mjs && node test/tick-test.mjs && node test/tick-auth-test.mjs && node test/read-surfaces-test.mjs && node test/runtime-activity-test.mjs && node test/policy-event-feed-test.mjs && node test/active-policy-limit-test.mjs && node test/revoke-api-test.mjs && node test/executor-adapters-test.mjs && node test/secret-safe-signer-test.mjs && node test/signer-adapters-test.mjs && node test/daemon-cli-test.mjs && node test/validate-policy-loop-cli-test.mjs"
   },
   "dependencies": {
     "@mysten/sui": "^1.45.2",

@@ -40,6 +40,10 @@ lerna-debug.log*
 # gstack
 .gstack/
 
+# RescueGrid local daemon state
+.rescuegrid/
+worker/.rescuegrid/
+
 # Sui Move build output
 move/**/build/
 
