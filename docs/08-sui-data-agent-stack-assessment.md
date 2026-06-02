@@ -41,6 +41,8 @@ Recommended direction:
 5. Reserve gRPC for low-latency agent monitoring once live execution matters.
 6. Use Archival Store-backed providers for historical activity, strategy performance, and judge/demo replay.
 
+Implementation status: J1 is partially implemented in `worker/src/chain-data-provider.js`. The default `JsonRpcChainDataProvider` wraps the current SuiClient/JSON-RPC path and is now used by Worker read endpoints, `runTick` and Durable Object price monitoring. `GraphqlChainDataProvider` remains a planned provider behind the same Worker contract; do not move GraphQL reads into the browser.
+
 Do not wire the frontend directly to GraphQL as the main production path. The Worker should stay the read contract so frontend, local daemon, and future operator console see the same state semantics.
 
 ## 2. Seal + Walrus

@@ -324,6 +324,7 @@ Production hardening backlog:
 
 - Dedicated event indexer.
 - Migrate Worker reads behind a `ChainDataProvider` boundary from JSON-RPC/SuiClient reads to Sui GraphQL RPC, with gRPC reserved for low-latency agent monitoring and Archival Store-backed providers for history/replay.
+- Current implementation: `worker/src/chain-data-provider.js` exposes `JsonRpcChainDataProvider` as the default read provider. Worker API routes, `runTick` and Durable Object price monitoring resolve reads through this boundary; GraphQL remains a planned read-only provider behind the same Worker contract.
 - Optional Seal + Walrus encrypted policy record layer for private strategy snapshots, backtests, reasoning traces and incident reports; never for wallet or agent private keys.
 - Optional `SignerAdapter` layer for local daemon, hardware signer, remote signer or WaaP-style two-party signing; MoveGate + RescuePolicyWrapper remain the Sui on-chain enforcement layer.
 - Direct owner emergency revoke script.

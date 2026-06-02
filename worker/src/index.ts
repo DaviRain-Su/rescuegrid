@@ -7,8 +7,8 @@ import { bodyLimit } from 'hono/body-limit'
 import { parseIntent } from './parse.js'
 import { strategyHash } from './strategy-core.js'
 import { buildCreatePolicyTx, buildRevokeTx } from './sui-tx.js'
-import { countActivePoliciesByDeployment, getActivity, listPoliciesByOwner, listActivityByOwner, getOwnerSummary, getMarket, getBalances, readMandate, readWrapper, readBalanceManagerBalance, policyEventsToFeedItems } from './chain.js'
-import { getClient, DEPLOYMENT } from './sui-tx.js'
+import { requireChainDataProvider } from './chain-data-provider.js'
+import { DEPLOYMENT } from './sui-tx.js'
 import { runTick, validateExecutionPlan } from './tick.js'
 import { validateForceTrigger, validateTickAuthorization, validateTickBody } from './tick-auth.js'
 import { buildFundingReadiness, parseIntentWithStability, resolveFundingThresholds } from './read-surfaces.js'
@@ -36,11 +36,17 @@ export interface Env {
   REQUIRED_DBUSDC_BALANCE?: string
   REQUIRED_DEEP_BALANCE?: string
   REQUIRED_AGENT_SUI_GAS_MIST?: string
+  CHAIN_DATA_PROVIDER?: string
+  RESCUEGRID_CHAIN_DATA_PROVIDER?: string
 }
 
 const app = new Hono<{ Bindings: Env }>()
 const PARSE_CACHE_MAX_ENTRIES = 200
 const parseCache = new Map<string, Record<string, unknown>>()
+function chainDataProvider(env: Env): any {
+  return requireChainDataProvider(env) as any
+}
+
 function setParseCache(key: string, value: Record<string, unknown>) {
   if (parseCache.size >= PARSE_CACHE_MAX_ENTRIES) {
     const firstKey = parseCache.keys().next().value
@@ -137,7 +143,8 @@ app.post('/api/policies', async (c) => {
 
   let activePolicyLimit
   try {
-    activePolicyLimit = await countActivePoliciesByDeployment({
+    const chainData = chainDataProvider(c.env)
+    activePolicyLimit = await chainData.countActivePoliciesByDeployment({
       limit: MAX_ACTIVE_POLICIES_PER_DEPLOYMENT,
     })
   } catch (e) {
@@ -174,7 +181,8 @@ app.get('/api/policies/:wrapper_id/activity', async (c) => {
     return c.json({ status: 'error', code: 'BAD_REQUEST', message: 'Invalid wrapper id.' }, 400)
   }
   try {
-    const result = await getActivity(wrapperId)
+    const chainData = chainDataProvider(c.env)
+    const result = await chainData.getActivity(wrapperId)
     if (result.status !== 'ok') return c.json(result, 404)
 
     // E8: reconcile Durable Object runtime state with chain. Chain wins.
@@ -182,7 +190,7 @@ app.get('/api/policies/:wrapper_id/activity', async (c) => {
     const runtimeActivity = await readRuntimeActivity(c.env, wrapperId)
     const p = reconcilePolicyRuntimeState(result.policy as Record<string, any>, runtimeState)
     const policyLabel = shortWrapperId(wrapperId)
-    const chainActivity = policyEventsToFeedItems(result.events, policyLabel)
+    const chainActivity = chainData.policyEventsToFeedItems(result.events, policyLabel)
     const runtimeFeed = runtimeActivity.map((event) => runtimeEventToFeedItem(event, policyLabel))
 
     return c.json({
@@ -205,10 +213,11 @@ app.get('/api/policies', async (c) => {
     return c.json({ status: 'error', code: 'BAD_REQUEST', message: 'owner query param required.' }, 400)
   }
   try {
-    const policies = await listPoliciesByOwner(owner)
-    const runtimePairs = await Promise.all(policies.map(async (policy: any) => {
+    const chainData = chainDataProvider(c.env)
+    const policies = await chainData.listPoliciesByOwner(owner)
+    const runtimePairs: [string | null, Record<string, any> | null][] = await Promise.all(policies.map(async (policy: any) => {
       const runtime = policy.wrapper_id ? await readRuntimeState(c.env, policy.wrapper_id) : null
-      return [policy.wrapper_id, runtime]
+      return [policy.wrapper_id ?? null, runtime] as [string | null, Record<string, any> | null]
     }))
     const runtimeByWrapperId = Object.fromEntries(runtimePairs.filter(([wrapperId]) => Boolean(wrapperId)))
     return c.json({ status: 'ok', policies: reconcilePolicyListRuntimeState(policies, runtimeByWrapperId) })
@@ -224,7 +233,8 @@ app.get('/api/summary', async (c) => {
     return c.json({ status: 'error', code: 'BAD_REQUEST', message: 'owner query param required.' }, 400)
   }
   try {
-    return c.json({ status: 'ok', summary: await getOwnerSummary(owner) })
+    const chainData = chainDataProvider(c.env)
+    return c.json({ status: 'ok', summary: await chainData.getOwnerSummary(owner) })
   } catch (e) {
     return c.json({ status: 'error', code: 'CHAIN_READ_FAILED', message: String((e as Error).message) }, 502)
   }
@@ -232,7 +242,8 @@ app.get('/api/summary', async (c) => {
 
 app.get('/api/market', async (c) => {
   try {
-    return c.json({ status: 'ok', market: await getMarket() })
+    const chainData = chainDataProvider(c.env)
+    return c.json({ status: 'ok', market: await chainData.getMarket() })
   } catch (e) {
     return c.json({ status: 'error', code: 'MARKET_READ_FAILED', message: String((e as Error).message) }, 502)
   }
@@ -244,12 +255,12 @@ app.get('/api/balances', async (c) => {
     return c.json({ status: 'error', code: 'BAD_REQUEST', message: 'owner query param required.' }, 400)
   }
   try {
-    const client = getClient()
+    const chainData = chainDataProvider(c.env)
     const [holdings, dbusdcBalance, deepBalance, suiBalance] = await Promise.all([
-      getBalances(owner),
-      readBalanceManagerBalance(client, DEPLOYMENT.deepbook.dbusdc_coin_type),
-      readBalanceManagerBalance(client, DEPLOYMENT.deepbook.deep_coin_type),
-      client.getBalance({ owner: DEPLOYMENT.agent.address, coinType: '0x2::sui::SUI' }),
+      chainData.getBalances(owner),
+      chainData.readBalanceManagerBalance(DEPLOYMENT.deepbook.dbusdc_coin_type),
+      chainData.readBalanceManagerBalance(DEPLOYMENT.deepbook.deep_coin_type),
+      chainData.getAgentSuiGasBalance(DEPLOYMENT.agent.address),
     ])
     const thresholds = resolveFundingThresholds({
       configured: {
@@ -305,8 +316,9 @@ app.get('/api/activity', async (c) => {
     return c.json({ status: 'error', code: 'BAD_REQUEST', message: 'owner query param required.' }, 400)
   }
   try {
-    const chainActivity = await listActivityByOwner(owner)
-    const policies = await listPoliciesByOwner(owner)
+    const chainData = chainDataProvider(c.env)
+    const chainActivity = await chainData.listActivityByOwner(owner)
+    const policies = await chainData.listPoliciesByOwner(owner)
     const runtimeActivity = await runtimeFeedForWrappers(c.env, policies.map((p: any) => p.wrapper_id).filter(Boolean))
     return c.json({
       status: 'ok',
@@ -331,9 +343,9 @@ app.post('/api/policies/:wrapper_id/revoke', async (c) => {
   try { body = await c.req.json() } catch { return c.json({ status: 'error', code: 'BAD_REQUEST', message: 'Invalid JSON.' }, 400) }
   if (!body.confirmed) return c.json({ status: 'error', code: 'CONFIRM_REQUIRED', message: 'confirmed must be true.' }, 400)
   try {
-    const client = getClient()
-    const wrapper = await readWrapper(client, wrapperId)
-    const mandate = wrapper ? await readMandate(client, wrapper.mandate_id) : null
+    const chainData = chainDataProvider(c.env)
+    const wrapper = await chainData.readWrapper(wrapperId)
+    const mandate = wrapper ? await chainData.readMandate(wrapper.mandate_id) : null
     const preflight = revokePolicyPreflight({ wrapper, mandate, owner: body.owner })
     if (!preflight.ok) return c.json(preflight.body, preflight.status as 400)
     const liveWrapper = wrapper!
@@ -357,9 +369,9 @@ app.post('/api/policies/:wrapper_id/activate', async (c) => {
   let body: { strategy?: Strategy } = {}
   try { body = await c.req.json() } catch { /* activate may carry no body */ }
   try {
-    const client = getClient()
-    const wrapper = await readWrapper(client, wrapperId)
-    const mandate = wrapper ? await readMandate(client, wrapper.mandate_id) : null
+    const chainData = chainDataProvider(c.env)
+    const wrapper = await chainData.readWrapper(wrapperId)
+    const mandate = wrapper ? await chainData.readMandate(wrapper.mandate_id) : null
     const preflight = activationPolicyPreflight({ wrapper, mandate, strategy: body.strategy ?? null })
     if (!preflight.ok) return c.json(preflight.body, preflight.status as 400)
   } catch (e) {
@@ -426,7 +438,7 @@ app.post('/api/execution/validate-plan', async (c) => {
     return c.json({ status: 'error', code: 'BAD_REQUEST', message: 'Invalid proposed.agent_id.' }, 400)
   }
 
-  const result = await validateExecutionPlan(getClient(), {
+  const result = await validateExecutionPlan(chainDataProvider(c.env), {
     wrapperId: body.wrapper_id,
     mandateId: body.mandate_id,
     proposed: {
@@ -556,10 +568,8 @@ export class AgentRuntime {
   async monitorPrice(asset: string): Promise<number> {
     const pool = asset === 'SUI' ? 'SUI_DBUSDC' : null
     if (!pool) return 0
-    const r = await fetch('https://deepbook-indexer.testnet.mystenlabs.com/ticker')
-    if (!r.ok) return 0
-    const j = (await r.json()) as Record<string, { last_price?: number }>
-    return Number(j[pool]?.last_price) || 0
+    const market = await chainDataProvider(this.env).getMarket() as Record<string, { last_price?: number }>
+    return Number(market[pool]?.last_price) || 0
   }
 
   async tickOnce(): Promise<Record<string, unknown>> {

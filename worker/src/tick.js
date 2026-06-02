@@ -1,11 +1,11 @@
 // E7 — agent tick. runTick() adds chain I/O + (gated) execution around the
 // shared Runtime Core. Allowed actions (docs §7):
 // no_op | blocked | executed | stopped_revoked | stopped_expired | error.
-import { readWrapper, readMandate, readBalanceManagerBalance, readClockTimestampMs } from './chain.js'
 import { DEPLOYMENT } from './sui-tx.js'
 import { buildFundingReadiness } from './read-surfaces.js'
 import { EXECUTOR_KIND_DEEPBOOK } from './executor-adapters.js'
 import { resolveSignerAdapter, signerExecutionEnabled } from './signer-adapters.js'
+import { requireChainDataProvider } from './chain-data-provider.js'
 import {
   buildProposedTrade,
   classifyExecutionResolution,
@@ -25,7 +25,12 @@ export {
   prepareRuntimeExecution,
 } from './runtime-core.js'
 
-export async function validateExecutionPlan(client, {
+function resolveProviderFromSource(source, env) {
+  if (source && typeof source.readWrapper === 'function') return source
+  return requireChainDataProvider(env, { client: source })
+}
+
+export async function validateExecutionPlan(chainSource, {
   wrapperId,
   mandateId,
   proposed,
@@ -33,10 +38,11 @@ export async function validateExecutionPlan(client, {
   expectedAgentId,
   executorKind = EXECUTOR_KIND_DEEPBOOK,
 }) {
-  const wrapper = await readWrapper(client, wrapperId)
+  const chainData = resolveProviderFromSource(chainSource)
+  const wrapper = await chainData.readWrapper(wrapperId)
   if (!wrapper) return { action: 'error', code: 'WRAPPER_NOT_FOUND', detail: 'Wrapper not found on-chain.', execution_claimed: false }
 
-  const clockMs = nowMs ?? await readClockTimestampMs(client)
+  const clockMs = nowMs ?? await chainData.readClockTimestampMs()
   if (!Number.isFinite(clockMs)) return { action: 'error', code: 'CLOCK_UNAVAILABLE', detail: 'Sui Clock timestamp was not readable.', execution_claimed: false }
   const planContext = await prepareRuntimeExecution({
     wrapperId,
@@ -77,7 +83,7 @@ export async function validateExecutionPlan(client, {
     }
   }
 
-  const mandate = await readMandate(client, wrapper.mandate_id)
+  const mandate = await chainData.readMandate(wrapper.mandate_id)
   if (!mandate) return { action: 'error', code: 'MANDATE_NOT_FOUND', detail: 'Mandate not found on-chain.', execution_claimed: false }
   const decision = decideTick({
     wrapper,
@@ -105,11 +111,11 @@ export async function validateExecutionPlan(client, {
   }
 }
 
-async function checkFunding(client, proposed, executionEnabled) {
+async function checkFunding(chainData, proposed, executionEnabled) {
   const [dbusdcBalance, deepBalance, suiBalance] = await Promise.all([
-    readBalanceManagerBalance(client, DEPLOYMENT.deepbook.dbusdc_coin_type),
-    readBalanceManagerBalance(client, DEPLOYMENT.deepbook.deep_coin_type),
-    client.getBalance({ owner: DEPLOYMENT.agent.address, coinType: '0x2::sui::SUI' }),
+    chainData.readBalanceManagerBalance(DEPLOYMENT.deepbook.dbusdc_coin_type),
+    chainData.readBalanceManagerBalance(DEPLOYMENT.deepbook.deep_coin_type),
+    chainData.getAgentSuiGasBalance(DEPLOYMENT.agent.address),
   ])
   const funding = buildFundingReadiness({
     agentAddress: DEPLOYMENT.agent.address,
@@ -133,10 +139,11 @@ async function checkFunding(client, proposed, executionEnabled) {
  */
 export async function runTick(env, p) {
   const client = (await import('./sui-tx.js')).getClient()
-  const nowMs = p.nowMs ?? await readClockTimestampMs(client) ?? Date.now()
-  const wrapper = await readWrapper(client, p.wrapperId)
+  const chainData = requireChainDataProvider(env, { client })
+  const nowMs = p.nowMs ?? await chainData.readClockTimestampMs() ?? Date.now()
+  const wrapper = await chainData.readWrapper(p.wrapperId)
   if (!wrapper) return { action: 'error', code: 'WRAPPER_NOT_FOUND', detail: 'Wrapper not found on-chain.', execution_claimed: false }
-  const mandate = await readMandate(client, wrapper.mandate_id)
+  const mandate = await chainData.readMandate(wrapper.mandate_id)
   if (!mandate) return { action: 'error', code: 'MANDATE_NOT_FOUND', detail: 'Mandate not found on-chain.', execution_claimed: false }
 
   // Trigger: force_trigger (demo) or a real price-drop evaluation supplied by the caller.
@@ -177,7 +184,7 @@ export async function runTick(env, p) {
     return { ...decision, wrapper_id: p.wrapperId, mandate_id: wrapper.mandate_id }
   }
 
-  const fundingBlock = await checkFunding(client, proposed, executionEnabled)
+  const fundingBlock = await checkFunding(chainData, proposed, executionEnabled)
   if (fundingBlock) {
     return { action: 'blocked', ...fundingBlock, wrapper_id: p.wrapperId, mandate_id: wrapper.mandate_id }
   }
@@ -219,7 +226,7 @@ export async function runTick(env, p) {
 
     let afterWrapper = null
     try {
-      afterWrapper = await readWrapper(client, p.wrapperId)
+      afterWrapper = await chainData.readWrapper(p.wrapperId)
     } catch {
       afterWrapper = null
     }
