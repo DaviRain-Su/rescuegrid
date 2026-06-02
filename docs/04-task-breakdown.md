@@ -106,6 +106,8 @@ Current H4/H5 implementation status: `/api/adapters/candidates` exposes the Sui-
 
 Current H6 implementation status: `/api/protocols/watch-boundaries` exposes 15 Sui-only watch boundaries for Bucket, Current, SpringSui, Haedal, Volo, AlphaFi, Kai, Mole, Ondo, KAIO, MatrixDock, Ember, Bluefin Pro, Sudo and DipCoin. The registry records readable state, redemption/liquidity/issuer/margin risk domains, future target fields and no-execution reasons. DipCoin is `roadmap_only` because it is not in the current DefiLlama top-26 registry baseline; all rows keep `registered_executor=false`, `execution_enabled=false` and `execution_blocker_code=WATCH_ONLY_BOUNDARY`.
 
+Current H7 implementation status: `worker/src/executor-adapter-sdk.js` is the adapter SDK skeleton. It defines the required interface, liquidity/volume gate methods, conformance requirements, `createAdapterGate`, registry construction and unsupported-executor helpers. `worker/src/deepbook-adapter.js` is the first plugin, while `worker/src/executor-adapters.js` only assembles the registered registry. `worker/test/executor-adapter-sdk-test.mjs` and `worker/test/executor-adapters-test.mjs` lock the SDK contract, duplicate-kind rejection, missing-method rejection, DeepBook target support and unsigned PTB build boundary.
+
 ## Phase I - Post-MVP Multivenue Expansion
 
 Phase I is a product expansion track, not a hackathon dependency. Planning baseline: [`docs/06-post-mvp-multivenue-roadmap.md`](06-post-mvp-multivenue-roadmap.md).

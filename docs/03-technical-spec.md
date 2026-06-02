@@ -65,7 +65,10 @@ interface ExecutorAdapter {
   kind: ExecutorKind;
   supportsTarget(target_id: string): boolean;
   readMarket(policy: PolicySnapshot): Promise<MarketSnapshot>;
+  liquidityGate(policy: PolicySnapshot, market: MarketSnapshot): AdapterGate;
+  volumeGate(policy: PolicySnapshot, market: MarketSnapshot): AdapterGate;
   planExecution(policy: PolicySnapshot, strategy: StructuredStrategy, market: MarketSnapshot): Promise<ExecutionPlan>;
+  preview(plan: ExecutionPlan): string[];
   buildPtb(plan: ExecutionPlan, auth: MoveGateAuthContext): Promise<Transaction>;
   parseExecutionResult(result: SuiTransactionResult): Promise<ActivityEvent>;
 }
@@ -80,6 +83,13 @@ Rules:
 - Guardian checks run against the `ExecutionPlan`; an adapter cannot submit directly.
 - `quote_amount`, `estimated_slippage_bps`, `target_id`, and `action_type` must match the values encoded in the PTB.
 - Runtime Core must use the same adapter interface in Worker/Durable Object and future CLI daemon code.
+
+H7 adapter SDK status:
+
+- `worker/src/executor-adapter-sdk.js` owns `EXECUTOR_ADAPTER_SDK_VERSION`, required interface methods, liquidity/volume gate methods, conformance requirements, `createAdapterGate`, registry construction and stable unsupported-executor error helpers.
+- `worker/src/deepbook-adapter.js` is the first adapter plugin. It contains DeepBook target support, market read passthrough, liquidity/volume gate metadata, plan/preview, unsigned PTB build and execution-result parsing.
+- `worker/src/executor-adapters.js` is now the registered-adapter assembly point. It still registers only `deepbook`, but future adapters must pass `assertExecutorAdapterConformance` before entering the registry.
+- `worker/test/executor-adapter-sdk-test.mjs` covers the SDK contract, gate shape, duplicate kind rejection and missing-method rejection. `worker/test/executor-adapters-test.mjs` covers the registered DeepBook plugin and target-gated unsigned PTB build.
 
 Post-MVP adapter candidates:
 

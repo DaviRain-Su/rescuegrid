@@ -267,6 +267,8 @@ Advisory:
 - `deepbook` 是唯一 MVP registered adapter。
 - unknown `executor_kind` 返回 `UNSUPPORTED_EXECUTOR`。
 - Runtime Core 只能通过 registry 获取 adapter，不能直接 import Deepbook execution path。
+- Adapter SDK conformance test 必须拒绝缺少 `readMarket`、`planExecution`、`buildPtb`、`parseExecutionResult`、`liquidityGate` 或 `volumeGate` 的 adapter。
+- Adapter SDK registry 必须拒绝重复 `kind`，并通过 `createAdapterGate` 固定 liquidity/volume gate 的公共 shape。
 
 ### ExecutionPlan conformance
 

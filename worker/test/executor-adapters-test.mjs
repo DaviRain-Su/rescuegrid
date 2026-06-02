@@ -1,6 +1,8 @@
 import assert from 'node:assert/strict'
 import {
+  ADAPTER_GATE_METHODS,
   ADAPTER_INTERFACE_METHODS,
+  EXECUTOR_ADAPTER_SDK_VERSION,
   EXECUTOR_KIND_DEEPBOOK,
   REGISTERED_EXECUTOR_KINDS,
   deepbookAdapter,
@@ -50,7 +52,15 @@ const proposed = {
   assert.deepEqual(REGISTERED_EXECUTOR_KINDS, [EXECUTOR_KIND_DEEPBOOK])
   assert.deepEqual(listExecutorAdapters(), [{
     kind: EXECUTOR_KIND_DEEPBOOK,
+    sdk_version: EXECUTOR_ADAPTER_SDK_VERSION,
     interface_methods: ADAPTER_INTERFACE_METHODS,
+    gate_methods: ADAPTER_GATE_METHODS,
+    conformance: {
+      ok: true,
+      kind: EXECUTOR_KIND_DEEPBOOK,
+      missing_methods: [],
+      missing_properties: [],
+    },
   }])
   assert.equal(getExecutorAdapter(EXECUTOR_KIND_DEEPBOOK), deepbookAdapter)
   assert.equal(getExecutorAdapter('cetus'), null)
