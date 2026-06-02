@@ -110,6 +110,7 @@ Happy path:
 - 不创建 MoveGate ActionReceipt。
 - 不改变 `spent_amount`。
 - `npm run safety:negative` 必须通过 live Worker + Sui Testnet fixture policy 证明 over-budget、over-slippage、wrong pool、wrong agent、mandate-wrapper mismatch、expired 和 revoked plans 全部通过 `/api/execution/validate-plan` 在提交前 blocked，且 wrapper spend、API spend、execution-success activity 和 `AgentTradeExecuted` chain activity 均不增加。
+- `npm run safety:negative:report` 必须在同一 live proof 全部通过后写 `.rescuegrid/safety-negative-report.json`，report 包含 `purpose=rescuegrid_safety_negative_report`、`phase=pass`、全部 blocker code、`submitted=false`、`execution_claimed=false`、spend unchanged、success activity unchanged 和 `chain_success_activity_total=0`。
 - `npm run safety:negative -- --help` 不得输出 `AGENT_KEY`、owner key、`INTERNAL_AGENT_TICK_TOKEN`、WaaP permission token 或任何 secret value。
 
 ## 3. Worker API Tests
@@ -337,6 +338,20 @@ Security / boundary:
 - `--out` 只在完整 strict execution pass 后写 report；preflight blocked 时不得创建 policy，也不得写出可被 `mission:readiness` 当作 success 的 report。
 - report 不得包含 `AGENT_KEY`、owner key、`INTERNAL_AGENT_TICK_TOKEN`、WaaP session file、permission token 或任何 secret value。
 
+### `npm run safety:negative:report`
+
+Happy path:
+
+- 等同于 `npm run safety:negative` 的 live Testnet safety proof，但在 active/expiring policy、validate-plan cases、revoke 和 post-revoke non-mutation checks 全部通过后写入 `.rescuegrid/safety-negative-report.json`。
+- report 必须包含 `purpose=rescuegrid_safety_negative_report`、`phase=pass`、`chain=sui:testnet`、active/expiring wrapper ids、active revoke tx digest、`assertions` 包含 `VAL-SAFETY-001`、`VAL-SAFETY-002`、`VAL-SAFETY-003`、`VAL-SAFETY-005`、`VAL-SAFETY-008`。
+- report 必须包含 validated codes：`OVER_BUDGET`、`OVER_SLIPPAGE`、`WRONG_POOL`、`WRONG_AGENT`、`MANDATE_MISMATCH`、`POLICY_EXPIRED`、`POLICY_REVOKED`。
+- 每个 evidence row 必须证明 `submitted=false`、`execution_claimed=false`、spend unchanged、execution-success activity unchanged、`chain_success_activity_count=0`。
+
+Security / boundary:
+
+- `--out` 只在完整 safety-negative pass 后写 report；任何 missing blocker、mutating blocker、claimed execution 或 chain success activity 都不得写出可被 `mission:readiness` 当作 success 的 report。
+- report 不得包含 `AGENT_KEY`、owner key、`INTERNAL_AGENT_TICK_TOKEN`、WaaP session file、permission token 或任何 secret value。
+
 ### `npm run funding:request`
 
 Happy path:
@@ -533,8 +548,9 @@ MVP desktop viewport:
 - `npm run test:wallet-flow` covers the frontend wallet orchestration contract with a mock signer: parse -> build `tx_json` -> wallet sign -> `waitForTransaction(showObjectChanges/showEvents)` -> require `PolicyCreated.wrapper_id` -> activate runtime, plus revoke build -> wallet sign.
 - `npm run test:wallet-evidence` covers the wallet click-through evidence artifact contract: the artifact is read-only, captures only public Worker status/readiness posture, lists create/revoke evidence fields, keeps `actual_clickthrough_completed=false` until manually filled, verifies filled create/revoke tx digests against Sui events, and never claims DeepBook execution.
 - `npm run wallet:evidence -- --format markdown --out .rescuegrid/wallet-clickthrough-evidence.md` must be run before real wallet QA; during the browser run, fill the artifact with owner address, create tx digest, `wrapper_id`, `mandate_id`, strategy hash, revoke tx digest and screenshots for sign-in, wallet approvals, active policy and revoked state. After filling it, `npm run wallet:evidence:verify -- --input .rescuegrid/wallet-clickthrough-evidence.md` must pass or report the exact missing/mismatched field.
-- `npm run test:mission-readiness` covers the final PRD readiness report contract: `status=ready` only when required scripts, filled wallet evidence, funding readiness and strict execution evidence all pass; incomplete wallet evidence, missing funding readiness or missing strict execution evidence must classify as `blocked`; contradictory artifacts such as a strict execution report with `execution_claimed=false`, missing `AgentTradeExecuted` evidence or missing spend increase must classify as `failed`.
+- `npm run test:mission-readiness` covers the final PRD readiness report contract: `status=ready` only when required scripts, safety-negative report evidence, filled wallet evidence, funding readiness and strict execution evidence all pass; incomplete safety report evidence, incomplete wallet evidence, missing funding readiness or missing strict execution evidence must classify as `blocked`; contradictory artifacts such as a safety report missing required blocker codes or a strict execution report with `execution_claimed=false`, missing `AgentTradeExecuted` evidence or missing spend increase must classify as `failed`.
 - `npm run test:demo-execution-report` covers the strict execution report helper: executed reports include `G2-EXECUTE`, `execution_claimed=true`, `agent_trade_event_found=true`, `spend_increased=true` and tx digests; funding-gated reports stay non-executed and cannot satisfy the mission gate.
+- `npm run test:safety-negative-report` covers the safety-negative report helper: reports only pass when all required blocker codes are present and every evidence row is pre-submission, non-executed, non-mutating and has no chain success activity.
 - `npm run mission:readiness` is read-only and may return non-zero while the project is externally blocked. It must not create policies, submit PTBs, call `demo:execute`, or print `AGENT_KEY`, owner key, `INTERNAL_AGENT_TICK_TOKEN`, WaaP permission token, WaaP session value or endpoint secrets.
 - Activity view shows events and budget within one 5 second polling interval after chain state changes.
 - `npm run test:activity-ledger` covers the Activity ledger normalization contract: signer blocker code extraction, WaaP approval evidence rows, signer-block filter state, non-signer funding blockers, and policy lookup by wrapper id.
@@ -589,10 +605,10 @@ Passing criteria:
 
 - At least one real Sui Testnet transaction is visible.
 - At least one real Deepbook-related execution is visible, or a documented Testnet blocker is explicitly shown by `npm run demo:loop` with fallback approved before demo.
-- `npm run safety:negative` provides the safety-negative acceptance proof for the fallback path: every known Guardian / wrapper / mandate blocker must be pre-submission and non-mutating.
+- `npm run safety:negative:report` provides the machine-readable safety-negative acceptance proof for the fallback path: every known Guardian / wrapper / mandate blocker must be pre-submission and non-mutating, and `.rescuegrid/safety-negative-report.json` must pass `mission:readiness`.
 - Once DBUSDC/DEEP funding is available, `npm run demo:execute` or `node worker/scripts/validate-demo-loop.mjs --require-execution` must replace the fallback path. Strict mode must preflight runtime signer status, BalanceManager DBUSDC/DEEP and agent SUI gas before policy creation, fail without creating a test policy when the known gate is not ready, and fail after creation unless the forced tick proves `AgentTradeExecuted`, `execution_claimed=true` and on-chain spend increase. To satisfy the final aggregate gate, run `npm run demo:execute:report` so the pass report is written to `.rescuegrid/demo-execute-report.json`.
 - Browser wallet evidence must include a filled `.rescuegrid/wallet-clickthrough-evidence.md` artifact from `npm run wallet:evidence` plus a passing `npm run wallet:evidence:verify -- --input .rescuegrid/wallet-clickthrough-evidence.md`; the generated blank artifact alone is not a passing click-through proof.
-- `npm run mission:readiness` must be the final aggregate gate before claiming the PRD complete. It may report `status=blocked` while DBUSDC/DEEP or manual wallet evidence is missing, but it must never report `status=ready` without a verified wallet artifact, funding readiness, and `.rescuegrid/demo-execute-report.json` proving strict `AgentTradeExecuted` execution.
+- `npm run mission:readiness` must be the final aggregate gate before claiming the PRD complete. It may report `status=blocked` while DBUSDC/DEEP, safety-negative report evidence or manual wallet evidence is missing, but it must never report `status=ready` without `.rescuegrid/safety-negative-report.json`, a verified wallet artifact, funding readiness, and `.rescuegrid/demo-execute-report.json` proving strict `AgentTradeExecuted` execution.
 - Revocation is visible both in UI and chain state.
 - No step requires exposing a user private key to the Agent.
 - The deployed agent address shown in preview matches the agent recorded in the Mandate and Wrapper.

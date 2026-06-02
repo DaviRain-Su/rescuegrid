@@ -14,6 +14,7 @@ const requiredScripts = {
   'test:wallet-evidence': 'node scripts/wallet-clickthrough-evidence.test.mjs',
   'test:mission-readiness': 'node scripts/mission-readiness.test.mjs',
   'test:demo-execution-report': 'npm --prefix worker run test:demo-execution-report',
+  'test:safety-negative-report': 'npm --prefix worker run test:safety-negative-report',
   'wallet:evidence': 'node scripts/wallet-clickthrough-evidence.mjs',
   'wallet:evidence:verify': 'node scripts/wallet-clickthrough-evidence.mjs --verify',
   'mission:readiness': 'node scripts/mission-readiness.mjs',
@@ -23,6 +24,7 @@ const requiredScripts = {
   'demo:execute': 'node worker/scripts/validate-demo-loop.mjs --require-execution',
   'demo:execute:report': 'node worker/scripts/validate-demo-loop.mjs --require-execution --out .rescuegrid/demo-execute-report.json',
   'safety:negative': 'node worker/scripts/validate-safety-negative-paths.mjs',
+  'safety:negative:report': 'node worker/scripts/validate-safety-negative-paths.mjs --out .rescuegrid/safety-negative-report.json',
   'baseline:smoke': 'node scripts/baseline-smoke.mjs',
 }
 
@@ -49,6 +51,37 @@ function readyFunding() {
     execution_claimed: false,
     signer: { kind: 'worker-secret', available: true },
     balance_manager: { balances: { DBUSDC: '1000000', DEEP: '1' } },
+  }
+}
+
+function safetyNegativeReport(overrides = {}) {
+  return {
+    purpose: 'rescuegrid_safety_negative_report',
+    phase: 'pass',
+    assertions: ['VAL-SAFETY-001', 'VAL-SAFETY-002', 'VAL-SAFETY-003', 'VAL-SAFETY-005', 'VAL-SAFETY-008'],
+    required_codes: ['OVER_BUDGET', 'OVER_SLIPPAGE', 'WRONG_POOL', 'WRONG_AGENT', 'MANDATE_MISMATCH', 'POLICY_EXPIRED', 'POLICY_REVOKED'],
+    validated_codes: ['OVER_BUDGET', 'OVER_SLIPPAGE', 'WRONG_POOL', 'WRONG_AGENT', 'MANDATE_MISMATCH', 'POLICY_EXPIRED', 'POLICY_REVOKED'],
+    all_pre_submission: true,
+    all_execution_unclaimed: true,
+    all_spend_unchanged: true,
+    all_success_activity_unchanged: true,
+    chain_success_activity_total: 0,
+    active_policy: { wrapper_id: '0xactive' },
+    expiring_policy: { wrapper_id: '0xexpired' },
+    revoke_tx_digest: 'revokeDigest',
+    evidence: ['OVER_BUDGET', 'OVER_SLIPPAGE', 'WRONG_POOL', 'WRONG_AGENT', 'MANDATE_MISMATCH', 'POLICY_EXPIRED', 'POLICY_REVOKED'].map((code) => ({
+      expected_code: code,
+      observed_code: code,
+      action: 'blocked',
+      submitted: false,
+      execution_claimed: false,
+      spend_before: '0',
+      spend_after: '0',
+      success_activity_count_before: 0,
+      success_activity_count_after: 0,
+      chain_success_activity_count: 0,
+    })),
+    ...overrides,
   }
 }
 
@@ -83,6 +116,7 @@ function strictExecutionReport(overrides = {}) {
   const report = buildMissionReadinessReport({
     generatedAt: '2026-06-03T00:00:00.000Z',
     scripts: requiredScripts,
+    safetyReport: safetyNegativeReport(),
     walletReport: verifiedWalletReport(),
     fundingReadiness: readyFunding(),
     executionReport: strictExecutionReport(),
@@ -97,6 +131,7 @@ function strictExecutionReport(overrides = {}) {
 {
   const report = buildMissionReadinessReport({
     scripts: requiredScripts,
+    safetyReport: safetyNegativeReport(),
     walletReport: {
       code: 'EVIDENCE_FIELDS_INCOMPLETE',
       missing_fields: ['owner_address', 'create_tx_digest'],
@@ -115,6 +150,7 @@ function strictExecutionReport(overrides = {}) {
 {
   const report = buildMissionReadinessReport({
     scripts: { ...requiredScripts, 'wallet:evidence:verify': '' },
+    safetyReport: safetyNegativeReport(),
     walletReport: verifiedWalletReport(),
     fundingReadiness: readyFunding(),
     executionReport: strictExecutionReport(),
@@ -129,6 +165,7 @@ function strictExecutionReport(overrides = {}) {
 {
   const report = buildMissionReadinessReport({
     scripts: requiredScripts,
+    safetyReport: safetyNegativeReport(),
     walletReport: verifiedWalletReport(),
     fundingReadiness: readyFunding(),
     executionReport: strictExecutionReport({ execution_claimed: false }),
@@ -143,6 +180,7 @@ function strictExecutionReport(overrides = {}) {
 {
   const report = buildMissionReadinessReport({
     scripts: requiredScripts,
+    safetyReport: safetyNegativeReport(),
     walletReport: verifiedWalletReport(),
     fundingReadiness: readyFunding(),
     executionReport: strictExecutionReport({ agent_trade_event_found: false }),
@@ -206,7 +244,26 @@ function strictExecutionReport(overrides = {}) {
   const report = JSON.parse(output)
   assert.equal(report.status, 'blocked')
   assert.equal(report.blocker_codes.includes('WALLET_EVIDENCE_MISSING'), true)
+  assert.equal(report.blocker_codes.includes('SAFETY_NEGATIVE_REPORT_MISSING'), true)
   assert.equal(report.blocker_codes.includes('FUNDING_READINESS_NOT_CHECKED'), true)
+}
+
+{
+  const report = buildMissionReadinessReport({
+    scripts: requiredScripts,
+    safetyReport: safetyNegativeReport({
+      validated_codes: ['OVER_BUDGET'],
+      missing_codes: ['POLICY_REVOKED'],
+    }),
+    walletReport: verifiedWalletReport(),
+    fundingReadiness: readyFunding(),
+    executionReport: strictExecutionReport(),
+  })
+  const safetyCheck = report.checks.find((row) => row.id === 'safety_negative_evidence')
+  assert.equal(report.status, 'failed')
+  assert.equal(report.full_prd_ready, false)
+  assert.equal(safetyCheck.status, 'failed')
+  assert.equal(report.blocker_codes.includes('SAFETY_NEGATIVE_NOT_PROVEN'), true)
 }
 
 {
@@ -216,6 +273,7 @@ function strictExecutionReport(overrides = {}) {
   })
   assert.equal(help.status, 0)
   assert.match(help.stdout, /mission readiness/i)
+  assert.match(help.stdout, /safety-report/)
   assert.equal(help.stdout.includes('AGENT_KEY='), false)
   assert.equal(help.stdout.includes('INTERNAL_AGENT_TICK_TOKEN='), false)
   assert.equal(help.stdout.includes('WAAP_PERMISSION_TOKEN='), false)

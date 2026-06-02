@@ -19,6 +19,7 @@
     "test:wallet-evidence": "node scripts/wallet-clickthrough-evidence.test.mjs",
     "test:mission-readiness": "node scripts/mission-readiness.test.mjs",
     "test:demo-execution-report": "npm --prefix worker run test:demo-execution-report",
+    "test:safety-negative-report": "npm --prefix worker run test:safety-negative-report",
     "wallet:evidence": "node scripts/wallet-clickthrough-evidence.mjs",
     "wallet:evidence:verify": "node scripts/wallet-clickthrough-evidence.mjs --verify",
     "mission:readiness": "node scripts/mission-readiness.mjs",
@@ -29,6 +30,7 @@
     "demo:execute": "node worker/scripts/validate-demo-loop.mjs --require-execution",
     "demo:execute:report": "node worker/scripts/validate-demo-loop.mjs --require-execution --out .rescuegrid/demo-execute-report.json",
     "safety:negative": "node worker/scripts/validate-safety-negative-paths.mjs",
+    "safety:negative:report": "node worker/scripts/validate-safety-negative-paths.mjs --out .rescuegrid/safety-negative-report.json",
     "baseline:smoke": "node scripts/baseline-smoke.mjs"
   },
   "dependencies": {

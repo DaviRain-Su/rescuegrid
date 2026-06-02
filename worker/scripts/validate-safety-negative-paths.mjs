@@ -9,6 +9,7 @@ import { strategyHash } from '../src/strategy-core.js'
 import { getClient, readPolicyCreated, DEPLOYMENT } from '../src/sui-tx.js'
 import { queryPolicyEvents, readClockTimestampMs, readMandate, readWrapper } from '../src/chain.js'
 import { loadAgentKeypairFromDevVars } from './agent-key-loader.mjs'
+import { buildSafetyNegativeReport, writeSafetyNegativeReportArtifact } from './safety-negative-report.mjs'
 
 const args = new Map()
 for (let i = 2; i < process.argv.length; i += 1) {
@@ -30,19 +31,26 @@ if (args.has('--help') || process.argv.includes('-h')) {
 
 Usage:
   npm run safety:negative -- [--worker-url http://localhost:8787]
+  npm run safety:negative:report -- [--worker-url http://localhost:8787]
   node worker/scripts/validate-safety-negative-paths.mjs [--worker-url http://localhost:8787]
+  node worker/scripts/validate-safety-negative-paths.mjs --out .rescuegrid/safety-negative-report.json
 
 Creates a current-run active policy and short-lived expired policy with the
 scripted agent-key owner path, validates over-budget, over-slippage, wrong pool,
 wrong agent, mandate-wrapper mismatch, expired, and revoked negative paths via
 the non-mutating Worker validate-plan API, revokes the active policy, then
 verifies no spend or execution-success activity was created. It requires a live
-local Worker and the scripted Testnet agent key configuration. No raw secrets
-are printed.`)
+local Worker and the scripted Testnet agent key configuration.
+
+Options:
+  --worker-url <url>  Worker URL (default: WORKER_URL or http://localhost:8787)
+  --out <path>        Write the final pass report as JSON after all negative
+                      paths are proven. No raw secrets are printed.`)
   process.exit(0)
 }
 
 const workerUrl = String(args.get('--worker-url') || process.env.WORKER_URL || 'http://localhost:8787').replace(/\/$/, '')
+const reportOutPath = args.get('--out') || args.get('--report-out') || args.get('--output')
 const expectedChain = 'sui:testnet'
 const poolId = DEPLOYMENT.deepbook.pools.SUI_DBUSDC.pool_id
 const wrongPoolId = `0x${'f'.repeat(64)}`
@@ -230,8 +238,11 @@ async function assertBlockedPlan({ name, policy, proposed, expectedCode, mandate
     execution_claimed: response.execution_claimed,
     spend_before: beforeWrapper?.spent_amount,
     spend_after: afterWrapper?.spent_amount,
+    spend_unchanged: beforeWrapper?.spent_amount === afterWrapper?.spent_amount,
     success_activity_count_before: beforeActivity.execution_success_count,
     success_activity_count_after: afterActivity.execution_success_count,
+    success_activity_unchanged: beforeActivity.execution_success_count === afterActivity.execution_success_count,
+    chain_success_activity_count: chainSuccessEvents.length,
     chain_time_source: response.chain_time_source,
   }
 }
@@ -334,20 +345,24 @@ evidence.push(await assertBlockedPlan({
   proposed: { pool_id: poolId, amount: '100000', estimated_slippage_bps: 50, agent_id: delegatedAgentAddress },
 }))
 
-console.log(JSON.stringify({
-  phase: 'negative_path_evidence',
-  active_policy: activePolicy,
-  expiring_policy: expiringPolicy,
-  revoke_tx: txMeta(revokeResolved),
-  assertions: ['VAL-SAFETY-001', 'VAL-SAFETY-002', 'VAL-SAFETY-003', 'VAL-SAFETY-005', 'VAL-SAFETY-008'],
+const passReport = buildSafetyNegativeReport({
+  workerUrl,
+  chain: DEPLOYMENT.chain,
+  signerAddress,
+  delegatedAgentAddress,
+  activePolicy,
+  expiringPolicy,
+  revokeResolved,
   evidence,
-}, null, 2))
-
-console.log(JSON.stringify({
-  phase: 'pass',
-  summary: 'All Guardian/safety negative paths blocked before submission through Worker/API validate-plan evidence; wrapper spend and execution-success activity stayed unchanged.',
-  active_wrapper_id: activePolicy.wrapper_id,
-  expired_wrapper_id: expiringPolicy.wrapper_id,
-  active_revoke_tx_digest: revokeResolved.digest,
-  validated_codes: evidence.map((e) => e.observed_code),
-}, null, 2))
+})
+assert(passReport.phase === 'pass', 'Safety negative report did not prove all required blockers', passReport)
+console.log(JSON.stringify(passReport, null, 2))
+if (reportOutPath) {
+  const artifact = writeSafetyNegativeReportArtifact(passReport, { outPath: reportOutPath })
+  console.log(JSON.stringify({
+    phase: 'report_written',
+    purpose: passReport.purpose,
+    artifact,
+    validated_codes: passReport.validated_codes,
+  }, null, 2))
+}

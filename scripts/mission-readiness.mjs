@@ -10,16 +10,22 @@ import packageJson from '../package.json' with { type: 'json' }
 import { buildExecutionReadiness } from '../worker/src/execution-readiness.js'
 import { requireChainDataProvider } from '../worker/src/chain-data-provider.js'
 import { fundingHandoffEnv } from '../worker/scripts/funding-handoff.mjs'
+import {
+  SAFETY_NEGATIVE_REQUIRED_ASSERTIONS,
+  SAFETY_NEGATIVE_REQUIRED_CODES,
+} from '../worker/scripts/safety-negative-report.mjs'
 import { verifyWalletEvidenceArtifact } from './wallet-clickthrough-evidence.mjs'
 
 const DEFAULT_WALLET_ARTIFACT = '.rescuegrid/wallet-clickthrough-evidence.md'
 const DEFAULT_EXECUTION_REPORT = '.rescuegrid/demo-execute-report.json'
+const DEFAULT_SAFETY_REPORT = '.rescuegrid/safety-negative-report.json'
 const REQUIRED_SCRIPTS = [
   'build',
   'test:wallet-flow',
   'test:wallet-evidence',
   'test:mission-readiness',
   'test:demo-execution-report',
+  'test:safety-negative-report',
   'wallet:evidence',
   'wallet:evidence:verify',
   'mission:readiness',
@@ -29,6 +35,7 @@ const REQUIRED_SCRIPTS = [
   'demo:execute',
   'demo:execute:report',
   'safety:negative',
+  'safety:negative:report',
   'baseline:smoke',
 ]
 
@@ -152,6 +159,83 @@ export function summarizeFundingReadiness(readiness) {
   })
 }
 
+function safetyReportEvidence(report) {
+  return {
+    phase: report?.phase || null,
+    active_wrapper_id: report?.active_policy?.wrapper_id || report?.active_wrapper_id || null,
+    expired_wrapper_id: report?.expiring_policy?.wrapper_id || report?.expired_wrapper_id || null,
+    revoke_tx_digest: report?.revoke_tx_digest || report?.active_revoke_tx_digest || null,
+    validated_codes: Array.isArray(report?.validated_codes) ? report.validated_codes : [],
+    missing_codes: Array.isArray(report?.missing_codes) ? report.missing_codes : [],
+    all_pre_submission: report?.all_pre_submission === true,
+    all_execution_unclaimed: report?.all_execution_unclaimed === true,
+    all_spend_unchanged: report?.all_spend_unchanged === true,
+    all_success_activity_unchanged: report?.all_success_activity_unchanged === true,
+    chain_success_activity_total: Number(report?.chain_success_activity_total ?? 0),
+  }
+}
+
+export function summarizeSafetyNegativeEvidence(report) {
+  if (!report) {
+    return check({
+      id: 'safety_negative_evidence',
+      label: 'Live safety negative-path evidence',
+      status: 'blocked',
+      detail: 'safety negative report is missing',
+      blocker_codes: ['SAFETY_NEGATIVE_REPORT_MISSING'],
+    })
+  }
+  const assertions = Array.isArray(report.assertions) ? report.assertions : []
+  const validatedCodes = Array.isArray(report.validated_codes) ? report.validated_codes : []
+  const evidenceRows = Array.isArray(report.evidence) ? report.evidence : []
+  const missingAssertions = SAFETY_NEGATIVE_REQUIRED_ASSERTIONS.filter((id) => !assertions.includes(id))
+  const missingCodes = SAFETY_NEGATIVE_REQUIRED_CODES.filter((code) => !validatedCodes.includes(code))
+  const rowsProvePreSubmit = evidenceRows.every((row) => row.submitted === false)
+  const rowsProveNoExecution = evidenceRows.every((row) => row.execution_claimed === false)
+  const rowsProveSpendUnchanged = evidenceRows.every((row) => row.spend_unchanged === true || String(row.spend_before) === String(row.spend_after))
+  const rowsProveNoSuccessActivity = evidenceRows.every((row) => {
+    const apiUnchanged = row.success_activity_unchanged === true || Number(row.success_activity_count_before) === Number(row.success_activity_count_after)
+    return apiUnchanged && Number(row.chain_success_activity_count || 0) === 0
+  })
+  const hasReportPass = report.phase === 'pass' &&
+    report.purpose === 'rescuegrid_safety_negative_report' &&
+    report.all_pre_submission === true &&
+    report.all_execution_unclaimed === true &&
+    report.all_spend_unchanged === true &&
+    report.all_success_activity_unchanged === true &&
+    Number(report.chain_success_activity_total || 0) === 0
+  if (
+    hasReportPass &&
+    missingAssertions.length === 0 &&
+    missingCodes.length === 0 &&
+    rowsProvePreSubmit &&
+    rowsProveNoExecution &&
+    rowsProveSpendUnchanged &&
+    rowsProveNoSuccessActivity
+  ) {
+    return check({
+      id: 'safety_negative_evidence',
+      label: 'Live safety negative-path evidence',
+      status: 'passed',
+      detail: 'live Testnet validate-plan report proves all required negative paths blocked before submission without spend or execution success',
+      evidence: safetyReportEvidence(report),
+    })
+  }
+  return check({
+    id: 'safety_negative_evidence',
+    label: 'Live safety negative-path evidence',
+    status: 'failed',
+    detail: 'safety negative report does not prove all required pre-submit blockers',
+    blocker_codes: ['SAFETY_NEGATIVE_NOT_PROVEN'],
+    evidence: {
+      ...safetyReportEvidence(report),
+      missing_assertions: missingAssertions,
+      missing_codes: missingCodes,
+      evidence_rows: evidenceRows.length,
+    },
+  })
+}
+
 function executionReportEvidence(report) {
   const assertions = Array.isArray(report?.assertions) ? report.assertions : []
   return {
@@ -212,6 +296,7 @@ export function buildMissionReadinessReport({
   walletReport = null,
   fundingReadiness = null,
   executionReport = null,
+  safetyReport = null,
 } = {}) {
   const missing = missingScripts(scripts)
   const scriptCheck = check({
@@ -222,10 +307,11 @@ export function buildMissionReadinessReport({
     blocker_codes: missing.length === 0 ? [] : ['VALIDATION_SCRIPT_MISSING'],
     evidence: { missing_scripts: missing },
   })
+  const safetyCheck = summarizeSafetyNegativeEvidence(safetyReport)
   const walletCheck = summarizeWalletReport(walletReport)
   const fundingCheck = summarizeFundingReadiness(fundingReadiness)
   const strictExecutionCheck = summarizeStrictExecutionEvidence(executionReport, fundingCheck)
-  const checks = [scriptCheck, walletCheck, fundingCheck, strictExecutionCheck]
+  const checks = [scriptCheck, safetyCheck, walletCheck, fundingCheck, strictExecutionCheck]
   const blockers = checks.flatMap((row) => row.status === 'passed' ? [] : row.blocker_codes)
   const fullPrdReady = checks.every((row) => row.status === 'passed')
   const hasFailedCheck = checks.some((row) => row.status === 'failed')
@@ -238,12 +324,15 @@ export function buildMissionReadinessReport({
     execution_claimed: strictExecutionCheck.status === 'passed',
     blocker_codes: blockers,
     checks,
-    next_actions: fullPrdReady ? [] : nextActions({ walletCheck, fundingCheck, strictExecutionCheck }),
+    next_actions: fullPrdReady ? [] : nextActions({ safetyCheck, walletCheck, fundingCheck, strictExecutionCheck }),
   }
 }
 
-function nextActions({ walletCheck, fundingCheck, strictExecutionCheck }) {
+function nextActions({ safetyCheck, walletCheck, fundingCheck, strictExecutionCheck }) {
   const actions = []
+  if (safetyCheck?.status !== 'passed') {
+    actions.push('Run npm run safety:negative:report with a live local Worker to write .rescuegrid/safety-negative-report.json proving all required validate-plan blockers.')
+  }
   if (walletCheck?.status !== 'passed') {
     actions.push('Run the real Slush / standard Sui wallet create+revoke flow, fill .rescuegrid/wallet-clickthrough-evidence.md, then run npm run wallet:evidence:verify -- --input .rescuegrid/wallet-clickthrough-evidence.md.')
   }
@@ -271,7 +360,7 @@ async function loadFundingReadiness({ env = process.env, skipLiveFunding = false
   })
 }
 
-function loadExecutionReport(path) {
+function loadJsonReport(path) {
   if (!path || !existsSync(path)) return null
   return JSON.parse(readFileSync(path, 'utf8'))
 }
@@ -282,12 +371,14 @@ function help() {
 Usage:
   npm run mission:readiness
   npm run mission:readiness -- --wallet-artifact .rescuegrid/wallet-clickthrough-evidence.md
+  npm run mission:readiness -- --safety-report .rescuegrid/safety-negative-report.json
   npm run mission:readiness -- --execution-report .rescuegrid/demo-execute-report.json
   npm run mission:readiness -- --skip-live-funding
 
 This is read-only. It checks validation command registration, wallet click-through
-evidence, execution funding readiness and strict AgentTradeExecuted evidence.
-It does not create policies, submit PTBs, run demo:execute or print secrets.`)
+evidence, live safety-negative evidence, execution funding readiness and strict
+AgentTradeExecuted evidence. It does not create policies, submit PTBs, run
+demo:execute or print secrets.`)
 }
 
 export async function main(argv = process.argv.slice(2), env = process.env, options = {}) {
@@ -297,6 +388,7 @@ export async function main(argv = process.argv.slice(2), env = process.env, opti
     return 0
   }
   const walletArtifact = resolve(String(flags.get('--wallet-artifact') || DEFAULT_WALLET_ARTIFACT))
+  const safetyReportPath = resolve(String(flags.get('--safety-report') || DEFAULT_SAFETY_REPORT))
   const executionReportPath = resolve(String(flags.get('--execution-report') || DEFAULT_EXECUTION_REPORT))
   let walletReport = null
   try {
@@ -328,11 +420,13 @@ export async function main(argv = process.argv.slice(2), env = process.env, opti
       error: String(e?.message || e),
     }
   }
-  const executionReport = options.executionReport ?? loadExecutionReport(executionReportPath)
+  const safetyReport = options.safetyReport ?? loadJsonReport(safetyReportPath)
+  const executionReport = options.executionReport ?? loadJsonReport(executionReportPath)
   const report = buildMissionReadinessReport({
     walletReport,
     fundingReadiness,
     executionReport,
+    safetyReport,
   })
   console.log(JSON.stringify(report, null, 2))
   return report.full_prd_ready ? 0 : 1
