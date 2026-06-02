@@ -2,8 +2,12 @@ import assert from 'node:assert/strict'
 import { Ed25519Keypair } from '@mysten/sui/keypairs/ed25519'
 import {
   SIGNER_CODE_ADDRESS_MISMATCH,
+  SIGNER_CODE_WAAP_APPROVAL_DENIED,
+  SIGNER_CODE_WAAP_APPROVAL_PENDING,
   SIGNER_CODE_WAAP_ADDRESS_MISSING,
   SIGNER_CODE_WAAP_NO_DIGEST,
+  SIGNER_CODE_WAAP_POLICY_BLOCKED,
+  SIGNER_CODE_WAAP_TIMEOUT,
   SIGNER_KIND_LOCAL_DAEMON,
   SIGNER_KIND_WAAP,
   SIGNER_KIND_WORKER_SECRET,
@@ -229,6 +233,35 @@ assert.equal(waapCalls[0].permissionToken, 'permission-secret')
 assert.equal(calls.length, 2, 'WaaP signer must not call Sui SDK keypair signing')
 assert.equal(JSON.stringify(waapSubmitted).includes('permission-secret'), false)
 
+const waapNdjson = resolveSignerAdapter({
+  SIGNER_KIND: SIGNER_KIND_WAAP,
+  RESCUEGRID_DAEMON_MODE: 'true',
+  RESCUEGRID_WAAP_CLI_ENABLED: 'true',
+  RESCUEGRID_WAAP_SUI_ADDRESS: signerAddress,
+  EXECUTION_ENABLED: 'true',
+}, {
+  client,
+  expectedAgentAddress: signerAddress,
+  waapCliRunner: async () => ({
+    stdout: [
+      JSON.stringify({ event: 'submitted', status: 'waiting_for_result' }),
+      JSON.stringify({ event: 'result', result: { txDigest: '0xndjsondigest', chain: 'sui:testnet', status: 'submitted' } }),
+    ].join('\n'),
+  }),
+})
+assert.deepEqual(await waapNdjson.signAndSubmit(waapTx), {
+  digest: '0xndjsondigest',
+  signer_kind: SIGNER_KIND_WAAP,
+  submitted: true,
+  waap_chain: 'sui:testnet',
+  waap_result: {
+    event: 'result',
+    txDigest: '0xndjsondigest',
+    chain: 'sui:testnet',
+    status: 'submitted',
+  },
+})
+
 const waapNoDigest = resolveSignerAdapter({
   SIGNER_KIND: SIGNER_KIND_WAAP,
   RESCUEGRID_DAEMON_MODE: 'true',
@@ -243,6 +276,74 @@ const waapNoDigest = resolveSignerAdapter({
 await assert.rejects(
   () => waapNoDigest.signAndSubmit(waapTx),
   (err) => err.code === SIGNER_CODE_WAAP_NO_DIGEST,
+)
+
+const waapApprovalPending = resolveSignerAdapter({
+  SIGNER_KIND: SIGNER_KIND_WAAP,
+  RESCUEGRID_DAEMON_MODE: 'true',
+  RESCUEGRID_WAAP_CLI_ENABLED: 'true',
+  RESCUEGRID_WAAP_SUI_ADDRESS: signerAddress,
+  EXECUTION_ENABLED: 'true',
+}, {
+  client,
+  expectedAgentAddress: signerAddress,
+  waapCliRunner: async () => ({ stdout: JSON.stringify({ event: 'approval_pending', approvalStatus: 'pending' }) }),
+})
+await assert.rejects(
+  () => waapApprovalPending.signAndSubmit(waapTx),
+  (err) => err.code === SIGNER_CODE_WAAP_APPROVAL_PENDING,
+)
+
+const waapApprovalDenied = resolveSignerAdapter({
+  SIGNER_KIND: SIGNER_KIND_WAAP,
+  RESCUEGRID_DAEMON_MODE: 'true',
+  RESCUEGRID_WAAP_CLI_ENABLED: 'true',
+  RESCUEGRID_WAAP_SUI_ADDRESS: signerAddress,
+  EXECUTION_ENABLED: 'true',
+}, {
+  client,
+  expectedAgentAddress: signerAddress,
+  waapCliRunner: async () => ({ stdout: JSON.stringify({ event: 'result', result: { approval_status: 'approval_denied' } }) }),
+})
+await assert.rejects(
+  () => waapApprovalDenied.signAndSubmit(waapTx),
+  (err) => err.code === SIGNER_CODE_WAAP_APPROVAL_DENIED,
+)
+
+const waapPolicyBlocked = resolveSignerAdapter({
+  SIGNER_KIND: SIGNER_KIND_WAAP,
+  RESCUEGRID_DAEMON_MODE: 'true',
+  RESCUEGRID_WAAP_CLI_ENABLED: 'true',
+  RESCUEGRID_WAAP_SUI_ADDRESS: signerAddress,
+  EXECUTION_ENABLED: 'true',
+}, {
+  client,
+  expectedAgentAddress: signerAddress,
+  waapCliRunner: async () => ({ stdout: JSON.stringify({ event: 'result', result: { policyStatus: 'policy_blocked' } }) }),
+})
+await assert.rejects(
+  () => waapPolicyBlocked.signAndSubmit(waapTx),
+  (err) => err.code === SIGNER_CODE_WAAP_POLICY_BLOCKED,
+)
+
+const waapTimeout = resolveSignerAdapter({
+  SIGNER_KIND: SIGNER_KIND_WAAP,
+  RESCUEGRID_DAEMON_MODE: 'true',
+  RESCUEGRID_WAAP_CLI_ENABLED: 'true',
+  RESCUEGRID_WAAP_SUI_ADDRESS: signerAddress,
+  EXECUTION_ENABLED: 'true',
+}, {
+  client,
+  expectedAgentAddress: signerAddress,
+  waapCliRunner: async () => {
+    const err = new Error('runner timeout')
+    err.timed_out = true
+    throw err
+  },
+})
+await assert.rejects(
+  () => waapTimeout.signAndSubmit(waapTx),
+  (err) => err.code === SIGNER_CODE_WAAP_TIMEOUT,
 )
 
 console.log('\nALL SIGNER ADAPTER TESTS PASS')

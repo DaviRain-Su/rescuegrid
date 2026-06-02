@@ -8,6 +8,10 @@ export const SIGNER_CODE_UNSUPPORTED = 'UNSUPPORTED_SIGNER'
 export const SIGNER_CODE_WAAP_ADDRESS_MISSING = 'WAAP_ADDRESS_MISSING'
 export const SIGNER_CODE_WAAP_RUNNER_MISSING = 'WAAP_RUNNER_MISSING'
 export const SIGNER_CODE_WAAP_NO_DIGEST = 'WAAP_NO_DIGEST'
+export const SIGNER_CODE_WAAP_APPROVAL_PENDING = 'WAAP_APPROVAL_PENDING'
+export const SIGNER_CODE_WAAP_APPROVAL_DENIED = 'WAAP_APPROVAL_DENIED'
+export const SIGNER_CODE_WAAP_POLICY_BLOCKED = 'WAAP_POLICY_BLOCKED'
+export const SIGNER_CODE_WAAP_TIMEOUT = 'WAAP_TIMEOUT'
 
 export const SIGNER_KIND_WORKER_SECRET = 'worker-secret'
 export const SIGNER_KIND_LOCAL_DAEMON = 'local-daemon'
@@ -111,16 +115,96 @@ function extractWaapDigest(result = {}) {
     }
   }
   if (typeof result !== 'object' || !result) return null
-  return result.digest || result.txDigest || result.transactionDigest || result.txHash || result.hash || null
+  for (const key of ['digest', 'txDigest', 'transactionDigest', 'txHash', 'hash']) {
+    if (result[key]) return result[key]
+  }
+  for (const key of ['result', 'data', 'transaction', 'tx']) {
+    if (result[key] != null) {
+      const nested = extractWaapDigest(result[key])
+      if (nested) return nested
+    }
+  }
+  return null
 }
 
 function waapPublicResult(result = {}) {
   if (typeof result !== 'object' || !result) return {}
+  const normalized = waapResultPayload(result)
   const out = {}
-  for (const key of ['digest', 'txDigest', 'transactionDigest', 'txHash', 'hash', 'chain', 'status', 'approvalStatus', 'policyStatus']) {
-    if (result[key] != null) out[key] = result[key]
+  for (const key of ['event', 'digest', 'txDigest', 'transactionDigest', 'txHash', 'hash', 'chain', 'status', 'approvalStatus', 'approval_status', 'policyStatus', 'policy_status']) {
+    if (normalized[key] != null) out[key] = normalized[key]
   }
   return out
+}
+
+function parseWaapJsonLines(stdout = '') {
+  const lines = String(stdout)
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter((line) => line.startsWith('{'))
+  const parsed = []
+  for (const line of lines) {
+    try {
+      parsed.push(JSON.parse(line))
+    } catch {
+      // Ignore progress lines that are not valid JSON. The final no-digest
+      // guard below still prevents accidental success.
+    }
+  }
+  return parsed.find((row) => row && row.event === 'result') || parsed.at(-1) || {}
+}
+
+function parseWaapRunnerResult(result = {}) {
+  if (typeof result?.stdout === 'string') return parseWaapJsonLines(result.stdout)
+  return result
+}
+
+function waapResultPayload(result = {}) {
+  if (typeof result !== 'object' || !result) return {}
+  if (result.result && typeof result.result === 'object') return { ...result.result, event: result.event || result.result.event }
+  if (result.data && typeof result.data === 'object') return { ...result.data, event: result.event || result.data.event }
+  return result
+}
+
+function normalizedWaapTokens(result = {}) {
+  const payload = waapResultPayload(result)
+  return [
+    result.event,
+    payload.event,
+    payload.status,
+    payload.approvalStatus,
+    payload.approval_status,
+    payload.policyStatus,
+    payload.policy_status,
+    payload.code,
+    payload.errorCode,
+    payload.blockerCode,
+  ]
+    .filter((value) => value != null)
+    .map((value) => String(value).toLowerCase())
+}
+
+function waapStateCode(result = {}) {
+  const tokens = normalizedWaapTokens(result)
+  if (tokens.some((token) => token.includes('timeout') || token.includes('timed_out'))) return SIGNER_CODE_WAAP_TIMEOUT
+  if (tokens.some((token) => token.includes('approval') && (token.includes('pending') || token.includes('required') || token.includes('waiting')))) return SIGNER_CODE_WAAP_APPROVAL_PENDING
+  if (tokens.some((token) => token.includes('approval') && (token.includes('denied') || token.includes('reject')))) return SIGNER_CODE_WAAP_APPROVAL_DENIED
+  if (tokens.some((token) => token.includes('policy') && (token.includes('blocked') || token.includes('denied') || token.includes('reject')))) return SIGNER_CODE_WAAP_POLICY_BLOCKED
+  return null
+}
+
+function waapStateDetail(code) {
+  if (code === SIGNER_CODE_WAAP_APPROVAL_PENDING) return 'waap signer is waiting for owner approval'
+  if (code === SIGNER_CODE_WAAP_APPROVAL_DENIED) return 'waap signer transaction was denied by owner approval flow'
+  if (code === SIGNER_CODE_WAAP_POLICY_BLOCKED) return 'waap signer policy controls blocked the transaction'
+  if (code === SIGNER_CODE_WAAP_TIMEOUT) return 'waap signer timed out waiting for approval or submission'
+  return 'waap signer did not return a completed transaction'
+}
+
+function waapStateError(code) {
+  const error = new Error(waapStateDetail(code))
+  error.code = code
+  return error
 }
 
 function serializeTxJsonForWaap(transaction, expectedAddress) {
@@ -235,18 +319,24 @@ function waapSignerAdapter(env, expectedAddress, waapCliRunner) {
       }
       const txJson = serializeTxJsonForWaap(transaction, expectedAddress)
       const chain = envString(env, 'RESCUEGRID_WAAP_CHAIN', 'WAAP_CHAIN', 'RESCUEGRID_CHAIN') || 'sui:testnet'
-      const result = await waapCliRunner({
-        txJson,
-        chain,
-        rpc: envString(env, 'RESCUEGRID_WAAP_RPC', 'WAAP_RPC'),
-        permissionToken: envString(env, 'RESCUEGRID_WAAP_PERMISSION_TOKEN', 'WAAP_PERMISSION_TOKEN'),
-        cliPath: envString(env, 'RESCUEGRID_WAAP_CLI_PATH', 'WAAP_CLI_PATH') || 'waap-cli',
-      })
-      const parsed = typeof result?.stdout === 'string'
-        ? JSON.parse(result.stdout || '{}')
-        : result
+      let result
+      try {
+        result = await waapCliRunner({
+          txJson,
+          chain,
+          rpc: envString(env, 'RESCUEGRID_WAAP_RPC', 'WAAP_RPC'),
+          permissionToken: envString(env, 'RESCUEGRID_WAAP_PERMISSION_TOKEN', 'WAAP_PERMISSION_TOKEN'),
+          cliPath: envString(env, 'RESCUEGRID_WAAP_CLI_PATH', 'WAAP_CLI_PATH') || 'waap-cli',
+        })
+      } catch (error) {
+        if (error?.timed_out || error?.code === SIGNER_CODE_WAAP_TIMEOUT) throw waapStateError(SIGNER_CODE_WAAP_TIMEOUT)
+        throw error
+      }
+      const parsed = parseWaapRunnerResult(result)
       const digest = extractWaapDigest(parsed)
       if (!digest) {
+        const stateCode = waapStateCode(parsed)
+        if (stateCode) throw waapStateError(stateCode)
         const error = new Error('waap signer did not return a Sui transaction digest')
         error.code = SIGNER_CODE_WAAP_NO_DIGEST
         throw error
