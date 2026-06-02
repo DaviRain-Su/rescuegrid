@@ -141,9 +141,10 @@ Error:
 
 Happy path:
 
-- `confirmed=true` 且 strategy hash 匹配时创建 Policy。
-- 成功响应包含 `policy_id`、`mandate_id`、`wrapper_id`、`tx_digest`、`agent_address`。
-- Durable Object 被激活。
+- `confirmed=true` 且 strategy hash 匹配时返回 owner 待签名的 `tx_json`。
+- 成功响应包含 `tx_json`、`strategy_hash`、`agent_address`、`active_policy_count` 和 `max_active_policies`。
+- Worker 不持有 owner key，不提交交易，不在本接口激活 Durable Object。
+- 前端或脚本用 owner signer 执行 `tx_json` 后，必须从 `PolicyCreated` event 读取 `wrapper_id` 和 `mandate_id`。
 
 Error:
 
@@ -151,7 +152,23 @@ Error:
 - `strategy.agent` 不等于部署配置 `RESCUEGRID_AGENT_ADDRESS` 时拒绝。
 - strategy hash 不匹配拒绝。
 - 活跃 Policy 数达到 `MAX_ACTIVE_POLICIES_PER_DEPLOYMENT` 时返回 `ACTIVE_POLICY_LIMIT_REACHED`。
-- Sui transaction 失败时不激活 Durable Object。
+- 返回 `tx_json` 前的链读取失败返回 `CHAIN_READ_FAILED`。
+
+### `POST /api/policies/:wrapper_id/activate`
+
+Happy path:
+
+- create transaction finalize 后，传入 `wrapper_id` 和可选 `strategy` 注册 Durable Object runtime。
+- activation 先读取链上 wrapper 和 Mandate，确认未撤销、未过期。
+- 如果传入 `strategy`，其 hash 必须匹配链上 wrapper `strategy_hash`。
+- 成功返回 `runtime_state=Monitoring`，并写入 runtime activation activity。
+
+Error:
+
+- 不存在的 wrapper 返回 `NOT_FOUND`。
+- 不存在的 Mandate 返回 `MANDATE_NOT_FOUND`。
+- revoked / expired Policy 分别返回 `POLICY_REVOKED` / `POLICY_EXPIRED`，不激活 Durable Object。
+- `strategy_hash` 不匹配返回 `HASH_MISMATCH`。
 
 ### `GET /api/policies?owner=`
 
@@ -166,12 +183,13 @@ Happy path:
 
 Happy path:
 
-- owner 确认撤销，返回 tx digest 和 `runtime_state=Revoked`。
+- owner 确认撤销时，Worker 返回 owner 待签名的 revoke `tx_json`、`wrapper_id` 和 `mandate_id`。
+- 前端或脚本用 owner signer 执行 `tx_json` 后，后续 list/activity 读到 chain-authoritative `Revoked` 状态。
 
 Error:
 
 - 非 owner 请求拒绝。
-- 已撤销 Policy 返回 `ALREADY_REVOKED`，且不提交第二笔 revoke transaction。
+- 已撤销 Policy 返回 `ALREADY_REVOKED`，且不返回第二笔 signable revoke transaction。
 
 ### `GET /api/policies/:wrapper_id/activity`
 

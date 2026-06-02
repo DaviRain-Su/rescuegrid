@@ -493,7 +493,7 @@ Unknown executor response:
 
 ### `POST /api/policies`
 
-Creates a policy after explicit user confirmation.
+Builds the unsigned owner-signed `create_policy` transaction after explicit user confirmation. The Worker does not hold the owner key, does not submit this transaction, and does not activate the Durable Object runtime until the client proves the transaction completed by reading the `PolicyCreated` event and calling `/api/policies/:wrapper_id/activate`.
 
 Request:
 
@@ -511,16 +511,14 @@ Response:
 ```json
 {
   "status": "ok",
-  "policy_id": "0x...",
-  "mandate_id": "0x...",
-  "wrapper_id": "0x...",
-  "tx_digest": "0x...",
+  "tx_json": "...",
+  "strategy_hash": "0x...",
   "agent_address": "0x...",
-  "runtime_state": "PolicyActive"
+  "active_policy_count": 3,
+  "max_active_policies": 10,
+  "sign_with": "owner signer (frontend wallet or scripted Testnet validation key); read PolicyCreated for wrapper_id"
 }
 ```
-
-`policy_id` is an API compatibility alias for `wrapper_id` in MVP.
 
 Validation:
 
@@ -530,6 +528,36 @@ Validation:
 - `strategy.executor_kind` must be registered in the ExecutorAdapter registry.
 - `strategy_hash` must equal the server recomputed hash.
 - The deployment must have fewer than `MAX_ACTIVE_POLICIES_PER_DEPLOYMENT` active policies, otherwise return `ACTIVE_POLICY_LIMIT_REACHED`.
+- The client must sign and execute `tx_json` with the owner wallet, then read the `PolicyCreated` event for `wrapper_id` and `mandate_id`.
+
+### `POST /api/policies/:wrapper_id/activate`
+
+Registers a successfully created on-chain Policy with the Durable Object runtime. This endpoint is called only after the owner-signed creation transaction is finalized.
+
+Request:
+
+```json
+{
+  "strategy": {}
+}
+```
+
+Response:
+
+```json
+{
+  "status": "ok",
+  "wrapper_id": "0x...",
+  "runtime_state": "Monitoring"
+}
+```
+
+Validation:
+
+- `wrapper_id` must exist on-chain.
+- Linked Mandate must exist, not be revoked and not be expired.
+- If `strategy` is supplied, its recomputed hash must equal the wrapper `strategy_hash`.
+- Activation must not submit chain transactions; it only registers Durable Object state and schedules ticks.
 
 ### `GET /api/policies?owner=0x...`
 
@@ -558,15 +586,14 @@ Response:
 ```json
 {
   "status": "ok",
-  "policy_id": "0x...",
-  "mandate_id": "0x...",
+  "tx_json": "...",
   "wrapper_id": "0x...",
-  "tx_digest": "0x...",
-  "runtime_state": "Revoked"
+  "mandate_id": "0x...",
+  "sign_with": "owner signer (frontend wallet or scripted Testnet validation key)"
 }
 ```
 
-If the Mandate is already revoked, the API must not submit another transaction. It returns:
+The client signs and executes `tx_json` with the owner wallet. After the transaction finalizes, list/activity reads must show the chain-authoritative revoked state. If the Mandate is already revoked, the API must not return another signable revoke transaction. It returns:
 
 ```json
 {
