@@ -127,7 +127,7 @@ Phase J is based on [`docs/08-sui-data-agent-stack-assessment.md`](08-sui-data-a
 | J4 | Explore | 3h | Archival Store history/replay design | Define historical activity, performance replay and judge/demo replay queries that need archival-backed data |
 | J5 | Explore | 4h | Seal + Walrus private policy record design | Define encrypted strategy snapshot, backtest, reasoning trace and incident report schema; explicitly exclude wallet/agent private keys |
 | J6 | Explore | 3h | Sui Stack CRM pattern adaptation | Map shared-object ACL + Walrus blob id + version events into `PolicyPrivateRecord` or equivalent object design |
-| J7 | Explore | 4h | WaaP/external signer adapter design | Draft `SignerAdapter` for `worker-secret`, `local-daemon`, `waap`, `hardware`, `remote-signer`; require security review before production submission |
+| J7 | Explore | 4h | WaaP/external signer adapter design | Draft `SignerAdapter` for `worker-secret`, `local-daemon`, `waap`, `hardware`, `remote-signer`; validate whether `waap-cli send-tx --tx-json ... --chain sui:testnet` can sign a Guardian-approved RescueGrid PTB; require security review before production submission |
 | J8 | Commit | 1h | Sui Agent Skills setup note | Add recommended Sui skills to engineering setup for data access, PTBs, Move tests, publish and frontend dApp Kit workflows |
 
 ## Phase K - Post-MVP Product Breadth and Frontend Design
