@@ -143,16 +143,67 @@ function GuardianRules({ onToast }) {
   );
 }
 
-export function RiskCenter({ policies, onEmergencyStop, onToast, stopped }) {
+export function RiskCenter({ policies, onEmergencyStop, onTogglePolicy, onToast, stopped }) {
+  const [stoppedVenues, setStoppedVenues] = useState(() => new Set());
   const rb = RG.riskBudget;
   const atRiskPct = rb.atRisk / rb.authorized * 100;
   const lossPct = rb.dailyLossUsed / rb.dailyLossCap * 100;
   const activeCount = policies.filter(p => p.status === 'active').length;
+  const terminalStatuses = new Set(['revoked', 'expired']);
+  const staleWarnings = [
+    ...RG.oracles.filter(o => o.status !== 'ok').map(o => ({
+      id: `oracle-${o.feed}`,
+      kind: 'Oracle',
+      label: o.feed,
+      detail: `age ${o.age} · deviation ±${o.dev}`,
+      severity: o.status === 'stale' ? 'warn' : 'danger',
+    })),
+    ...RG.signers.filter(s => s.status !== 'ok').map(s => ({
+      id: `signer-${s.name}`,
+      kind: s.kind === 'cloud' ? 'Cloud signer' : s.kind === 'daemon' ? 'Local daemon' : 'Signer',
+      label: s.name,
+      detail: s.detail,
+      severity: s.status === 'offline' ? 'warn' : 'danger',
+    })),
+    ...policies.filter(p => p.runtime_state_stale || p.runtimeStateStale).map(p => ({
+      id: `policy-${p.id}`,
+      kind: 'Runtime state',
+      label: p.name,
+      detail: 'Worker runtime row diverged from chain state; chain state wins.',
+      severity: 'warn',
+    })),
+  ];
 
   const HEALTH = {
     safe: ['var(--safe)', 'var(--safe-dim)'], warn: ['var(--warn)', 'var(--warn-dim)'],
     ok: ['var(--safe)', 'var(--safe-dim)'], stale: ['var(--warn)', 'var(--warn-dim)'],
     offline: ['var(--t2)', 'var(--glass-hi)'], danger: ['var(--danger)', 'var(--danger-dim)'],
+  };
+  const riskBadge = (status) => {
+    if (status === 'active') return ['var(--safe)', 'var(--safe-dim)', 'active'];
+    if (status === 'paused') return ['var(--warn)', 'var(--warn-dim)', 'paused'];
+    if (status === 'revoked') return ['var(--danger)', 'var(--danger-dim)', 'revoked'];
+    if (status === 'expired') return ['var(--t2)', 'var(--glass-hi)', 'expired'];
+    return ['var(--t2)', 'var(--glass-hi)', status || 'unknown'];
+  };
+  const toggleVenueStop = (venue) => {
+    const stopping = !stoppedVenues.has(venue);
+    setStoppedVenues(prev => {
+      const next = new Set(prev);
+      if (stopping) next.add(venue); else next.delete(venue);
+      return next;
+    });
+    onToast && onToast(
+      stopping
+        ? `${venue} venue stop queued — runtime gate will reject new adapter actions for this venue`
+        : `${venue} venue stop lifted — adapter actions can be evaluated again`,
+      stopping ? 'var(--warn)' : 'var(--accent)',
+    );
+  };
+  const toggleStrategyStop = (p) => {
+    if (terminalStatuses.has(p.status)) return;
+    if (onTogglePolicy) onTogglePolicy(p);
+    else onToast && onToast(`${p.name} ${p.status === 'active' ? 'paused' : 'resumed'} locally`, p.status === 'active' ? 'var(--warn)' : 'var(--accent)');
   };
 
   return (
@@ -171,6 +222,11 @@ export function RiskCenter({ policies, onEmergencyStop, onToast, stopped }) {
             {stopped ? 'Every policy is paused. Resume individual strategies when ready.' : 'Pause every policy instantly. Positions are held — nothing is force-closed.'}
           </div>
         </div>
+        <div style={{ display: 'flex', gap: 7, flexWrap: 'wrap' }}>
+          <span className="badge badge-danger" style={{ fontSize: 9 }}><span className="dot"></span>global</span>
+          <span className="badge badge-warn" style={{ fontSize: 9 }}><span className="dot"></span>strategy</span>
+          <span className="badge badge-accent" style={{ fontSize: 9 }}><span className="dot"></span>venue</span>
+        </div>
         <button onClick={() => { onEmergencyStop && onEmergencyStop(); }} className="btn btn-danger"
           style={{ fontWeight: 600 }} disabled={stopped}>
           <Icon name="x" size={15} stroke={2.4} /> {stopped ? 'Halted' : 'Stop all agents'}
@@ -178,7 +234,7 @@ export function RiskCenter({ policies, onEmergencyStop, onToast, stopped }) {
       </div>
 
       {/* global budget KPIs */}
-      <div style={{ display: 'grid', gridTemplateColumns: '1.4fr 1fr 1fr', gap: 14 }}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(210px, 1fr))', gap: 14 }}>
         <RCard title="Global risk budget" icon="shield">
           <div style={{ display: 'flex', alignItems: 'baseline', gap: 10, marginBottom: 12 }}>
             <span className="mono display" style={{ fontSize: 26, fontWeight: 600 }}>${fmtUsd(rb.atRisk, 0)}</span>
@@ -207,7 +263,116 @@ export function RiskCenter({ policies, onEmergencyStop, onToast, stopped }) {
         </RCard>
       </div>
 
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 18, alignItems: 'start' }}>
+      <RCard title="Stale data warnings" icon="alert" right={
+        <span className={`badge ${staleWarnings.length ? 'badge-warn' : 'badge-safe'}`} style={{ fontSize: 9.5 }}>
+          <span className="dot"></span>{staleWarnings.length ? `${staleWarnings.length} warnings` : 'clear'}
+        </span>
+      }>
+        {staleWarnings.length ? (
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: 10 }}>
+            {staleWarnings.map(w => {
+              const h = HEALTH[w.severity] || HEALTH.warn;
+              return (
+                <div key={w.id} style={{ padding: '11px 13px', borderRadius: 'var(--r-sm)', background: h[1], border: `1px solid color-mix(in srgb, ${h[0]} 32%, var(--border))` }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 5 }}>
+                    <span style={{ color: h[0] }}><Icon name={w.severity === 'danger' ? 'x' : 'alert'} size={13} stroke={2.3} /></span>
+                    <span className="mono" style={{ fontSize: 9.5, fontWeight: 700, color: h[0] }}>{w.kind.toUpperCase()}</span>
+                  </div>
+                  <div style={{ fontSize: 12.5, fontWeight: 600 }}>{w.label}</div>
+                  <div style={{ fontSize: 10.5, color: 'var(--t2)', marginTop: 3, lineHeight: 1.45 }}>{w.detail}</div>
+                </div>
+              );
+            })}
+          </div>
+        ) : (
+          <div style={{ display: 'flex', alignItems: 'center', gap: 9, padding: '12px 13px', borderRadius: 'var(--r-sm)', background: 'var(--safe-dim)', color: 'var(--safe)', fontSize: 12.5, fontWeight: 600 }}>
+            <Icon name="check" size={15} stroke={2.4} /> Oracle feeds, signer paths and runtime policy rows are fresh.
+          </div>
+        )}
+      </RCard>
+
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: 18, alignItems: 'start' }}>
+        <RCard title="Strategy emergency controls" icon="shield" right={<span className="badge badge-neutral" style={{ fontSize: 9.5 }}>{policies.length} strategies</span>}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+            {policies.map(p => {
+              const h = riskBadge(p.status);
+              const used = p.budgetUsed || p.spent || p.used || 0;
+              const budget = p.budgetCap || p.budget || p.cap || p.maxSpend || 1;
+              const scope = Array.isArray(p.scope) ? p.scope.join(', ') : (p.scope || p.venue || 'Sui policy');
+              const pct = Math.min(100, budget ? used / budget * 100 : 0);
+              const disabled = terminalStatuses.has(p.status);
+              return (
+                <div key={p.id} style={{ padding: '12px 13px', borderRadius: 'var(--r-sm)', background: 'var(--glass)', border: `1px solid ${p.status === 'active' ? 'var(--border)' : `color-mix(in srgb, ${h[0]} 35%, var(--border))`}` }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+                    <div style={{ flex: '1 1 180px', minWidth: 0 }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0 }}>
+                        <span style={{ width: 8, height: 8, borderRadius: p.status === 'active' ? '50%' : 3, background: h[0], flexShrink: 0 }} />
+                        <span style={{ fontSize: 12.5, fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{p.name}</span>
+                      </div>
+                      <div className="mono" style={{ fontSize: 10, color: 'var(--t2)', marginTop: 3 }}>
+                        {scope} · {p.mode || 'cloud'} agent
+                      </div>
+                    </div>
+                    <span className="badge" style={{ fontSize: 9, background: h[1], color: h[0] }}><span className="dot"></span>{h[2]}</span>
+                    <button className={`btn btn-sm ${p.status === 'active' ? 'btn-danger' : ''}`} disabled={disabled}
+                      onClick={() => toggleStrategyStop(p)} style={{ minWidth: 82, justifyContent: 'center' }}>
+                      <Icon name={p.status === 'active' ? 'x' : 'refresh'} size={12} stroke={2.4} /> {p.status === 'active' ? 'Pause' : 'Resume'}
+                    </button>
+                  </div>
+                  <div style={{ marginTop: 10 }}>
+                    <RiskBar pct={pct} />
+                    <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 6, fontSize: 10.5, color: 'var(--t2)' }}>
+                      <span>{pct.toFixed(0)}% budget used</span>
+                      <span className="mono">${fmtUsd(used, 0)} / ${fmtUsd(budget, 0)}</span>
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </RCard>
+
+        <RCard title="Venue emergency controls" icon="layers" right={<span className="badge badge-neutral" style={{ fontSize: 9.5 }}>{stoppedVenues.size} stopped</span>}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+            {RG.venueLimits.map(v => {
+              const pct = v.exposure / v.cap * 100;
+              const isStopped = stoppedVenues.has(v.venue);
+              return (
+                <div key={v.venue} style={{ padding: '12px 13px', borderRadius: 'var(--r-sm)', background: isStopped ? 'var(--warn-dim)' : 'var(--glass)', border: `1px solid ${isStopped ? 'color-mix(in srgb, var(--warn) 40%, var(--border))' : 'var(--border)'}` }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+                    <div style={{ flex: '1 1 170px' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                        <span style={{ width: 8, height: 8, borderRadius: v.kind === 'cex' ? 2 : '50%', background: adapterColor(v.venue), filter: isStopped ? 'grayscale(1)' : 'none' }} />
+                        <span style={{ fontSize: 12.5, fontWeight: 600 }}>{v.venue}</span>
+                        <span className="mono" style={{ fontSize: 8.5, fontWeight: 700, color: 'var(--t3)' }}>{v.kind.toUpperCase()}</span>
+                      </div>
+                      <div className="mono" style={{ fontSize: 10, color: 'var(--t2)', marginTop: 3 }}>
+                        ${fmtUsd(v.exposure, 0)} exposure / ${fmtUsd(v.cap, 0)} cap
+                      </div>
+                    </div>
+                    <span className={`badge ${isStopped ? 'badge-warn' : 'badge-safe'}`} style={{ fontSize: 9 }}>
+                      <span className="dot"></span>{isStopped ? 'stopped' : 'open'}
+                    </span>
+                    <button className={`btn btn-sm ${isStopped ? '' : 'btn-danger'}`} onClick={() => toggleVenueStop(v.venue)}
+                      style={{ minWidth: 98, justifyContent: 'center' }}>
+                      <Icon name={isStopped ? 'refresh' : 'x'} size={12} stroke={2.4} /> {isStopped ? 'Resume' : 'Stop venue'}
+                    </button>
+                  </div>
+                  <div style={{ marginTop: 10 }}>
+                    <RiskBar pct={pct} />
+                  </div>
+                </div>
+              );
+            })}
+            <div style={{ display: 'flex', gap: 8, fontSize: 10.5, color: 'var(--t2)', lineHeight: 1.45, paddingTop: 2 }}>
+              <span style={{ color: 'var(--warn)', flexShrink: 0 }}><Icon name="alert" size={13} /></span>
+              Venue stop is a runtime gate control surface today. Future backend wiring must persist it into the policy/adapter execution path before it counts as chain-enforced.
+            </div>
+          </div>
+        </RCard>
+      </div>
+
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: 18, alignItems: 'start' }}>
         {/* venue caps */}
         <RCard title="Per-venue exposure caps" icon="layers" right={<span className="badge badge-neutral" style={{ fontSize: 9.5 }}>{RG.venueLimits.length} venues</span>}>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 13 }}>

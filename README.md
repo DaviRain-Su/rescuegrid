@@ -58,6 +58,7 @@ Post-hackathon multivenue planning lives in [`docs/06-post-mvp-multivenue-roadma
 - **Sign in** — connect a Sui wallet (Slush or any standard wallet); optional Google zkLogin via Enoki. No seed phrase pasted, no extension lock-in.
 - **Command center** — live portfolio KPIs, a SUI/USDC Deepbook chart, an animated radial risk gauge, agent reasoning trail, open positions, and an agent live feed.
 - **New strategy** — natural language → parsed intent + human-readable **PTB preview** + 30-day backtest + **Guardian** risk checks (including a hard **BLOCK** path) → Move Policy config → Local/Cloud mode → one-signature deploy.
+- **Risk center** — global budget, strategy controls, Sui venue caps, liquidation/oracle/signer health, stale-data warnings, Guardian rule simulation, and global / strategy / venue emergency-stop surfaces.
 - **Agent activity** — audit ledger for autonomous decisions and policy actions, with strategy / venue / status / tx-or-order filters, expandable reason/input/PTB/Guardian/budget evidence, and clickable tx hashes opening a **Sui explorer drawer**.
 - **Policies** — your on-chain authority as cards (budget bars, scope, expiry, revoke) with an **Inspect** slide-over exposing the MoveGate Mandate + `RescuePolicyWrapper` shape, delegated-vs-denied capabilities, protocol allow-list, gas/signing, and audit trail.
 - **Profile** — wallet identity, real balances/assets, the active session, the agent's delegated authority, and gas posture; live values when a wallet is connected.

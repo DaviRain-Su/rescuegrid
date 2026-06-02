@@ -237,6 +237,8 @@ Required modules:
 - Guardian rule editor;
 - "what the agent cannot do" capability matrix.
 
+Implementation status: `src/components/Risk.jsx` now implements the K7 Risk Center surface. It shows global budget and daily loss caps, per-strategy pause/resume controls wired to the existing policy toggle state, local Sui venue stop/resume controls, per-venue exposure caps, liquidation watch, oracle health, signer/executor health, stale-data warning summaries, Guardian preset editing/simulation and the capability matrix. The global emergency stop remains wired to the app-wide halt path; strategy controls update the current policy state. Venue stop is intentionally marked as a runtime gate control surface until a backend persistence path writes venue stops into the policy/adapter execution path.
+
 ### G. Agent Activity Ledger v2
 
 Purpose: replace a simple event list with an audit product.
