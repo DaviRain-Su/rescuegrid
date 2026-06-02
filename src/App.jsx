@@ -5,7 +5,6 @@ import { useState, useEffect, useRef } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useNavigate, useSearch } from '@tanstack/react-router'
 import { useCurrentAccount, useCurrentWallet, useSuiClient, useSignAndExecuteTransaction, useSignPersonalMessage, useDisconnectWallet } from '@mysten/dapp-kit'
-import { Transaction } from '@mysten/sui/transactions'
 import { RG } from './data.js'
 import deployment from '../core/deployment.js'
 import {
@@ -21,6 +20,7 @@ import {
   setRiskControl,
 } from './api.js'
 import { EMPTY_LIVE_DASHBOARD, liveDashboardOwnerKey, useLiveDashboard } from './queries/live.js'
+import { apiFailure, createPolicyWithWallet, revokePolicyWithWallet } from './queries/wallet-flow.js'
 import { Icon, Logo, Token, hexToRgba } from './components/primitives.jsx'
 import { ZkLogin } from './components/ZkLogin.jsx'
 import { Dashboard } from './components/Dashboard.jsx'
@@ -90,11 +90,6 @@ function NavItem({ icon, label, active, onClick, badge, badgeClass = 'badge-acce
       {badge != null && <span className={`badge ${badgeClass}`} style={{ fontSize: 9.5, padding: '2px 7px' }}>{badge}</span>}
     </button>
   )
-}
-
-function apiFailure(label, result) {
-  const message = result?.message || result?.code || 'unknown error'
-  return new Error(`${label}: ${message}`)
 }
 
 function buildSourceMeta({ live, loading, readOnly, meta, count }) {
@@ -404,10 +399,12 @@ export default function App({ onExit }) {
     mutationFn: async ({ id }) => {
       const pol = policies.find(p => p.id === id)
       const wid = pol?._wrapperId || id
-      const built = await buildRevokeTx(owner, wid)
-      if (built.status !== 'ok') throw apiFailure('Revoke build failed', built)
-      await signAndExec({ transaction: Transaction.from(built.tx_json) })
-      return { wrapperId: wid }
+      return revokePolicyWithWallet({
+        owner,
+        wrapperId: wid,
+        buildRevokeTx,
+        signAndExec,
+      })
     },
     onSuccess: () => {
       showToast('Policy revoked on-chain — agent authority deleted', 'var(--danger)')
@@ -451,16 +448,16 @@ export default function App({ onExit }) {
 
   const deployLiveMutation = useMutation({
     mutationFn: async ({ text, meta }) => {
-      const parsed = await parseIntent(owner, text || `When SUI drops more than 8%, deploy a ${meta.budget} USDC rescue grid`)
-      if (parsed.status !== 'ok') throw apiFailure('Parse failed', parsed)
-      const built = await buildPolicyTx(owner, parsed.strategy, parsed.strategy_hash)
-      if (built.status !== 'ok') throw apiFailure('Build failed', built)
-      const signed = await signAndExec({ transaction: Transaction.from(built.tx_json) })
-      const res = await suiClient.waitForTransaction({ digest: signed.digest, options: { showObjectChanges: true, showEvents: true } })
-      const ev = (res.events || []).find(e => String(e.type).endsWith('::policy::PolicyCreated'))
-      const wrapperId = ev?.parsedJson?.wrapper_id
-      if (wrapperId) await activatePolicy(wrapperId, parsed.strategy).catch(() => {})
-      return { meta, wrapperId, digest: signed.digest }
+      return createPolicyWithWallet({
+        owner,
+        text,
+        meta,
+        parseIntent,
+        buildPolicyTx,
+        signAndExec,
+        suiClient,
+        activatePolicy,
+      })
     },
     onSuccess: ({ meta }) => {
       showToast('Policy created on-chain — agent authorized within limits', 'var(--accent)')
