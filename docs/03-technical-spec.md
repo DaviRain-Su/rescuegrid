@@ -1027,6 +1027,7 @@ Output:
   },
   "next_verification": {
     "readiness_command": "npm run daemon -- status --json",
+    "funding_watch_command": "npm run funding:watch -- --json",
     "strict_execution_command": "npm run demo:execute"
   },
   "execution_claimed": false
@@ -1036,6 +1037,7 @@ Output:
 Rules:
 
 - `funding:request` must reuse `buildExecutionReadiness`; it cannot maintain a second funding/signer readiness model.
+- `funding:watch` must reuse the same readiness + handoff contract, return non-zero while blocked when `--run-demo` or `--fail-until-ready` is set, and must not create a policy until `execution_ready=true`.
 - DBUSDC and DEEP targets are the DeepBook BalanceManager balances, not plain wallet balances. Direct wallet transfer is insufficient unless the BalanceManager read reflects the balance.
 - SUI gas target is the agent address.
 - Output may include public addresses and coin types, but must not include `AGENT_KEY`, owner key, internal tick token, WaaP session file, permission token or secret values.

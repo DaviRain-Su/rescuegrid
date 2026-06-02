@@ -75,6 +75,7 @@ assert.equal(handoff.funding_targets.balance_manager.required_assets[0].asset, '
 assert.equal(handoff.funding_targets.balance_manager.required_assets[0].missing, '750')
 assert.equal(handoff.funding_targets.balance_manager.required_assets[1].missing, '10')
 assert.equal(handoff.funding_targets.agent_gas.required_assets[0].missing, '0')
+assert.equal(handoff.next_verification.funding_watch_command, 'npm run funding:watch -- --json')
 assert.equal(handoff.next_verification.strict_execution_command, 'npm run demo:execute')
 assert.equal(JSON.stringify(handoff).includes('super-secret'), false)
 

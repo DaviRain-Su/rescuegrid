@@ -13,6 +13,7 @@
     "test:live-config": "node src/queries/live-config.test.mjs",
     "test:signer-health": "node src/queries/signer-health.test.mjs",
     "funding:request": "node worker/scripts/funding-handoff.mjs",
+    "funding:watch": "node worker/scripts/funding-watch.mjs",
     "chain-data:status": "node worker/scripts/chain-data-status.mjs",
     "demo:loop": "node worker/scripts/validate-demo-loop.mjs",
     "demo:execute": "node worker/scripts/validate-demo-loop.mjs --require-execution",

@@ -326,7 +326,7 @@ Happy path:
 - 输出 `purpose=external_deepbook_testnet_funding_request`、`chain=sui:testnet`、部署 agent address、AgentPassport id、BalanceManager id、DeepBook `SUI_DBUSDC` pool id、DBUSDC coin type 和 DEEP coin type。
 - 输出 BalanceManager DBUSDC / DEEP 的 observed、required、missing、usable 和 blocker code。
 - 输出 agent gas address 的 SUI_MIST observed、required、missing、usable 和 blocker code。
-- 输出 `next_verification.readiness_command="npm run daemon -- status --json"` 和 `next_verification.strict_execution_command="npm run demo:execute"`。
+- 输出 `next_verification.readiness_command="npm run daemon -- status --json"`、`next_verification.funding_watch_command="npm run funding:watch -- --json"` 和 `next_verification.strict_execution_command="npm run demo:execute"`。
 - 支持 `--dbusdc-threshold` / `--deep-threshold` / `--sui-gas-threshold`，且这些 request threshold 只能通过 `buildExecutionReadiness` 提高门槛，不能弱化 Worker 配置 minimum。
 
 Security / boundary:
@@ -335,6 +335,22 @@ Security / boundary:
 - 必须是 read-only；不得创建 policy、不得提交 PTB、不得修改 BalanceManager。
 - 响应不得包含 `AGENT_KEY`、owner key、`INTERNAL_AGENT_TICK_TOKEN`、WaaP session file、permission token 或任何 secret value。
 - `execution_claimed` 必须始终为 `false`；`ready_for_strict_execution=true` 只代表 preflight ready，不能代表已经执行成功。
+
+### `npm run funding:watch`
+
+Happy path:
+
+- 默认 `npm run funding:watch -- --json` 运行一次，复用 `buildExecutionReadiness` + `buildFundingHandoff` 输出 `purpose=deepbook_execution_funding_watch`、`funding_ready`、`execution_ready`、blocker codes、public funding targets 和 next verification commands。
+- `--wait --interval-ms <ms> --max-attempts <n>` 轮询同一 readiness contract，直到 `execution_ready=true` 或达到 attempts 上限。
+- `--run-demo` / `--execute` 只有在 `execution_ready=true` 后才启动 strict `demo:execute`；blocked 状态必须返回非零退出码且不创建 policy。
+- `--fail-until-ready` 在资金/签名仍 blocked 时返回非零退出码，用于外部 funding watcher 或 CI gate。
+
+Security / boundary:
+
+- 必须复用 `buildExecutionReadiness`，不能复制资金、signer 或 BalanceManager 判断。
+- blocked 状态不得创建 policy、不得提交 PTB、不得调用 strict demo runner。
+- 输出不得包含 `AGENT_KEY`、owner key、`INTERNAL_AGENT_TICK_TOKEN`、WaaP session file、permission token 或任何 secret value。
+- `execution_claimed` 必须始终为 `false`；watcher ready 只代表可以进入 strict execution validator。
 
 ### `POST /api/agent/tick`
 
