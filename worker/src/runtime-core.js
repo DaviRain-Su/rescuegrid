@@ -6,6 +6,7 @@
 // runtime-specific callers.
 import { runGuardian } from './guardian.js'
 import { EXECUTOR_KIND_DEEPBOOK, getExecutorAdapter, listExecutorAdapters, unsupportedExecutor, unsupportedExecutorTarget } from './executor-adapters.js'
+import { isVenueStopped, normalizeVenueKey } from './risk-controls.js'
 
 export const RUNTIME_CORE_BOUNDARIES = Object.freeze({
   policy_reader: 'Loads MoveGate Mandate + RescuePolicyWrapper snapshots before a tick.',
@@ -41,6 +42,8 @@ export const EXECUTION_BLOCKER_LABELS = {
   FORCE_TRIGGER_DISABLED: 'Force trigger disabled',
   UNSUPPORTED_EXECUTOR: 'Unsupported executor',
   UNSUPPORTED_EXECUTOR_TARGET: 'Unsupported executor target',
+  VENUE_STOPPED: 'Venue emergency stop',
+  RISK_CONTROLS_UNAVAILABLE: 'Risk controls unavailable',
 }
 
 function blockerLabel(code) {
@@ -160,9 +163,12 @@ export function classifyExecutionResolution({ submitted, resolved, beforeWrapper
  * @param {boolean} a.executionEnabled
  * @param {string=} a.expectedAgentId
  * @param {string=} a.expectedPoolId
+ * @param {string=} a.venue
+ * @param {Array<string|object>=} a.stoppedVenues
+ * @param {boolean=} a.riskControlsUnavailable
  * @returns {{action:string, reason?:number, detail:string, guardian?:object}}
  */
-export function decideTick({ wrapper, mandate, triggerMet, proposed, nowMs, executionEnabled, expectedAgentId, expectedPoolId }) {
+export function decideTick({ wrapper, mandate, triggerMet, proposed, nowMs, executionEnabled, expectedAgentId, expectedPoolId, venue, stoppedVenues = [], riskControlsUnavailable = false }) {
   if (mandate.revoked) return readinessBlock({ action: 'stopped_revoked', code: 'POLICY_REVOKED', detail: 'Mandate revoked on-chain; halting.' })
   if (nowMs >= Number(mandate.expires_at_ms)) return readinessBlock({ action: 'stopped_expired', code: 'POLICY_EXPIRED', detail: 'Mandate expired; halting.' })
   if (expectedAgentId && (wrapper.agent !== expectedAgentId || mandate.agent !== expectedAgentId)) {
@@ -172,6 +178,23 @@ export function decideTick({ wrapper, mandate, triggerMet, proposed, nowMs, exec
     return readinessBlock({ code: 'WRONG_POOL', detail: 'Execution blocked: policy pool is outside the configured execution scope.' })
   }
   if (!triggerMet) return readinessBlock({ action: 'no_op', code: 'TRIGGER_NOT_MET', detail: 'Trigger condition not met; monitoring.' })
+  if (riskControlsUnavailable) {
+    return readinessBlock({
+      code: 'RISK_CONTROLS_UNAVAILABLE',
+      detail: 'Execution blocked: runtime risk controls could not be read before preparing a transaction.',
+    })
+  }
+  if (venue && isVenueStopped(venue, stoppedVenues)) {
+    return readinessBlock({
+      code: 'VENUE_STOPPED',
+      detail: `Execution blocked: ${venue} venue emergency stop is active.`,
+      extra: {
+        venue,
+        venue_key: normalizeVenueKey(venue),
+        stopped_venues: stoppedVenues,
+      },
+    })
+  }
 
   const guardian = runGuardian({ mandate, wrapper, proposed, nowMs })
   if (guardian.decision === 'block') {

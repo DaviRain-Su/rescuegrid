@@ -134,7 +134,7 @@ async function checkFunding(chainData, proposed, executionEnabled) {
 /**
  * Full tick with chain reads + gated execution.
  * @param {object} env worker env (AGENT_KEY, EXECUTION_ENABLED, DEMO_MODE)
- * @param {object} p { wrapperId, forceTrigger, nowMs, market, executorKind }
+ * @param {object} p { wrapperId, forceTrigger, nowMs, market, executorKind, venueStops, riskControlsUnavailable }
  * @returns {Promise<Record<string, any>>}
  */
 export async function runTick(env, p) {
@@ -168,7 +168,20 @@ export async function runTick(env, p) {
   const adapter = planContext.adapter
   const expectedPoolId = planContext.expected_target_id
   const plan = planContext.execution_plan
-  const decision = decideTick({ wrapper, mandate, triggerMet, proposed, nowMs, executionEnabled, expectedAgentId: DEPLOYMENT.agent.address, expectedPoolId })
+  const venue = plan.venue || adapter.venue || executorKind
+  const decision = decideTick({
+    wrapper,
+    mandate,
+    triggerMet,
+    proposed,
+    nowMs,
+    executionEnabled,
+    expectedAgentId: DEPLOYMENT.agent.address,
+    expectedPoolId,
+    venue,
+    stoppedVenues: p.venueStops || [],
+    riskControlsUnavailable: p.riskControlsUnavailable === true,
+  })
   if (decision.action !== 'execute') {
     if (decision.code === 'EXECUTION_DISABLED' && env?.EXECUTION_ENABLED === 'true' && !signerAdapter.available && signerAdapter.unavailable_code !== 'EXECUTION_DISABLED') {
       return {

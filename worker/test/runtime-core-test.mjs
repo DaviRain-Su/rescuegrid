@@ -65,6 +65,7 @@ const market = {
   assert.equal(prepared.expected_target_id, POOL.pool_id)
   assert.equal(prepared.market_snapshot, market)
   assert.equal(prepared.execution_plan.executor_kind, 'deepbook')
+  assert.equal(prepared.execution_plan.venue, 'DeepBook')
   assert.equal(prepared.execution_plan.liquidity_gate.ok, true)
   assert.equal(prepared.execution_plan.volume_gate.ok, true)
 }

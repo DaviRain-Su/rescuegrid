@@ -165,6 +165,53 @@ export function getBalances(owner) {
   return read(`/api/balances?owner=${owner}`, () => chainRead.getBalances(owner))
 }
 
+function ownerControlNonce() {
+  const cryptoApi = globalThis.crypto
+  if (cryptoApi?.randomUUID) return cryptoApi.randomUUID()
+  if (cryptoApi?.getRandomValues) {
+    const bytes = new Uint32Array(4)
+    cryptoApi.getRandomValues(bytes)
+    return [...bytes].map((n) => n.toString(16).padStart(8, '0')).join('-')
+  }
+  throw new Error('Secure random source unavailable for owner control nonce.')
+}
+
+function venueKey(venue) {
+  return String(venue || '').trim().toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '')
+}
+
+export function buildVenueStopMessage({ owner, venue, stopped, nonce = ownerControlNonce(), issuedAtMs = Date.now() }) {
+  const cleanVenue = String(venue || '').trim().replace(/\s+/g, ' ')
+  return JSON.stringify({
+    app: 'RescueGrid',
+    version: 1,
+    chain: 'sui:testnet',
+    action: 'set_venue_stop',
+    owner,
+    venue: cleanVenue,
+    venue_key: venueKey(cleanVenue),
+    stopped: Boolean(stopped),
+    nonce,
+    issued_at_ms: issuedAtMs,
+  })
+}
+
+/** GET /api/risk/venue-stops — Worker runtime venue emergency stops. */
+export function getVenueStops() {
+  return workerGet('/api/risk/venue-stops').catch((e) => ({
+    status: 'error',
+    code: WORKER_CONFIGURED ? 'WORKER_READ_FAILED' : 'WORKER_NOT_CONFIGURED',
+    message: String(e?.message || e),
+    venue_stops: [],
+    venue_stop_records: [],
+  }))
+}
+
+/** POST /api/risk/venue-stops — owner-signed runtime venue stop/resume. */
+export function setVenueStop(owner, message, signature) {
+  return post('/api/risk/venue-stops', { owner, message, signature })
+}
+
 /** POST /api/policies/:id/revoke — returns { tx_json } unsigned revoke tx. */
 export function buildRevokeTx(owner, wrapperId) {
   return post(`/api/policies/${wrapperId}/revoke`, { owner, confirmed: true })

@@ -680,6 +680,51 @@ Data source rules:
 - `runtime_state` comes from Durable Object state.
 - If chain state conflicts with runtime state, chain state wins and `runtime_state_stale` is true.
 
+### `GET /api/risk/venue-stops`
+
+Returns Worker-persisted runtime venue emergency stops.
+
+Response:
+
+```json
+{
+  "status": "ok",
+  "venue_stops": ["DeepBook"],
+  "venue_stop_records": [
+    {
+      "venue": "DeepBook",
+      "venue_key": "deepbook",
+      "stopped": true,
+      "owner": "0x...",
+      "updated_ms": 1780480000000,
+      "issued_at_ms": 1780480000000
+    }
+  ]
+}
+```
+
+### `POST /api/risk/venue-stops`
+
+Persists an owner-signed runtime venue stop/resume control. The Worker must verify a Sui personal-message signature from the owner before mutating Durable Object state.
+
+Request:
+
+```json
+{
+  "owner": "0x...",
+  "message": "{\"app\":\"RescueGrid\",\"version\":1,\"chain\":\"sui:testnet\",\"action\":\"set_venue_stop\",...}",
+  "signature": "base64..."
+}
+```
+
+Rules:
+
+- `message` domain must be `RescueGrid`, `version=1`, `chain=sui:testnet`, `action=set_venue_stop`.
+- `message.owner` must match the request owner and the verified Sui signature address.
+- `message` must include `venue`, `venue_key`, `stopped`, `nonce` and `issued_at_ms`.
+- The control expires after 10 minutes and used nonces are rejected.
+- Successful writes update the runtime control plane only. They do not revoke the MoveGate Mandate or alter the `RescuePolicyWrapper`.
+
 ### `POST /api/agent/tick`
 
 Internal endpoint called by scheduler or Durable Object alarm. This endpoint is not exposed to Dashboard and must reject public traffic; local development may call it only with an internal dev token.
@@ -726,6 +771,12 @@ Allowed `action` values:
 - `stopped_revoked`
 - `stopped_expired`
 - `error`
+
+Runtime risk controls:
+
+- Before submitting an execution PTB, tick must read Worker venue-stop controls.
+- If the target venue is stopped and the trigger condition is met, tick returns `action=blocked`, `code=VENUE_STOPPED`, and does not submit a transaction.
+- If risk controls cannot be read when a triggered execution is being evaluated, tick returns `RISK_CONTROLS_UNAVAILABLE` and does not submit.
 
 ## 9. Agent State Machine
 

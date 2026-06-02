@@ -2,9 +2,9 @@
    RescueGrid — app shell, navigation, crash orchestration
    =========================================================== */
 import { useState, useEffect, useRef } from 'react'
-import { useMutation, useQueryClient } from '@tanstack/react-query'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useNavigate, useSearch } from '@tanstack/react-router'
-import { useCurrentAccount, useCurrentWallet, useSuiClient, useSignAndExecuteTransaction, useDisconnectWallet } from '@mysten/dapp-kit'
+import { useCurrentAccount, useCurrentWallet, useSuiClient, useSignAndExecuteTransaction, useSignPersonalMessage, useDisconnectWallet } from '@mysten/dapp-kit'
 import { Transaction } from '@mysten/sui/transactions'
 import { RG } from './data.js'
 import deployment from '../core/deployment.js'
@@ -14,6 +14,9 @@ import {
   buildPolicyTx,
   activatePolicy,
   buildRevokeTx,
+  buildVenueStopMessage,
+  getVenueStops,
+  setVenueStop,
 } from './api.js'
 import { EMPTY_LIVE_DASHBOARD, liveDashboardOwnerKey, useLiveDashboard } from './queries/live.js'
 import { Icon, Logo, Token, hexToRgba } from './components/primitives.jsx'
@@ -236,6 +239,7 @@ export default function App({ onExit }) {
   const { currentWallet } = useCurrentWallet()
   const suiClient = useSuiClient()
   const { mutateAsync: signAndExec } = useSignAndExecuteTransaction()
+  const { mutateAsync: signPersonalMessage } = useSignPersonalMessage()
   const { mutate: disconnect } = useDisconnectWallet()
   const queryClient = useQueryClient()
   const liveMode = sessionMode === 'wallet' && !!account
@@ -253,6 +257,14 @@ export default function App({ onExit }) {
     enabled: liveReadsEnabled && authed,
   })
   const liveDashboard = liveDashboardQuery.data || EMPTY_LIVE_DASHBOARD
+  const venueStopsQuery = useQuery({
+    queryKey: ['risk', 'venue-stops'],
+    queryFn: getVenueStops,
+    enabled: authed && liveReadsEnabled && WORKER_CONFIGURED,
+    staleTime: 5_000,
+    refetchInterval: authed && liveReadsEnabled && WORKER_CONFIGURED ? 5_000 : false,
+    refetchOnWindowFocus: false,
+  })
   const liveActivity = liveDashboard.activity
   const liveSummary = liveDashboard.summary
   const liveMarket = liveDashboard.market
@@ -268,6 +280,10 @@ export default function App({ onExit }) {
     ? { source: 'error', error: String(liveDashboardQuery.error?.message || liveDashboardQuery.error) }
     : liveDashboard.meta
   const refreshLivePolicies = () => queryClient.invalidateQueries({ queryKey: liveDashboardOwnerKey(owner) })
+  const refreshVenueStops = () => queryClient.invalidateQueries({ queryKey: ['risk', 'venue-stops'] })
+  const liveVenueStops = venueStopsQuery.data?.status === 'ok' && Array.isArray(venueStopsQuery.data.venue_stops)
+    ? venueStopsQuery.data.venue_stops
+    : []
   const displayedPolicies = liveReadsEnabled && livePoliciesLoading ? [] : policies
 
   // apply accent + theme to CSS vars
@@ -396,6 +412,30 @@ export default function App({ onExit }) {
     },
   })
 
+  const venueStopMutation = useMutation({
+    mutationFn: async ({ venue, stopped }) => {
+      if (!account) throw new Error('Connect a Sui wallet to sign runtime risk controls.')
+      const message = buildVenueStopMessage({ owner: account.address, venue, stopped })
+      const signed = await signPersonalMessage({ message: new TextEncoder().encode(message) })
+      const result = await setVenueStop(account.address, message, signed.signature)
+      if (result.status !== 'ok') throw apiFailure('Venue stop failed', result)
+      return { venue, stopped, result }
+    },
+    onSuccess: ({ venue, stopped }) => {
+      showToast(
+        stopped
+          ? `${venue} stop persisted — Worker runtime will block new adapter submissions`
+          : `${venue} stop removed — Worker runtime can evaluate adapter submissions`,
+        stopped ? 'var(--warn)' : 'var(--accent)',
+      )
+      pushNotif('guardian', `${venue} ${stopped ? 'venue stop enabled' : 'venue stop removed'}`)
+      refreshVenueStops()
+    },
+    onError: (e) => {
+      showToast(`Venue stop failed: ${String(e?.message || e).slice(0, 80)}`, 'var(--danger)')
+    },
+  })
+
   const deployLiveMutation = useMutation({
     mutationFn: async ({ text, meta }) => {
       const parsed = await parseIntent(owner, text || `When SUI drops more than 8%, deploy a ${meta.budget} USDC rescue grid`)
@@ -439,6 +479,17 @@ export default function App({ onExit }) {
   const togglePolicy = (p) => {
     setPolicies(ps => ps.map(x => x.id === p.id ? { ...x, status: x.status === 'active' ? 'paused' : 'active' } : x))
     showToast(p.status === 'active' ? 'Strategy paused — agent holds, no new actions' : 'Strategy resumed — agent active within policy', p.status === 'active' ? 'var(--warn)' : 'var(--accent)')
+  }
+
+  const handleVenueStop = (venue, stopped) => {
+    if (liveMode) {
+      if (!WORKER_CONFIGURED) { showToast('Venue stop needs the Worker — set VITE_WORKER_URL and run it', 'var(--warn)'); return }
+      venueStopMutation.mutate({ venue, stopped })
+      return
+    }
+    if (readOnlyLiveMode) {
+      showToast('Read-only live Worker mode — connect a wallet to sign venue risk controls', 'var(--warn)')
+    }
   }
 
   const rebalanceNow = (p) => {
@@ -776,7 +827,18 @@ export default function App({ onExit }) {
             {view === 'new' && <NewStrategy mode={mode} setMode={setMode} onDone={deployPolicy} seed={seed} />}
             {view === 'activity' && <ActivityView activity={shownActivity} policies={displayedPolicies} onTx={setTxView} live={liveReadsEnabled} loading={liveActivityLoading} source={sourceMeta} />}
             {view === 'markets' && <MarketsView onDeploy={(s) => { setSeed(s); setView('new') }} live={liveFeed} onToast={showToast} />}
-            {view === 'risk' && <RiskCenter policies={displayedPolicies} stopped={halted} onEmergencyStop={emergencyStop} onTogglePolicy={togglePolicy} onToast={showToast} />}
+            {view === 'risk' && <RiskCenter
+              policies={displayedPolicies}
+              stopped={halted}
+              onEmergencyStop={emergencyStop}
+              onTogglePolicy={togglePolicy}
+              onToggleVenueStop={liveReadsEnabled ? handleVenueStop : undefined}
+              onToast={showToast}
+              venueStops={liveReadsEnabled ? liveVenueStops : undefined}
+              venueStopsLoading={liveReadsEnabled && venueStopsQuery.isFetching}
+              venueStopPending={venueStopMutation.isPending}
+              venueStopSource={liveReadsEnabled && venueStopsQuery.data?.status === 'ok' ? 'worker' : 'local'}
+            />}
             {view === 'strategies' && <StrategyMarketplace onDeploy={(s) => { setSeed(s); setView('new') }} onToast={showToast} onOpen={openStrategy} />}
             {view === 'strategy-detail' && <StrategyDetail id={stratId} onBack={() => setView('strategies')} onDeploy={(s) => { setSeed(s); setView('new') }} onToast={showToast} />}
             {view === 'data' && <DataSources onToast={showToast} live={liveFeed} setLive={setLiveFeed} />}

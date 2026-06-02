@@ -13,6 +13,7 @@
     "test:guardian": "node test/guardian-test.mjs",
     "test:tick": "node test/tick-test.mjs",
     "test:runtime-core": "node test/runtime-core-test.mjs",
+    "test:risk-controls": "node test/risk-controls-test.mjs",
     "test:chain-data": "node test/chain-data-provider-test.mjs",
     "test:protocols": "node test/sui-protocol-registry-test.mjs",
     "test:watchlist": "node test/sui-watch-registry-test.mjs",
@@ -22,7 +23,7 @@
     "test:lending-reads": "node test/sui-lending-read-adapters-test.mjs",
     "test:adapter-sdk": "node test/executor-adapter-sdk-test.mjs",
     "demo:loop": "node scripts/validate-demo-loop.mjs",
-    "test": "node test/hash-vectors.mjs && node test/parse-intent-test.mjs && node test/guardian-test.mjs && node test/runtime-core-test.mjs && node test/chain-data-provider-test.mjs && node test/sui-protocol-registry-test.mjs && node test/sui-watch-registry-test.mjs && node test/sui-adapter-candidates-test.mjs && node test/sui-watch-only-boundaries-test.mjs && node test/sui-dex-read-adapters-test.mjs && node test/sui-lending-read-adapters-test.mjs && node test/tick-test.mjs && node test/tick-auth-test.mjs && node test/read-surfaces-test.mjs && node test/runtime-activity-test.mjs && node test/policy-event-feed-test.mjs && node test/active-policy-limit-test.mjs && node test/revoke-api-test.mjs && node test/executor-adapter-sdk-test.mjs && node test/executor-adapters-test.mjs && node test/secret-safe-signer-test.mjs && node test/signer-adapters-test.mjs && node test/daemon-cli-test.mjs && node test/validate-policy-loop-cli-test.mjs"
+    "test": "node test/hash-vectors.mjs && node test/parse-intent-test.mjs && node test/guardian-test.mjs && node test/runtime-core-test.mjs && node test/risk-controls-test.mjs && node test/chain-data-provider-test.mjs && node test/sui-protocol-registry-test.mjs && node test/sui-watch-registry-test.mjs && node test/sui-adapter-candidates-test.mjs && node test/sui-watch-only-boundaries-test.mjs && node test/sui-dex-read-adapters-test.mjs && node test/sui-lending-read-adapters-test.mjs && node test/tick-test.mjs && node test/tick-auth-test.mjs && node test/read-surfaces-test.mjs && node test/runtime-activity-test.mjs && node test/policy-event-feed-test.mjs && node test/active-policy-limit-test.mjs && node test/revoke-api-test.mjs && node test/executor-adapter-sdk-test.mjs && node test/executor-adapters-test.mjs && node test/secret-safe-signer-test.mjs && node test/signer-adapters-test.mjs && node test/daemon-cli-test.mjs && node test/validate-policy-loop-cli-test.mjs"
   },
   "dependencies": {
     "@mysten/sui": "^1.45.2",

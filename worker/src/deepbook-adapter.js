@@ -38,6 +38,7 @@ function deepbookPreview(plan) {
 
 export const deepbookAdapter = {
   kind: EXECUTOR_KIND_DEEPBOOK,
+  venue: 'DeepBook',
 
   supportsTarget(targetId) {
     return !!findDeepbookPool(targetId)
@@ -63,6 +64,7 @@ export const deepbookAdapter = {
     const pool = findDeepbookPool(wrapper.pool_id)
     const plan = {
       executor_kind: EXECUTOR_KIND_DEEPBOOK,
+      venue: 'DeepBook',
       target_id: wrapper.pool_id,
       target_supported: !!pool,
       pool_id: wrapper.pool_id,

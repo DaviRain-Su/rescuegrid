@@ -29,6 +29,7 @@ import {
 import { AGENT_ADDRESS, DEFAULT_TICK_INTERVAL_SECONDS, MAX_ACTIVE_POLICIES_PER_DEPLOYMENT } from './config.js'
 import { getExecutorAdapter, unsupportedExecutor, unsupportedExecutorTarget } from './executor-adapters.js'
 import { activationPolicyPreflight, reconcilePolicyListRuntimeState, reconcilePolicyRuntimeState, revokePolicyPreflight } from './policy-api.js'
+import { RISK_CONTROLS_DO_NAME, verifyVenueStopControl } from './risk-controls.js'
 import type { ParseDefaults, Strategy } from './types.js'
 
 export interface Env {
@@ -70,6 +71,24 @@ async function fetchRuntimeJson(env: Env, wrapperId: string, path: string): Prom
   } catch {
     return null
   }
+}
+
+async function fetchRiskControlsJson(env: Env, path: string, init?: RequestInit): Promise<Record<string, any> | null> {
+  try {
+    const stub = env.AGENT_RUNTIME.get(env.AGENT_RUNTIME.idFromName(RISK_CONTROLS_DO_NAME))
+    const res = await stub.fetch(`https://do${path}`, init)
+    if (!res.ok) return null
+    return await res.json<Record<string, any>>()
+  } catch {
+    return null
+  }
+}
+
+async function readRuntimeVenueStops(env: Env): Promise<{ venueStops: string[]; unavailable: boolean }> {
+  const body = await fetchRiskControlsJson(env, '/venue-stops')
+  if (!body) return { venueStops: [], unavailable: true }
+  const stops = Array.isArray(body.venue_stops) ? body.venue_stops.map(String) : []
+  return { venueStops: stops, unavailable: false }
 }
 
 async function readRuntimeState(env: Env, wrapperId: string): Promise<Record<string, any> | null> {
@@ -345,6 +364,33 @@ app.get('/api/balances', async (c) => {
   }
 })
 
+// ── K7: runtime risk controls for venue emergency stops ──────────────────
+app.get('/api/risk/venue-stops', async (c) => {
+  const body = await fetchRiskControlsJson(c.env, '/venue-stops')
+  if (!body) {
+    return c.json({ status: 'error', code: 'RISK_CONTROLS_UNAVAILABLE', message: 'Runtime risk controls are unavailable.' }, 503)
+  }
+  return c.json(body)
+})
+
+app.post('/api/risk/venue-stops', async (c) => {
+  let body: { owner?: string; message?: string; signature?: string }
+  try {
+    body = await c.req.json()
+  } catch {
+    return c.json({ status: 'error', code: 'BAD_REQUEST', message: 'Invalid JSON body.' }, 400)
+  }
+  const verified = await verifyVenueStopControl(body as any)
+  if (!verified.ok) return c.json(verified.body, verified.status as 400)
+
+  const stub = c.env.AGENT_RUNTIME.get(c.env.AGENT_RUNTIME.idFromName(RISK_CONTROLS_DO_NAME))
+  const res = await stub.fetch('https://do/venue-stops', {
+    method: 'POST',
+    body: JSON.stringify(verified.control),
+  })
+  return c.json(await res.json(), res.status as 200)
+})
+
 // ── D4: owner activity feed (merged on-chain policy events) ───────────────
 app.get('/api/activity', async (c) => {
   const owner = c.req.query('owner')
@@ -505,7 +551,13 @@ app.post('/api/agent/tick', async (c) => {
   if (!bodyResult.ok) return c.json(bodyResult.body, bodyResult.status as 400)
   const forceResult = validateForceTrigger({ forceTriggerRequested: body.force_trigger === true, demoMode: c.env.RESCUEGRID_DEMO_MODE })
   if (!forceResult.ok) return c.json(forceResult.body, forceResult.status as 403)
-  const result = await runTick(c.env, { wrapperId: bodyResult.wrapperId, forceTrigger: forceResult.forceTrigger })
+  const controls = await readRuntimeVenueStops(c.env)
+  const result = await runTick(c.env, {
+    wrapperId: bodyResult.wrapperId,
+    forceTrigger: forceResult.forceTrigger,
+    venueStops: controls.venueStops,
+    riskControlsUnavailable: controls.unavailable,
+  })
   return c.json({ status: 'ok', ...result })
 })
 
@@ -528,6 +580,55 @@ export class AgentRuntime {
 
   async fetch(req: Request): Promise<Response> {
     const url = new URL(req.url)
+    if (url.pathname === '/venue-stops') {
+      const recordsByVenue = (await this.state.storage.get<Record<string, any>>('venueStopRecords')) ?? {}
+      if (req.method === 'GET') {
+        const records = Object.values(recordsByVenue).sort((a: any, b: any) => Number(b.updated_ms || 0) - Number(a.updated_ms || 0))
+        return this.json({
+          status: 'ok',
+          venue_stops: records.filter((r: any) => r.stopped).map((r: any) => r.venue),
+          venue_stop_records: records,
+          updated_ms: records[0]?.updated_ms ?? null,
+        })
+      }
+      if (req.method === 'POST') {
+        const control = await req.json<any>()
+        if (!control?.owner || !control?.venue || !control?.venue_key || typeof control.stopped !== 'boolean' || !control?.nonce) {
+          return this.json({ status: 'error', code: 'BAD_CONTROL', message: 'Verified venue-stop control required.' }, 400)
+        }
+        const nonces = (await this.state.storage.get<Record<string, number>>('venueStopNonces')) ?? {}
+        const nonceKey = `${control.owner}:${control.nonce}`
+        if (nonces[nonceKey]) {
+          return this.json({ status: 'error', code: 'CONTROL_REPLAYED', message: 'Owner control nonce was already used.' }, 409)
+        }
+        const nowMs = Date.now()
+        const nextRecords = {
+          ...recordsByVenue,
+          [control.venue_key]: {
+            venue: control.venue,
+            venue_key: control.venue_key,
+            stopped: control.stopped,
+            owner: control.owner,
+            updated_ms: nowMs,
+            issued_at_ms: control.issued_at_ms,
+          },
+        }
+        const nextNonces = Object.fromEntries([...Object.entries(nonces), [nonceKey, nowMs]].slice(-100))
+        await this.state.storage.put('venueStopRecords', nextRecords)
+        await this.state.storage.put('venueStopNonces', nextNonces)
+        const records = Object.values(nextRecords).sort((a: any, b: any) => Number(b.updated_ms || 0) - Number(a.updated_ms || 0))
+        await this.state.storage.put('lastVenueStopUpdateMs', nowMs)
+        return this.json({
+          status: 'ok',
+          venue: control.venue,
+          venue_key: control.venue_key,
+          stopped: control.stopped,
+          venue_stops: records.filter((r: any) => r.stopped).map((r: any) => r.venue),
+          venue_stop_records: records,
+          updated_ms: nowMs,
+        })
+      }
+    }
     if (url.pathname === '/activate' && req.method === 'POST') {
       const { wrapperId, strategy } = await req.json<{ wrapperId: string; strategy?: any }>()
       await this.state.storage.put('wrapperId', wrapperId)
@@ -636,7 +737,8 @@ export class AgentRuntime {
       } catch { /* price read is best-effort; fall through to monitoring */ }
     }
 
-    const result = await runTick(this.env, { wrapperId, market, executorKind })
+    const controls = await readRuntimeVenueStops(this.env)
+    const result = await runTick(this.env, { wrapperId, market, executorKind, venueStops: controls.venueStops, riskControlsUnavailable: controls.unavailable })
     const rsMap: Record<string, string> = {
       stopped_revoked: 'Revoked',
       stopped_expired: 'Expired',

@@ -26,6 +26,10 @@ function RCard({ title, icon, right, children, pad = 18 }) {
   );
 }
 
+function venueKey(venue) {
+  return String(venue || '').trim().toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
+}
+
 function GuardianRules({ onToast }) {
   const [rules, setRules] = useState(RG.guardianRules.map(r => ({ ...r })));
   const [sim, setSim] = useState(null);
@@ -143,8 +147,21 @@ function GuardianRules({ onToast }) {
   );
 }
 
-export function RiskCenter({ policies, onEmergencyStop, onTogglePolicy, onToast, stopped }) {
-  const [stoppedVenues, setStoppedVenues] = useState(() => new Set());
+export function RiskCenter({
+  policies,
+  onEmergencyStop,
+  onTogglePolicy,
+  onToggleVenueStop,
+  onToast,
+  stopped,
+  venueStops,
+  venueStopsLoading = false,
+  venueStopPending = false,
+  venueStopSource = 'local',
+}) {
+  const [localStoppedVenues, setLocalStoppedVenues] = useState(() => new Set());
+  const controlledVenueStops = Array.isArray(venueStops);
+  const stoppedVenueKeys = new Set((controlledVenueStops ? venueStops : [...localStoppedVenues]).map(venueKey));
   const rb = RG.riskBudget;
   const atRiskPct = rb.atRisk / rb.authorized * 100;
   const lossPct = rb.dailyLossUsed / rb.dailyLossCap * 100;
@@ -187,15 +204,19 @@ export function RiskCenter({ policies, onEmergencyStop, onTogglePolicy, onToast,
     return ['var(--t2)', 'var(--glass-hi)', status || 'unknown'];
   };
   const toggleVenueStop = (venue) => {
-    const stopping = !stoppedVenues.has(venue);
-    setStoppedVenues(prev => {
+    const stopping = !stoppedVenueKeys.has(venueKey(venue));
+    if (onToggleVenueStop) {
+      onToggleVenueStop(venue, stopping);
+      return;
+    }
+    setLocalStoppedVenues(prev => {
       const next = new Set(prev);
-      if (stopping) next.add(venue); else next.delete(venue);
+      if (stopping) next.add(venueKey(venue)); else next.delete(venueKey(venue));
       return next;
     });
     onToast && onToast(
       stopping
-        ? `${venue} venue stop queued — runtime gate will reject new adapter actions for this venue`
+        ? `${venue} venue stop queued locally — runtime gate preview is active for this session`
         : `${venue} venue stop lifted — adapter actions can be evaluated again`,
       stopping ? 'var(--warn)' : 'var(--accent)',
     );
@@ -332,11 +353,15 @@ export function RiskCenter({ policies, onEmergencyStop, onTogglePolicy, onToast,
           </div>
         </RCard>
 
-        <RCard title="Venue emergency controls" icon="layers" right={<span className="badge badge-neutral" style={{ fontSize: 9.5 }}>{stoppedVenues.size} stopped</span>}>
+        <RCard title="Venue emergency controls" icon="layers" right={
+          <span className={`badge ${venueStopsLoading || venueStopPending ? 'badge-warn' : 'badge-neutral'}`} style={{ fontSize: 9.5 }}>
+            <span className="dot"></span>{venueStopsLoading || venueStopPending ? 'syncing' : `${stoppedVenueKeys.size} stopped`}
+          </span>
+        }>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
             {RG.venueLimits.map(v => {
               const pct = v.exposure / v.cap * 100;
-              const isStopped = stoppedVenues.has(v.venue);
+              const isStopped = stoppedVenueKeys.has(venueKey(v.venue));
               return (
                 <div key={v.venue} style={{ padding: '12px 13px', borderRadius: 'var(--r-sm)', background: isStopped ? 'var(--warn-dim)' : 'var(--glass)', border: `1px solid ${isStopped ? 'color-mix(in srgb, var(--warn) 40%, var(--border))' : 'var(--border)'}` }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
@@ -354,6 +379,7 @@ export function RiskCenter({ policies, onEmergencyStop, onTogglePolicy, onToast,
                       <span className="dot"></span>{isStopped ? 'stopped' : 'open'}
                     </span>
                     <button className={`btn btn-sm ${isStopped ? '' : 'btn-danger'}`} onClick={() => toggleVenueStop(v.venue)}
+                      disabled={venueStopPending}
                       style={{ minWidth: 98, justifyContent: 'center' }}>
                       <Icon name={isStopped ? 'refresh' : 'x'} size={12} stroke={2.4} /> {isStopped ? 'Resume' : 'Stop venue'}
                     </button>
@@ -366,7 +392,9 @@ export function RiskCenter({ policies, onEmergencyStop, onTogglePolicy, onToast,
             })}
             <div style={{ display: 'flex', gap: 8, fontSize: 10.5, color: 'var(--t2)', lineHeight: 1.45, paddingTop: 2 }}>
               <span style={{ color: 'var(--warn)', flexShrink: 0 }}><Icon name="alert" size={13} /></span>
-              Venue stop is a runtime gate control surface today. Future backend wiring must persist it into the policy/adapter execution path before it counts as chain-enforced.
+              {venueStopSource === 'worker'
+                ? 'Venue stop is persisted in the Worker runtime controls and blocks new adapter submissions before PTB signing.'
+                : 'Venue stop is local demo state in this session. Connect a wallet with the Worker to persist it into runtime controls.'}
             </div>
           </div>
         </RCard>
