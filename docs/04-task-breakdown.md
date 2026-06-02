@@ -165,6 +165,8 @@ Current K3 implementation status: Market Monitor now consumes Worker adapter sur
 
 Current K5/K6 implementation status: Strategy Builder now reuses the shared readiness helper in `src/queries/strategy-readiness.js`, shows a Builder-level adapter readiness panel, and blocks final deploy for templates whose selected adapters are read-only, missing, or only watch surfaces. DeepBook-only templates can still preview/create the policy shape; multi-venue Sui templates such as Cetus, Scallop/NAVI/Suilend and Bluefin Pro stay read-only until their executor and wrapper target constraints exist. Active Strategy Detail v2 shows live legs, net exposure, PnL/carry, open orders, execution ticks, pending approvals and Guardian limits; the Sui inventory flow uses Sui venue labels only and no longer crashes when a venue node is opened.
 
+Current K8 implementation status: Agent Activity now builds a normalized ledger row model for demo and live rows, inferring strategy, Sui venue, status, Guardian block state, human-approval state and tx/order identifiers. The view adds strategy, venue, status and tx/order/policy search filters while preserving quick event/outcome filters. Expanded rows now include explicit tx digest, venue order id, ledger status, approval state, reason, input snapshot, execution plan, Guardian result, PnL impact and budget impact.
+
 ## Hackathon Critical Path
 
 MVP 任务清单约 76h（含 B8 feasibility note 和 E9 adapter registry），Phase H 约 18h 且不进入 hackathon critical path。单人 hackathon 应优先跑最小可演示闭环。Critical path 只保留证明 Sub-track 2 的必要任务：

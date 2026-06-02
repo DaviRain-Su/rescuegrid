@@ -774,7 +774,7 @@ export default function App({ onExit }) {
             )}
             {view === 'dashboard' && <Dashboard state={state} live={liveReadsEnabled ? { summary: liveSummary, market: liveMarket, activity: liveActivity } : null} />}
             {view === 'new' && <NewStrategy mode={mode} setMode={setMode} onDone={deployPolicy} seed={seed} />}
-            {view === 'activity' && <ActivityView activity={shownActivity} onTx={setTxView} live={liveReadsEnabled} loading={liveActivityLoading} source={sourceMeta} />}
+            {view === 'activity' && <ActivityView activity={shownActivity} policies={displayedPolicies} onTx={setTxView} live={liveReadsEnabled} loading={liveActivityLoading} source={sourceMeta} />}
             {view === 'markets' && <MarketsView onDeploy={(s) => { setSeed(s); setView('new') }} live={liveFeed} onToast={showToast} />}
             {view === 'risk' && <RiskCenter policies={displayedPolicies} stopped={halted} onEmergencyStop={emergencyStop} onToast={showToast} />}
             {view === 'strategies' && <StrategyMarketplace onDeploy={(s) => { setSeed(s); setView('new') }} onToast={showToast} onOpen={openStrategy} />}

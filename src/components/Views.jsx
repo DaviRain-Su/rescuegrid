@@ -1,7 +1,7 @@
 /* ===========================================================
    RescueGrid — Activity log + Policy management
    =========================================================== */
-import { useState, Fragment } from 'react'
+import { useState, Fragment, useMemo } from 'react'
 import { RG } from '../data.js'
 import { Icon, fmtUsd, ModeBadge } from './primitives.jsx'
 import { Button, ProgressBar } from '@heroui/react'
@@ -69,8 +69,135 @@ function evidenceValue(value) {
   return value == null || value === '' ? '-' : String(value)
 }
 
-export function ActivityView({ activity, onTx, live = false, loading = false, source = null }) {
+const STRATEGY_LABELS = {
+  'rescue-grid': 'Rescue Grid',
+  dca: 'DCA Ladder',
+  hedge: 'Hedge',
+  'funding-arb': 'Funding / Perps',
+  'spot-arb': 'Spot Spread',
+  'lp-manage': 'LP Manager',
+  lending: 'Yield Router',
+}
+
+const VENUE_MATCHERS = [
+  ['Bluefin Pro', /bluefin pro|sui-perp|perp hedge|funding/i],
+  ['Bluefin Spot', /bluefin spot/i],
+  ['DeepBook', /deepbook|deepbook v3|clob|grid rung|dca|rescue grid/i],
+  ['Cetus', /cetus/i],
+  ['Turbos', /turbos/i],
+  ['Momentum', /momentum/i],
+  ['Scallop', /scallop/i],
+  ['NAVI', /\bnavi\b/i],
+  ['Suilend', /suilend/i],
+  ['AlphaLend', /alphalend/i],
+  ['Sui policy', /policy authority|mandate|wrapper|revoked/i],
+]
+
+function compactId(value) {
+  const s = String(value || '')
+  return s.length > 22 ? `${s.slice(0, 10)}…${s.slice(-8)}` : s || '-'
+}
+
+function policyLookup(policies) {
+  const byName = new Map()
+  const byId = new Map()
+  ;(policies || []).forEach((p) => {
+    if (p?.name) byName.set(String(p.name), p)
+    if (p?.id) byId.set(String(p.id), p)
+    if (p?._wrapperId) byId.set(String(p._wrapperId), p)
+  })
+  return { byName, byId }
+}
+
+function inferStrategy(a, lookup) {
+  const p = lookup.byName.get(String(a.policy || '')) || lookup.byId.get(String(a.wrapper_id || '')) || lookup.byId.get(String(a.policy_id || ''))
+  const id = a.strategy || p?.strategy || (
+    /dca|accumulation/i.test(`${a.policy} ${a.title}`) ? 'dca'
+    : /funding|perp/i.test(`${a.policy} ${a.title} ${a.detail}`) ? 'funding-arb'
+    : /spread|arb/i.test(`${a.policy} ${a.title} ${a.detail}`) ? 'spot-arb'
+    : /lp|range/i.test(`${a.policy} ${a.title} ${a.detail}`) ? 'lp-manage'
+    : /lend|yield/i.test(`${a.policy} ${a.title} ${a.detail}`) ? 'lending'
+    : /hedge/i.test(`${a.policy} ${a.title} ${a.detail}`) ? 'hedge'
+    : 'rescue-grid'
+  )
+  return { id, label: STRATEGY_LABELS[id] || id || 'Strategy' }
+}
+
+function inferVenue(a) {
+  const explicit = a.venue || a.protocol || a.adapter || a.venue_name
+  if (explicit) return String(explicit)
+  const hay = `${a.policy || ''} ${a.title || ''} ${a.detail || ''} ${a.chain_event || ''}`
+  const hit = VENUE_MATCHERS.find(([, re]) => re.test(hay))
+  return hit ? hit[0] : 'Sui venue'
+}
+
+function outcomeOfActivity(a) {
+  if (a.kind === 'guardian' || a.kind === 'fail') return 'blocked'
+  if (a.kind === 'monitor') return 'planned'
+  return 'executed'
+}
+
+function statusOfActivity(a, outcome) {
+  if (a.kind === 'retry') return { id: 'retry', label: 'Retry' }
+  if (a.kind === 'fail') return { id: 'failed', label: 'Failed' }
+  if (outcome === 'blocked') return { id: 'blocked', label: 'Guardian block' }
+  if (outcome === 'planned') return { id: 'planned', label: 'No action' }
+  if (a.kind === 'policy') return { id: 'policy', label: 'Policy' }
+  return { id: 'executed', label: 'Executed' }
+}
+
+function approvalOfActivity(a) {
+  if (a.requireApproval || a.requires_approval || a.human_approval_required) return 'required'
+  if (/approve|approval|sign-off|supervised|awaiting/i.test(`${a.title || ''} ${a.detail || ''}`)) return 'required'
+  return 'not-required'
+}
+
+function txOrOrderId(a) {
+  const txId = a.tx_digest || a.tx || null
+  const orderId = a.order_id || a.venue_order_id || a.client_order_id || a.orderId || null
+  return { txId, orderId }
+}
+
+function makeLedgerRow(a, i, lookup) {
+  const outcome = outcomeOfActivity(a)
+  const status = statusOfActivity(a, outcome)
+  const strategy = inferStrategy(a, lookup)
+  const venue = inferVenue(a)
+  const approval = approvalOfActivity(a)
+  const ids = txOrOrderId(a)
+  const hasGuardianBlock = outcome === 'blocked' || evidenceRowsFor(a).length > 0
+  return {
+    activity: a,
+    key: a.id || a.dedupe_key || ids.txId || `${a.t}-${a.title}-${i}`,
+    outcome,
+    status,
+    strategy,
+    venue,
+    approval,
+    hasGuardianBlock,
+    plannedExecuted: outcome === 'executed' ? 'executed' : outcome === 'blocked' ? 'blocked' : 'planned',
+    ...ids,
+  }
+}
+
+function FilterSelect({ label, value, onChange, children }) {
+  return (
+    <label style={{ display: 'flex', flexDirection: 'column', gap: 5, flex: '1 1 150px', minWidth: 150 }}>
+      <span className="eyebrow" style={{ fontSize: 8.5 }}>{label}</span>
+      <select value={value} onChange={(e) => onChange(e.target.value)}
+        style={{ width: '100%', height: 34, padding: '0 9px', borderRadius: 'var(--r-sm)', border: '1px solid var(--border)', background: 'var(--bg-0)', color: 'var(--t0)', fontSize: 12, fontFamily: 'var(--f-body)', outline: 'none' }}>
+        {children}
+      </select>
+    </label>
+  )
+}
+
+export function ActivityView({ activity, policies = [], onTx, live = false, loading = false, source = null }) {
   const [filter, setFilter] = useState('all')
+  const [strategyFilter, setStrategyFilter] = useState('all')
+  const [venueFilter, setVenueFilter] = useState('all')
+  const [statusFilter, setStatusFilter] = useState('all')
+  const [idQuery, setIdQuery] = useState('')
   const [open, setOpen] = useState(null)
   const sourceMeta = resolveSourceMeta(source, live)
   const liveSource = sourceMeta.kind !== 'demo'
@@ -93,11 +220,6 @@ export function ActivityView({ activity, onTx, live = false, loading = false, so
     monitor: { c: 'var(--t1)', bg: 'var(--glass-hi)', icon: 'eye', label: 'MONITOR' },
     policy: { c: 'var(--sui)', bg: 'var(--sui-dim)', icon: 'grid', label: 'POLICY' },
   }
-  const outcomeOf = (a) => {
-    if (a.kind === 'guardian' || a.kind === 'fail') return 'blocked'
-    if (a.kind === 'monitor') return 'planned'
-    return 'executed'
-  }
   const OUTCOME = {
     executed: { label: 'Executed', c: 'var(--safe)' },
     blocked: { label: 'Blocked', c: 'var(--danger)' },
@@ -107,12 +229,39 @@ export function ActivityView({ activity, onTx, live = false, loading = false, so
   const sourceBg = sourceTone === 'warn' ? 'var(--warn-dim)' : sourceTone === 'live' ? 'var(--accent-dim)' : 'var(--glass)'
   const sourceBorder = sourceTone === 'warn' ? 'rgba(255,194,75,0.35)' : sourceTone === 'live' ? 'color-mix(in srgb, var(--accent) 25%, var(--border))' : 'var(--border)'
   const sourceColor = sourceTone === 'warn' ? 'var(--warn)' : sourceTone === 'live' ? 'var(--accent)' : 'var(--t1)'
-  const filtered = activity.filter(a =>
-    filter === 'all' ? true
-    : ['executed', 'blocked', 'planned'].includes(filter) ? outcomeOf(a) === filter
-    : filter === 'retry' ? (a.kind === 'retry' || a.kind === 'fail')
-    : a.kind === filter)
-  const dates = [...new Set(filtered.map(a => a.date))]
+  const lookup = useMemo(() => policyLookup(policies), [policies])
+  const ledgerRows = useMemo(() => activity.map((a, i) => makeLedgerRow(a, i, lookup)), [activity, lookup])
+  const strategyOptions = [...new Map(ledgerRows.map((r) => [r.strategy.id, r.strategy.label])).entries()]
+  const venueOptions = [...new Set(ledgerRows.map((r) => r.venue))]
+  const statusOptions = [...new Map(ledgerRows.map((r) => [r.status.id, r.status.label])).entries()]
+  const normalizedIdQuery = idQuery.trim().toLowerCase()
+  const filtersActive = filter !== 'all' || strategyFilter !== 'all' || venueFilter !== 'all' || statusFilter !== 'all' || Boolean(normalizedIdQuery)
+  const clearFilters = () => {
+    setFilter('all')
+    setStrategyFilter('all')
+    setVenueFilter('all')
+    setStatusFilter('all')
+    setIdQuery('')
+  }
+  const filtered = ledgerRows.filter((row) => {
+    const a = row.activity
+    const quickOk = filter === 'all' ? true
+      : ['executed', 'blocked', 'planned'].includes(filter) ? row.outcome === filter
+      : filter === 'retry' ? (a.kind === 'retry' || a.kind === 'fail')
+      : a.kind === filter
+    const strategyOk = strategyFilter === 'all' || row.strategy.id === strategyFilter
+    const venueOk = venueFilter === 'all' || row.venue === venueFilter
+    const statusOk = statusFilter === 'all'
+      || row.status.id === statusFilter
+      || (statusFilter === 'approval' && row.approval === 'required')
+      || (statusFilter === 'tx' && Boolean(row.txId || row.orderId))
+      || (statusFilter === 'guardian' && row.hasGuardianBlock)
+    const idOk = !normalizedIdQuery || [row.txId, row.orderId, a.id, a.dedupe_key, a.wrapper_id, a.mandate_id, a.policy, a.title]
+      .filter(Boolean)
+      .some((v) => String(v).toLowerCase().includes(normalizedIdQuery))
+    return quickOk && strategyOk && venueOk && statusOk && idOk
+  })
+  const dates = [...new Set(filtered.map((row) => row.activity.date))]
 
   // synthesize the planned-vs-executed detail for an event
   const expand = (a) => {
@@ -162,19 +311,60 @@ export function ActivityView({ activity, onTx, live = false, loading = false, so
         <div style={{ flex: 1 }}>{sourceMeta.detail}</div>
       </div>
 
+      <div className="card" style={{ padding: 14 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12 }}>
+          <span style={{ color: 'var(--accent)' }}><Icon name="sliders" size={15} /></span>
+          <div className="card-title">Audit filters</div>
+          <span className="badge badge-neutral" style={{ fontSize: 9.5 }}>{filtered.length} / {ledgerRows.length} rows</span>
+          <div style={{ flex: 1 }} />
+          {filtersActive && (
+            <button className="btn btn-sm" onClick={clearFilters} style={{ padding: '6px 10px' }}>
+              <Icon name="x" size={12} /> Clear
+            </button>
+          )}
+        </div>
+        <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'end' }}>
+          <FilterSelect label="Strategy" value={strategyFilter} onChange={setStrategyFilter}>
+            <option value="all">All strategies</option>
+            {strategyOptions.map(([id, label]) => <option key={id} value={id}>{label}</option>)}
+          </FilterSelect>
+          <FilterSelect label="Venue" value={venueFilter} onChange={setVenueFilter}>
+            <option value="all">All Sui venues</option>
+            {venueOptions.map((venue) => <option key={venue} value={venue}>{venue}</option>)}
+          </FilterSelect>
+          <FilterSelect label="Status" value={statusFilter} onChange={setStatusFilter}>
+            <option value="all">All statuses</option>
+            {statusOptions.map(([id, label]) => <option key={id} value={id}>{label}</option>)}
+            <option value="guardian">Guardian block</option>
+            <option value="approval">Human approval</option>
+            <option value="tx">Has tx/order id</option>
+          </FilterSelect>
+          <label style={{ display: 'flex', flexDirection: 'column', gap: 5, flex: '1.3 1 190px', minWidth: 190 }}>
+            <span className="eyebrow" style={{ fontSize: 8.5 }}>Tx / order / policy id</span>
+            <input value={idQuery} onChange={(e) => setIdQuery(e.target.value)} placeholder="Search id, digest, wrapper…"
+              style={{ width: '100%', height: 34, padding: '0 10px', borderRadius: 'var(--r-sm)', border: '1px solid var(--border)', background: 'var(--bg-0)', color: 'var(--t0)', fontSize: 12, fontFamily: 'var(--f-body)', outline: 'none' }} />
+          </label>
+        </div>
+      </div>
+
       {loading && <LoadingCard label="Loading live activity…" />}
       {!loading && activity.length === 0 && (
         <EmptyCard icon="activity" title="No agent activity yet"
           detail={liveSource ? 'Autonomous executions, policy creations and revocations will appear here once your agent acts in the live source.' : 'No demo activity rows are available.'} />
+      )}
+      {!loading && activity.length > 0 && filtered.length === 0 && (
+        <EmptyCard icon="activity" title="No matching ledger rows"
+          detail="Relax the strategy, venue, status or tx/order filters to inspect the rest of the audit trail." />
       )}
 
       {!loading && dates.map(date => (
         <div key={date}>
           <div className="eyebrow" style={{ marginBottom: 10, marginLeft: 2 }}>{date}</div>
           <div className="card" style={{ overflow: 'hidden' }}>
-            {filtered.filter(a => a.date === date).map((a, i) => {
+            {filtered.filter(row => row.activity.date === date).map((row, i) => {
+              const a = row.activity
               const m = meta[a.kind] || meta.monitor
-              const key = a.id || a.dedupe_key || a.tx || `${a.t}-${a.title}-${i}`
+              const key = row.key
               const isOpen = open === key
               const ex = expand(a)
               const oc = OUTCOME[ex.oc]
@@ -189,14 +379,18 @@ export function ActivityView({ activity, onTx, live = false, loading = false, so
                       <div style={{ display: 'flex', alignItems: 'center', gap: 9, flexWrap: 'wrap' }}>
                         <span style={{ fontWeight: 600, fontSize: 14 }}>{a.title}</span>
                         <span className="badge" style={{ fontSize: 9, background: `color-mix(in srgb, ${oc.c} 14%, transparent)`, color: oc.c }}><span className="dot"></span>{oc.label}</span>
+                        <span className="badge badge-neutral" style={{ fontSize: 9 }}>{row.strategy.label}</span>
+                        <span className="badge badge-sui" style={{ fontSize: 9 }}>{row.venue}</span>
+                        {row.approval === 'required' && <span className="badge badge-warn" style={{ fontSize: 9 }}><Icon name="eye" size={10} />approval</span>}
                         {a.mode && <ModeBadge mode={a.mode} />}
                       </div>
                       <div style={{ fontSize: 12.5, color: 'var(--t1)', marginTop: 3 }}>{a.detail}</div>
                       <div style={{ display: 'flex', alignItems: 'center', gap: 14, marginTop: 8 }}>
                         <span className="mono" style={{ fontSize: 11, color: 'var(--t2)' }}><Icon name="clock" size={11} style={{ verticalAlign: -1, marginRight: 3 }} />{a.t}</span>
                         <span className="mono" style={{ fontSize: 11.5, color: 'var(--t1)' }}>{a.policy}</span>
-                        {a.tx && <a href="#" onClick={e => { e.preventDefault(); e.stopPropagation(); onTx && onTx(a.tx) }} className="mono" style={{ fontSize: 11, color: 'var(--sui)', textDecoration: 'none', display: 'inline-flex', alignItems: 'center', gap: 3 }}>
-                          <Icon name="link" size={11} />{a.tx}</a>}
+                        {row.txId && <a href="#" onClick={e => { e.preventDefault(); e.stopPropagation(); onTx && onTx(row.txId) }} className="mono" style={{ fontSize: 11, color: 'var(--sui)', textDecoration: 'none', display: 'inline-flex', alignItems: 'center', gap: 3 }}>
+                          <Icon name="link" size={11} />{row.txId}</a>}
+                        {row.orderId && <span className="mono" style={{ fontSize: 11, color: 'var(--t2)' }}>order {compactId(row.orderId)}</span>}
                       </div>
                     </div>
                     <div style={{ textAlign: 'right', flexShrink: 0, display: 'flex', alignItems: 'center', gap: 12 }}>
@@ -260,6 +454,19 @@ export function ActivityView({ activity, onTx, live = false, loading = false, so
                             </div>
                           ))}
                         </div>
+                      </div>
+                      <div style={{ gridColumn: '1 / -1', display: 'grid', gridTemplateColumns: 'repeat(4, minmax(120px, 1fr))', gap: 10 }}>
+                        {[
+                          ['Tx digest', row.txId ? compactId(row.txId) : 'none', row.txId ? 'var(--sui)' : 'var(--t2)'],
+                          ['Venue order id', row.orderId ? compactId(row.orderId) : 'none', row.orderId ? 'var(--accent)' : 'var(--t2)'],
+                          ['Ledger status', row.status.label, oc.c],
+                          ['Human approval', row.approval === 'required' ? 'required' : 'not required', row.approval === 'required' ? 'var(--warn)' : 'var(--t2)'],
+                        ].map(([k, v, c]) => (
+                          <div key={k} style={{ padding: '10px 12px', borderRadius: 'var(--r-sm)', background: 'var(--glass)', border: '1px solid var(--border)', minWidth: 0 }}>
+                            <div className="eyebrow" style={{ fontSize: 8 }}>{k}</div>
+                            <div className="mono" title={String(v)} style={{ fontSize: 11.5, color: c, fontWeight: 600, marginTop: 5, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{v}</div>
+                          </div>
+                        ))}
                       </div>
                       <div style={{ gridColumn: '1 / -1', display: 'flex', gap: 12, flexWrap: 'wrap' }}>
                         <div style={{ flex: 1, minWidth: 160, display: 'flex', alignItems: 'center', gap: 9, padding: '11px 13px', borderRadius: 'var(--r-sm)',

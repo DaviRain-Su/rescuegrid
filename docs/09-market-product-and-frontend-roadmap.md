@@ -263,6 +263,8 @@ Required row details:
 - budget impact;
 - retry/failure state.
 
+Implementation status: `src/components/Views.jsx` now treats activity as an audit ledger instead of a simple feed. Each row is normalized with inferred strategy, Sui venue, status, Guardian block state, human approval state and tx/order identifiers, then filtered by strategy, venue, status and tx/order/policy search on top of the existing event/outcome chips. Expanded rows show reason, input snapshot, execution plan, Guardian result, tx digest, venue order id, PnL impact, budget impact and retry/failure state.
+
 ### H. Sui Accounts / Integrations
 
 Purpose: make Sui policy, signer and future adapter authority understandable.
