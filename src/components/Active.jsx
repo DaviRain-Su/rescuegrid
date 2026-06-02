@@ -302,6 +302,16 @@ function LivePnLCard({ L, active }) {
   );
 }
 
+function activityPolicyKeys(p) {
+  const keys = [p.name, p.id, p._wrapperId]
+  if (p._wrapperId && p._wrapperId.length > 12) keys.push(`${p._wrapperId.slice(0, 6)}…${p._wrapperId.slice(-4)}`)
+  return new Set(keys.filter(Boolean))
+}
+
+function activityMatchesPolicy(a, keys) {
+  return keys.has(a?.policy)
+}
+
 export function ActiveStrategy({ p, activity, onBack, onToggle, onRebalance, onRevoke, onTx, onToast }) {
   if (!p) return null;
   const sm = {
@@ -331,7 +341,8 @@ export function ActiveStrategy({ p, activity, onBack, onToggle, onRebalance, onR
     L.delta = { v: neutral ? '≈ 0%' : (net > 0 ? '+' : '−') + Math.abs(net) + '%', neutral };
   }
   const active = p.status === 'active';
-  const log = (activity || []).filter(a => a.policy === p.name).slice(0, 6);
+  const policyLogKeys = activityPolicyKeys(p);
+  const log = (activity || []).filter(a => activityMatchesPolicy(a, policyLogKeys)).slice(0, 6);
   const sideC = (side) => /short|sell/i.test(side) ? 'var(--danger)' : /long|buy|supply|lp/i.test(side) ? 'var(--safe)' : 'var(--t1)';
 
   // shared market clock — ticks while live so KPIs / leg marks update together

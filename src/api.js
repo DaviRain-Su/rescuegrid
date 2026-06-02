@@ -73,8 +73,8 @@ export function buildPolicyTx(owner, strategy, strategy_hash) {
 }
 
 /** POST /api/policies/:id/activate — register the Durable Object runtime. */
-export function activatePolicy(wrapperId) {
-  return post(`/api/policies/${wrapperId}/activate`, {})
+export function activatePolicy(wrapperId, strategy = null) {
+  return post(`/api/policies/${wrapperId}/activate`, strategy ? { strategy } : {})
 }
 
 /** GET /api/policies/:id/activity — chain-authoritative policy + events. */

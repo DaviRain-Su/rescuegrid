@@ -406,7 +406,7 @@ export default function App({ onExit }) {
       const res = await suiClient.waitForTransaction({ digest: signed.digest, options: { showObjectChanges: true, showEvents: true } })
       const ev = (res.events || []).find(e => String(e.type).endsWith('::policy::PolicyCreated'))
       const wrapperId = ev?.parsedJson?.wrapper_id
-      if (wrapperId) await activatePolicy(wrapperId).catch(() => {})
+      if (wrapperId) await activatePolicy(wrapperId, parsed.strategy).catch(() => {})
       return { meta, wrapperId, digest: signed.digest }
     },
     onSuccess: ({ meta }) => {
