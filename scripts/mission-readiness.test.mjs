@@ -108,6 +108,60 @@ function readyFunding() {
   }
 }
 
+function readyFundingProof(overrides = {}) {
+  return {
+    status: 'ready',
+    purpose: 'rescuegrid_external_funding_proof',
+    chain: 'sui:testnet',
+    funding_proven: true,
+    ready_for_strict_execution: true,
+    execution_claimed: false,
+    blocker_codes: [],
+    transaction_evidence: {
+      required: true,
+      tx_digest_count: 1,
+      tx_evidence_passed: true,
+      target_evidence_passed: true,
+      failed_tx_digests: [],
+      failed_target_digests: [],
+      asset_hits: ['DBUSDC', 'DEEP'],
+      target_asset_hits: ['DBUSDC', 'DEEP'],
+    },
+    transactions: [
+      {
+        role: 'provider_funding_tx',
+        digest: 'fundingDigest',
+        status: 'passed',
+        effect_status: 'success',
+        checkpoint: '40',
+        timestamp_ms: 1759999998000,
+        sender: '0xprovider',
+        target_evidence: {
+          required: true,
+          target_evidence_passed: true,
+          balance_manager_id: '0xbm',
+          agent_address: '0xagent',
+          balance_manager_object_touched: true,
+          agent_gas_address_touched: false,
+          asset_target_hits: [
+            { asset: 'DBUSDC', target_kind: 'deepbook_balance_manager', target: '0xbm' },
+            { asset: 'DEEP', target_kind: 'deepbook_balance_manager', target: '0xbm' },
+          ],
+        },
+      },
+    ],
+    execution_gate: {
+      readiness_only: true,
+      policy_creation_allowed: true,
+      policy_creation_blocked: false,
+      execution_claimed: false,
+      strict_execution_report_required: true,
+      strict_execution_report_path: '.rescuegrid/demo-execute-report.json',
+    },
+    ...overrides,
+  }
+}
+
 function assertNoSecretSignerPosture(value) {
   const json = JSON.stringify(value)
   assert.equal(json.includes('super-secret'), false)
@@ -246,6 +300,7 @@ function strictExecutionReport(overrides = {}) {
     safetyReport: safetyNegativeReport(),
     walletReport: verifiedWalletReport(),
     fundingReadiness: readyFunding(),
+    fundingProofReport: readyFundingProof(),
     executionReport: strictExecutionReport(),
   })
   assert.equal(report.status, 'ready')
@@ -254,6 +309,7 @@ function strictExecutionReport(overrides = {}) {
   assert.deepEqual(report.blocker_codes, [])
   assert.equal(report.checks.every((row) => row.status === 'passed'), true)
   const fundingCheck = report.checks.find((row) => row.id === 'execution_funding_readiness')
+  const fundingProofCheck = report.checks.find((row) => row.id === 'external_funding_proof')
   const executionCheck = report.checks.find((row) => row.id === 'strict_execution_evidence')
   const continuityCheck = report.checks.find((row) => row.id === 'mission_same_policy_continuity')
   const walletCheck = report.checks.find((row) => row.id === 'wallet_clickthrough')
@@ -265,6 +321,13 @@ function strictExecutionReport(overrides = {}) {
   assert.equal(fundingCheck.evidence.execution_gate.execution_claimed, false)
   assert.equal(fundingCheck.evidence.execution_gate.strict_execution_report_required, true)
   assert.equal(fundingCheck.evidence.execution_gate.strict_execution_report_path, '.rescuegrid/demo-execute-report.json')
+  assert.equal(fundingProofCheck.status, 'passed')
+  assert.equal(fundingProofCheck.evidence.funding_proven, true)
+  assert.equal(fundingProofCheck.evidence.execution_claimed, false)
+  assert.equal(fundingProofCheck.evidence.transaction_evidence.target_evidence_passed, true)
+  assert.equal(fundingProofCheck.evidence.transaction_evidence.target_asset_hits.includes('DBUSDC'), true)
+  assert.equal(fundingProofCheck.evidence.execution_gate.readiness_only, true)
+  assert.equal(fundingProofCheck.evidence.execution_gate.execution_claimed, false)
   assert.equal(executionCheck.evidence.agent_trade_event.wrapper_id, '0xwrapper')
   assert.equal(executionCheck.evidence.agent_trade_event.mandate_id, '0xmandate')
   assert.equal(executionCheck.evidence.agent_trade_event.tx_digest, 'tickDigest')
@@ -280,9 +343,63 @@ function strictExecutionReport(overrides = {}) {
 {
   const report = buildMissionReadinessReport({
     scripts: requiredScripts,
+    safetyReport: safetyNegativeReport(),
+    walletReport: verifiedWalletReport(),
+    fundingReadiness: readyFunding(),
+    executionReport: strictExecutionReport(),
+  })
+  const fundingProofCheck = report.checks.find((row) => row.id === 'external_funding_proof')
+  assert.equal(report.status, 'blocked')
+  assert.equal(report.full_prd_ready, false)
+  assert.equal(report.execution_claimed, false)
+  assert.equal(fundingProofCheck.status, 'blocked')
+  assert.equal(report.blocker_codes.includes('FUNDING_PROOF_REPORT_MISSING'), true)
+  assert.equal(fundingProofCheck.evidence.expected_report, '.rescuegrid/funding-proof-report.json')
+  assert.equal(report.next_actions.some((row) => /transaction_evidence\.target_evidence_passed=true/.test(row)), true)
+}
+
+{
+  const report = buildMissionReadinessReport({
+    scripts: requiredScripts,
+    safetyReport: safetyNegativeReport(),
+    walletReport: verifiedWalletReport(),
+    fundingReadiness: readyFunding(),
+    fundingProofReport: readyFundingProof({
+      status: 'failed',
+      funding_proven: false,
+      ready_for_strict_execution: false,
+      blocker_codes: ['FUNDING_TX_TARGET_NOT_PROVEN'],
+      transaction_evidence: {
+        required: true,
+        tx_digest_count: 1,
+        tx_evidence_passed: true,
+        target_evidence_passed: false,
+        failed_tx_digests: [],
+        failed_target_digests: ['unrelatedDigest'],
+        asset_hits: ['DBUSDC', 'DEEP'],
+        target_asset_hits: [],
+      },
+    }),
+    executionReport: strictExecutionReport(),
+  })
+  const fundingProofCheck = report.checks.find((row) => row.id === 'external_funding_proof')
+  assert.equal(report.status, 'failed')
+  assert.equal(report.full_prd_ready, false)
+  assert.equal(report.execution_claimed, false)
+  assert.equal(fundingProofCheck.status, 'failed')
+  assert.equal(report.blocker_codes.includes('FUNDING_TX_TARGET_NOT_PROVEN'), true)
+  assert.equal(report.blocker_codes.includes('FUNDING_PROOF_NOT_PROVEN'), true)
+  assert.equal(fundingProofCheck.evidence.missing_live_evidence.includes('target_evidence_passed'), true)
+  assert.deepEqual(fundingProofCheck.evidence.transaction_evidence.failed_target_digests, ['unrelatedDigest'])
+}
+
+{
+  const report = buildMissionReadinessReport({
+    scripts: requiredScripts,
     safetyReport: safetyNegativeReport({ chain: 'sui:mainnet' }),
     walletReport: verifiedWalletReport(),
     fundingReadiness: readyFunding(),
+    fundingProofReport: readyFundingProof(),
     executionReport: strictExecutionReport(),
   })
   const safetyCheck = report.checks.find((row) => row.id === 'safety_negative_evidence')
@@ -297,6 +414,7 @@ function strictExecutionReport(overrides = {}) {
     safetyReport: safetyNegativeReport({ revoke_tx_digest: null }),
     walletReport: verifiedWalletReport(),
     fundingReadiness: readyFunding(),
+    fundingProofReport: readyFundingProof(),
     executionReport: strictExecutionReport(),
   })
   const safetyCheck = report.checks.find((row) => row.id === 'safety_negative_evidence')
@@ -373,6 +491,7 @@ function strictExecutionReport(overrides = {}) {
       },
     },
     fundingReadiness: readyFunding(),
+    fundingProofReport: readyFundingProof(),
     executionReport: strictExecutionReport(),
   })
   const walletCheck = report.checks.find((row) => row.id === 'wallet_clickthrough')
@@ -388,6 +507,7 @@ function strictExecutionReport(overrides = {}) {
     safetyReport: safetyNegativeReport(),
     walletReport: verifiedWalletReport(),
     fundingReadiness: readyFunding(),
+    fundingProofReport: readyFundingProof(),
     executionReport: strictExecutionReport({
       wrapper_id: '0xotherwrapper',
       agent_trade_event: strictAgentTradeEvent({ wrapper_id: '0xotherwrapper' }),
@@ -412,6 +532,7 @@ function strictExecutionReport(overrides = {}) {
     safetyReport: safetyNegativeReport(),
     walletReport: verifiedWalletReport(),
     fundingReadiness: readyFunding(),
+    fundingProofReport: readyFundingProof(),
     executionReport: strictExecutionReport(),
   })
   const scriptCheck = report.checks.find((row) => row.id === 'validation_scripts')
@@ -427,6 +548,7 @@ function strictExecutionReport(overrides = {}) {
     safetyReport: safetyNegativeReport(),
     walletReport: verifiedWalletReport(),
     fundingReadiness: readyFunding(),
+    fundingProofReport: readyFundingProof(),
     executionReport: strictExecutionReport({ execution_claimed: false }),
   })
   const executionCheck = report.checks.find((row) => row.id === 'strict_execution_evidence')
@@ -442,6 +564,7 @@ function strictExecutionReport(overrides = {}) {
     safetyReport: safetyNegativeReport(),
     walletReport: verifiedWalletReport(),
     fundingReadiness: readyFunding(),
+    fundingProofReport: readyFundingProof(),
     executionReport: null,
   })
   assert.equal(report.status, 'blocked')
@@ -456,6 +579,7 @@ function strictExecutionReport(overrides = {}) {
     safetyReport: safetyNegativeReport(),
     walletReport: verifiedWalletReport(),
     fundingReadiness: readyFunding(),
+    fundingProofReport: readyFundingProof(),
     executionReport: strictExecutionReport({ agent_trade_event_found: false }),
   })
   const executionCheck = report.checks.find((row) => row.id === 'strict_execution_evidence')
@@ -470,6 +594,7 @@ function strictExecutionReport(overrides = {}) {
     safetyReport: safetyNegativeReport(),
     walletReport: verifiedWalletReport(),
     fundingReadiness: readyFunding(),
+    fundingProofReport: readyFundingProof(),
     executionReport: strictExecutionReport({ agent_trade_event: null }),
   })
   const executionCheck = report.checks.find((row) => row.id === 'strict_execution_evidence')
@@ -484,6 +609,7 @@ function strictExecutionReport(overrides = {}) {
     safetyReport: safetyNegativeReport(),
     walletReport: verifiedWalletReport(),
     fundingReadiness: readyFunding(),
+    fundingProofReport: readyFundingProof(),
     executionReport: strictExecutionReport({
       agent_trade_event: strictAgentTradeEvent({ wrapper_id: '0xotherwrapper' }),
     }),
@@ -500,6 +626,7 @@ function strictExecutionReport(overrides = {}) {
     safetyReport: safetyNegativeReport(),
     walletReport: verifiedWalletReport(),
     fundingReadiness: readyFunding(),
+    fundingProofReport: readyFundingProof(),
     executionReport: strictExecutionReport({
       revoke_tx: { digest: 'revokeDigest', status: 'success', checkpoint: '42', timestamp_ms: 1759999999001 },
     }),
@@ -516,6 +643,7 @@ function strictExecutionReport(overrides = {}) {
     safetyReport: safetyNegativeReport(),
     walletReport: verifiedWalletReport(),
     fundingReadiness: readyFunding(),
+    fundingProofReport: readyFundingProof(),
     executionReport: strictExecutionReport({
       tick_tx_digest: 'createDigest',
       tx_digest: 'createDigest',
@@ -534,6 +662,7 @@ function strictExecutionReport(overrides = {}) {
     safetyReport: safetyNegativeReport(),
     walletReport: verifiedWalletReport(),
     fundingReadiness: readyFunding(),
+    fundingProofReport: readyFundingProof(),
     executionReport: strictExecutionReport({
       create_tx: { digest: 'createDigest', status: 'success' },
     }),
@@ -550,6 +679,7 @@ function strictExecutionReport(overrides = {}) {
     safetyReport: safetyNegativeReport(),
     walletReport: verifiedWalletReport(),
     fundingReadiness: readyFunding(),
+    fundingProofReport: readyFundingProof(),
     executionReport: strictExecutionReport({
       delegated_agent_address: '0xagent',
       pool_id: '0xpool',
@@ -572,6 +702,7 @@ function strictExecutionReport(overrides = {}) {
     safetyReport: safetyNegativeReport(),
     walletReport: verifiedWalletReport(),
     fundingReadiness: readyFunding(),
+    fundingProofReport: readyFundingProof(),
     executionReport: strictExecutionReport({
       delegated_agent_address: null,
       pool_id: null,
@@ -590,6 +721,7 @@ function strictExecutionReport(overrides = {}) {
     safetyReport: safetyNegativeReport(),
     walletReport: verifiedWalletReport(),
     fundingReadiness: readyFunding(),
+    fundingProofReport: readyFundingProof(),
     executionReport: strictExecutionReport({ revoke_tx: { digest: 'revokeDigest', status: 'failure' } }),
   })
   const executionCheck = report.checks.find((row) => row.id === 'strict_execution_evidence')
@@ -604,6 +736,7 @@ function strictExecutionReport(overrides = {}) {
     safetyReport: safetyNegativeReport(),
     walletReport: verifiedWalletReport(),
     fundingReadiness: readyFunding(),
+    fundingProofReport: readyFundingProof(),
     executionReport: strictExecutionReport({
       post_revoke: {
         action: 'blocked',
@@ -628,6 +761,7 @@ function strictExecutionReport(overrides = {}) {
     safetyReport: safetyNegativeReport(),
     walletReport: verifiedWalletReport(),
     fundingReadiness: readyFunding(),
+    fundingProofReport: readyFundingProof(),
     executionReport: strictExecutionReport({
       post_revoke: {
         action: 'stopped_revoked',
@@ -650,6 +784,7 @@ function strictExecutionReport(overrides = {}) {
     safetyReport: safetyNegativeReport(),
     walletReport: verifiedWalletReport(),
     fundingReadiness: readyFunding(),
+    fundingProofReport: readyFundingProof(),
     executionReport: strictExecutionReport({ assertions: ['G2-EXECUTE'] }),
   })
   const executionCheck = report.checks.find((row) => row.id === 'strict_execution_evidence')
@@ -674,6 +809,8 @@ function strictExecutionReport(overrides = {}) {
       '--skip-live-funding',
       '--wallet-artifact',
       artifactPath,
+      '--funding-proof-report',
+      join(tempDir, 'missing-funding-proof.json'),
       '--execution-report',
       '.rescuegrid/mission-readiness-test-missing-execution.json',
     ], {}, {
@@ -709,6 +846,8 @@ function strictExecutionReport(overrides = {}) {
       '.rescuegrid/mission-readiness-test-missing-wallet.md',
       '--safety-report',
       '.rescuegrid/mission-readiness-test-missing-safety.json',
+      '--funding-proof-report',
+      '.rescuegrid/mission-readiness-test-missing-funding-proof.json',
       '--execution-report',
       '.rescuegrid/mission-readiness-test-missing-execution.json',
     ], {}, { fundingReadiness: null })
@@ -732,6 +871,7 @@ function strictExecutionReport(overrides = {}) {
     }),
     walletReport: verifiedWalletReport(),
     fundingReadiness: readyFunding(),
+    fundingProofReport: readyFundingProof(),
     executionReport: strictExecutionReport(),
   })
   const safetyCheck = report.checks.find((row) => row.id === 'safety_negative_evidence')
@@ -753,6 +893,8 @@ function strictExecutionReport(overrides = {}) {
     const code = await main([
       '--wallet-artifact',
       join(tempDir, 'missing-wallet.md'),
+      '--funding-proof-report',
+      join(tempDir, 'missing-funding-proof.json'),
       '--execution-report',
       join(tempDir, 'missing-execution.json'),
       '--out',
@@ -781,6 +923,7 @@ function strictExecutionReport(overrides = {}) {
   assert.equal(help.status, 0)
   assert.match(help.stdout, /mission readiness/i)
   assert.match(help.stdout, /safety-report/)
+  assert.match(help.stdout, /funding-proof-report/)
   assert.match(help.stdout, /--out/)
   assert.equal(help.stdout.includes('AGENT_KEY='), false)
   assert.equal(help.stdout.includes('INTERNAL_AGENT_TICK_TOKEN='), false)

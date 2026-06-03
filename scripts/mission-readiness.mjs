@@ -19,6 +19,7 @@ import { verifyWalletEvidenceArtifact } from './wallet-clickthrough-evidence.mjs
 const DEFAULT_WALLET_ARTIFACT = '.rescuegrid/wallet-clickthrough-evidence.md'
 const DEFAULT_EXECUTION_REPORT = '.rescuegrid/demo-execute-report.json'
 const DEFAULT_SAFETY_REPORT = '.rescuegrid/safety-negative-report.json'
+const DEFAULT_FUNDING_PROOF_REPORT = '.rescuegrid/funding-proof-report.json'
 const DEFAULT_MISSION_REPORT = '.rescuegrid/mission-readiness-report.json'
 const REQUIRED_SCRIPTS = [
   'build',
@@ -360,6 +361,134 @@ export function summarizeFundingReadiness(readiness) {
   })
 }
 
+function publicFundingTargetHits(rows = []) {
+  if (!Array.isArray(rows)) return []
+  return rows.map((row) => pickPublicFields(row, ['asset', 'target_kind', 'target']))
+}
+
+function publicFundingTargetEvidence(evidence = null) {
+  const publicEvidence = pickPublicFields(evidence, [
+      'required',
+      'target_evidence_passed',
+      'balance_manager_id',
+      'agent_address',
+      'balance_manager_object_touched',
+      'agent_gas_address_touched',
+    ])
+  publicEvidence.asset_target_hits = publicFundingTargetHits(evidence?.asset_target_hits)
+  return publicEvidence
+}
+
+function publicFundingProofTransactions(rows = []) {
+  if (!Array.isArray(rows)) return []
+  return rows.map((row) => ({
+    role: row.role || null,
+    digest: row.digest || null,
+    status: row.status || null,
+    effect_status: row.effect_status || null,
+    checkpoint: row.checkpoint || null,
+    timestamp_ms: numberOrNull(row.timestamp_ms),
+    sender: row.sender || null,
+    target_evidence: publicFundingTargetEvidence(row.target_evidence),
+  }))
+}
+
+function fundingProofSummaryEvidence(report = null) {
+  const txEvidence = report?.transaction_evidence || {}
+  return {
+    status: report?.status || null,
+    purpose: report?.purpose || null,
+    chain: report?.chain || null,
+    funding_proven: report?.funding_proven === true,
+    ready_for_strict_execution: report?.ready_for_strict_execution === true,
+    execution_claimed: typeof report?.execution_claimed === 'boolean' ? report.execution_claimed : null,
+    blocker_codes: Array.isArray(report?.blocker_codes) ? report.blocker_codes : [],
+    transaction_evidence: {
+      required: txEvidence.required === true,
+      tx_digest_count: Number(txEvidence.tx_digest_count || 0),
+      tx_evidence_passed: txEvidence.tx_evidence_passed === true,
+      target_evidence_passed: txEvidence.target_evidence_passed === true,
+      failed_tx_digests: Array.isArray(txEvidence.failed_tx_digests) ? txEvidence.failed_tx_digests : [],
+      failed_target_digests: Array.isArray(txEvidence.failed_target_digests) ? txEvidence.failed_target_digests : [],
+      asset_hits: Array.isArray(txEvidence.asset_hits) ? txEvidence.asset_hits : [],
+      target_asset_hits: Array.isArray(txEvidence.target_asset_hits) ? txEvidence.target_asset_hits : [],
+    },
+    execution_gate: pickPublicFields(report?.execution_gate, [
+      'readiness_only',
+      'policy_creation_allowed',
+      'policy_creation_blocked',
+      'execution_claimed',
+      'strict_execution_report_required',
+      'strict_execution_report_path',
+    ]),
+    transactions: publicFundingProofTransactions(report?.transactions),
+  }
+}
+
+function fundingProofMissingEvidence(evidence) {
+  const missing = []
+  if (evidence.purpose !== 'rescuegrid_external_funding_proof') missing.push('purpose')
+  if (evidence.chain !== 'sui:testnet') missing.push('chain')
+  if (evidence.status !== 'ready') missing.push('status_ready')
+  if (evidence.funding_proven !== true) missing.push('funding_proven')
+  if (evidence.ready_for_strict_execution !== true) missing.push('ready_for_strict_execution')
+  if (evidence.execution_claimed !== false) missing.push('execution_unclaimed')
+  if (evidence.transaction_evidence.required !== true) missing.push('transaction_evidence_required')
+  if (evidence.transaction_evidence.tx_digest_count < 1) missing.push('tx_digest')
+  if (evidence.transaction_evidence.tx_evidence_passed !== true) missing.push('tx_evidence_passed')
+  if (evidence.transaction_evidence.target_evidence_passed !== true) missing.push('target_evidence_passed')
+  if (evidence.transaction_evidence.failed_tx_digests.length > 0) missing.push('failed_tx_digests_empty')
+  if (evidence.transaction_evidence.failed_target_digests.length > 0) missing.push('failed_target_digests_empty')
+  if (evidence.transaction_evidence.target_asset_hits.length < 1) missing.push('target_asset_hits')
+  if (evidence.execution_gate.readiness_only !== true) missing.push('execution_gate_readiness_only')
+  if (evidence.execution_gate.execution_claimed !== false) missing.push('execution_gate_unclaimed')
+  if (evidence.execution_gate.strict_execution_report_required !== true) missing.push('execution_gate_strict_report_required')
+  return missing
+}
+
+export function summarizeFundingProofEvidence(report) {
+  if (!report) {
+    return check({
+      id: 'external_funding_proof',
+      label: 'External funding transaction proof',
+      status: 'blocked',
+      detail: 'funding proof report is missing',
+      blocker_codes: ['FUNDING_PROOF_REPORT_MISSING'],
+      evidence: {
+        expected_report: DEFAULT_FUNDING_PROOF_REPORT,
+      },
+    })
+  }
+  const evidence = fundingProofSummaryEvidence(report)
+  const missing = fundingProofMissingEvidence(evidence)
+  if (missing.length === 0) {
+    return check({
+      id: 'external_funding_proof',
+      label: 'External funding transaction proof',
+      status: 'passed',
+      detail: 'provider tx digest proves target BalanceManager / agent gas funding and live readiness',
+      evidence,
+    })
+  }
+  const status = evidence.status === 'failed' ? 'failed' : 'blocked'
+  return check({
+    id: 'external_funding_proof',
+    label: 'External funding transaction proof',
+    status,
+    detail: status === 'failed'
+      ? 'funding proof report failed target transaction validation'
+      : 'funding proof report does not yet prove target funding readiness',
+    blocker_codes: [...new Set([
+      ...(evidence.blocker_codes || []),
+      status === 'failed' ? 'FUNDING_PROOF_NOT_PROVEN' : 'FUNDING_PROOF_NOT_READY',
+    ])],
+    evidence: {
+      ...evidence,
+      missing_live_evidence: missing,
+    },
+  })
+}
+
 function safetyReportEvidence(report) {
   return {
     chain: report?.chain || null,
@@ -542,16 +671,17 @@ function strictExecutionMissingEvidence(report, assertions = []) {
   return missing
 }
 
-export function summarizeStrictExecutionEvidence(report, fundingCheck) {
+export function summarizeStrictExecutionEvidence(report, fundingCheck, fundingProofCheck = null) {
   if (!report) {
+    const fundingReady = fundingCheck?.status === 'passed' && fundingProofCheck?.status === 'passed'
     return check({
       id: 'strict_execution_evidence',
       label: 'AgentTradeExecuted strict execution evidence',
       status: 'blocked',
-      detail: fundingCheck?.status === 'passed'
+      detail: fundingReady
         ? 'funding preflight is ready; run npm run demo:execute and provide its pass report'
-        : 'strict execution cannot run until funding readiness is passed',
-      blocker_codes: fundingCheck?.status === 'passed'
+        : 'strict execution cannot run until funding readiness and external funding proof are passed',
+      blocker_codes: fundingReady
         ? ['STRICT_EXECUTION_REPORT_MISSING']
         : ['STRICT_EXECUTION_BLOCKED_BY_FUNDING'],
     })
@@ -689,6 +819,7 @@ export function buildMissionReadinessReport({
   scripts = packageJson.scripts,
   walletReport = null,
   fundingReadiness = null,
+  fundingProofReport = null,
   executionReport = null,
   safetyReport = null,
 } = {}) {
@@ -704,9 +835,10 @@ export function buildMissionReadinessReport({
   const safetyCheck = summarizeSafetyNegativeEvidence(safetyReport)
   const walletCheck = summarizeWalletReport(walletReport)
   const fundingCheck = summarizeFundingReadiness(fundingReadiness)
-  const strictExecutionCheck = summarizeStrictExecutionEvidence(executionReport, fundingCheck)
+  const fundingProofCheck = summarizeFundingProofEvidence(fundingProofReport)
+  const strictExecutionCheck = summarizeStrictExecutionEvidence(executionReport, fundingCheck, fundingProofCheck)
   const continuityCheck = summarizeMissionContinuity(walletCheck, strictExecutionCheck)
-  const checks = [scriptCheck, safetyCheck, walletCheck, fundingCheck, strictExecutionCheck, continuityCheck]
+  const checks = [scriptCheck, safetyCheck, walletCheck, fundingCheck, fundingProofCheck, strictExecutionCheck, continuityCheck]
   const blockers = checks.flatMap((row) => row.status === 'passed' ? [] : row.blocker_codes)
   const fullPrdReady = checks.every((row) => row.status === 'passed')
   const hasFailedCheck = checks.some((row) => row.status === 'failed')
@@ -716,14 +848,14 @@ export function buildMissionReadinessReport({
     generated_at: generatedAt,
     chain: 'sui:testnet',
     full_prd_ready: fullPrdReady,
-    execution_claimed: strictExecutionCheck.status === 'passed' && continuityCheck.status === 'passed',
+    execution_claimed: fundingProofCheck.status === 'passed' && strictExecutionCheck.status === 'passed' && continuityCheck.status === 'passed',
     blocker_codes: blockers,
     checks,
-    next_actions: fullPrdReady ? [] : nextActions({ safetyCheck, walletCheck, fundingCheck, strictExecutionCheck, continuityCheck }),
+    next_actions: fullPrdReady ? [] : nextActions({ safetyCheck, walletCheck, fundingCheck, fundingProofCheck, strictExecutionCheck, continuityCheck }),
   }
 }
 
-function nextActions({ safetyCheck, walletCheck, fundingCheck, strictExecutionCheck, continuityCheck }) {
+function nextActions({ safetyCheck, walletCheck, fundingCheck, fundingProofCheck, strictExecutionCheck, continuityCheck }) {
   const actions = []
   if (safetyCheck?.status !== 'passed') {
     actions.push('Run npm run safety:negative:report with a live local Worker to write .rescuegrid/safety-negative-report.json proving all required validate-plan blockers.')
@@ -731,10 +863,10 @@ function nextActions({ safetyCheck, walletCheck, fundingCheck, strictExecutionCh
   if (walletCheck?.status !== 'passed') {
     actions.push('Run npm run wallet:evidence -- --format markdown --out .rescuegrid/wallet-clickthrough-evidence.md, then npm run wallet:evidence:preflight before the real Slush / standard Sui wallet flow. Create and activate the policy first, download the UI Activation strategy evidence JSON, run npm run wallet:evidence:apply-strategy -- --input .rescuegrid/wallet-clickthrough-evidence.md --strategy-file <strategy_json_path> to fill machine-derived owner/create/wrapper/mandate/hash fields without marking completion, keep the same wrapper active, run npm run demo:execute:wallet-report -- --wrapper-id <wrapper_id> --strategy-file <strategy_json_path> --create-tx-digest <create_tx_digest>, revoke from the browser wallet when the script reaches awaiting_wallet_revoke, then run npm run wallet:evidence:apply-report -- --input .rescuegrid/wallet-clickthrough-evidence.md --execution-report .rescuegrid/demo-execute-report.json to fill machine-derived revoke/report lifecycle fields including strict_execution_report_reference, set Actual click-through completed: true, fill screenshot evidence fields with readable local files or external audit URLs, and run npm run wallet:evidence:verify -- --input .rescuegrid/wallet-clickthrough-evidence.md --require-worker --execution-report .rescuegrid/demo-execute-report.json.')
   }
-  if (fundingCheck?.status !== 'passed') {
-    actions.push('Send the DBUSDC/DEEP funding handoff to an external funding provider, save the provider Sui tx digest with npm run funding:proof -- --tx <provider_funding_tx_digest> --json and npm run funding:proof:report -- --tx <provider_funding_tx_digest>, then rerun npm run funding:watch -- --json and npm run funding:watch:report.')
+  if (fundingCheck?.status !== 'passed' || fundingProofCheck?.status !== 'passed') {
+    actions.push('Send the DBUSDC/DEEP funding handoff to an external funding provider, save the provider Sui tx digest with npm run funding:proof -- --tx <provider_funding_tx_digest> --json and npm run funding:proof:report -- --tx <provider_funding_tx_digest>, ensure .rescuegrid/funding-proof-report.json has funding_proven=true and transaction_evidence.target_evidence_passed=true for the target BalanceManager / agent gas address, then rerun npm run funding:watch -- --json and npm run funding:watch:report.')
   }
-  if (fundingCheck?.status === 'passed' && strictExecutionCheck?.status !== 'passed') {
+  if (fundingCheck?.status === 'passed' && fundingProofCheck?.status === 'passed' && strictExecutionCheck?.status !== 'passed') {
     actions.push('Run npm run demo:execute:wallet-report -- --wrapper-id <wallet_wrapper_id> --strategy-file <strategy_json_path> --create-tx-digest <wallet_create_tx_digest> to write .rescuegrid/demo-execute-report.json for the browser-wallet-created wrapper, proving create -> execute -> wallet revoke -> post-revoke no-execution with structured AgentTradeExecuted evidence, execution_claimed=true and spend increase.')
   }
   if (continuityCheck?.status === 'failed') {
@@ -782,14 +914,15 @@ Usage:
   npm run mission:readiness:report
   npm run mission:readiness -- --wallet-artifact .rescuegrid/wallet-clickthrough-evidence.md
   npm run mission:readiness -- --safety-report .rescuegrid/safety-negative-report.json
+  npm run mission:readiness -- --funding-proof-report .rescuegrid/funding-proof-report.json
   npm run mission:readiness -- --execution-report .rescuegrid/demo-execute-report.json
   npm run mission:readiness -- --out .rescuegrid/mission-readiness-report.json
   npm run mission:readiness -- --skip-live-funding
 
 This is read-only. It checks validation command registration, wallet click-through
-evidence, live safety-negative evidence, execution funding readiness and strict
-structured AgentTradeExecuted evidence. It does not create policies, submit PTBs, run
-demo:execute or print secrets. --out writes the same report as a gitignored
+evidence, live safety-negative evidence, execution funding readiness, target
+funding proof evidence and strict structured AgentTradeExecuted evidence. It does
+not create policies, submit PTBs, run demo:execute or print secrets. --out writes the same report as a gitignored
 artifact even when status is blocked.`)
 }
 
@@ -801,6 +934,7 @@ export async function main(argv = process.argv.slice(2), env = process.env, opti
   }
   const walletArtifact = resolve(String(flags.get('--wallet-artifact') || DEFAULT_WALLET_ARTIFACT))
   const safetyReportPath = resolve(String(flags.get('--safety-report') || DEFAULT_SAFETY_REPORT))
+  const fundingProofReportPath = resolve(String(flags.get('--funding-proof-report') || DEFAULT_FUNDING_PROOF_REPORT))
   const executionReportArg = String(flags.get('--execution-report') || DEFAULT_EXECUTION_REPORT)
   const executionReportPath = resolve(executionReportArg)
   const reportOutPath = flags.get('--out') || flags.get('--report-out') || flags.get('--output') || null
@@ -836,10 +970,12 @@ export async function main(argv = process.argv.slice(2), env = process.env, opti
     }
   }
   const safetyReport = options.safetyReport ?? loadJsonReport(safetyReportPath)
+  const fundingProofReport = options.fundingProofReport ?? loadJsonReport(fundingProofReportPath)
   const executionReport = options.executionReport ?? loadJsonReport(executionReportPath)
   const report = buildMissionReadinessReport({
     walletReport,
     fundingReadiness,
+    fundingProofReport,
     executionReport,
     safetyReport,
   })
