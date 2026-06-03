@@ -23,7 +23,7 @@
 | --- | --- | --- |
 | B0 MoveGate 适配 + Mandate 访问模型 | ✅ PASS | Mandate 可共享给 agent，无需 owner co-sign |
 | B1 Deepbook testnet pool | ✅ PASS | 三种策略对应 pool 均为 live shared object |
-| B2 最小下单路径 | ✅ 路径确认，无架构阻塞 | 需 BalanceManager；DBUSDC faucet 待 F1 确认 |
+| B2 最小下单路径 | ✅ 路径确认，无架构阻塞；资金外部依赖 | Agent BalanceManager 已部署；DBUSDC/DEEP 自筹路径后续验证为不可用，执行资金需走外部 funding handoff + proof |
 | B5 同一 PTB 可组合性 | ✅ 结构性确认 | 完整编译验证随 Phase C（C5）落地 |
 
 `docs/04-task-breakdown.md` 的 Stop Conditions **均未触发**。
@@ -94,8 +94,8 @@ DeepBook V3 testnet package：`0xfb28c4cbc6865bd1c897d26aecbe1f8792d1509a20ffec6
 
 - **交易构建器**：`@mysten/deepbook-v3@1.4.1`（`DeepBookClient`）封装 pool 调用、BalanceManager、下单；配合 `@mysten/sui@2.17.0` 的 `Transaction`。
 - **下单前置（关键）**：DeepBook v3 交易需要每个 trader 一个 **BalanceManager** 对象（`balance_manager::new`），先 deposit base/quote，下单时用 BalanceManager 生成的 `TradeProof` 调 `pool::place_limit_order`。Agent 钱包需要：BalanceManager + 已存入的 DBUSDC（+ gas SUI）。
-- **测试资金**：testnet SUI 走 `sui client faucet`（当前 0.33 SUI）。DBUSDC 测试币的领取方式（DeepBook testnet faucet / DBUSDC mint）→ **唯一待确认项，留给 F1**，不阻塞架构。
-- **结论**：路径清晰、SDK 与 pool 均就绪；本阶段不实际成交一笔（会提前进入 F 实现），按 B2 验收"明确 testnet 阻塞项"处理 —— 唯一阻塞项是 DBUSDC faucet，F1 解决。
+- **测试资金**：testnet SUI 可走 `sui client faucet`。后续 Phase F/G 实测确认：DBUSDC `mint` 是 TreasuryCap-gated，DEEP permissionless mint 路径不可用，SUI→DBUSDC 自筹 swap 还需要 DEEP taker fee 且零 DEEP 不会形成有效成交。因此 DBUSDC/DEEP 不再作为 repo 内自筹项处理。
+- **结论**：路径清晰、SDK 与 pool 均就绪；B2 的架构结论仍为 GO，但 live execution 的资金前置被明确外部化。当前官方路径是 `npm run funding:request -- --format markdown --out .rescuegrid/funding-request.md` 生成 BalanceManager 资金 handoff，provider 返回 digest 后用 `npm run funding:proof -- --tx <provider_funding_tx_digest> --json` / `npm run funding:proof:report -- --tx <provider_funding_tx_digest>` 证明 DBUSDC/DEEP 目标资产进入部署的 BalanceManager。
 
 ---
 
@@ -121,5 +121,5 @@ ABI 层结构性结论（实测）：
 1. **Phase C**：采用 thin Move helper 构造 `allowed_coin_types: vector<TypeName>`；wrapper 创建 PTB 末尾 `public_share_object` 共享 Mandate 与 wrapper。
 2. **常量固化**：把 MoveGate package/registry/treasury/feeconfig id、DeepBook package、`SUI_DBUSDC` pool id、DBUSDC coin type 写入部署配置常量（对应 `docs/03-technical-spec.md §1` 的 `RESCUEGRID_*` 与新增 MoveGate/DeepBook 地址）。
 3. **creation fee**：提交创建交易前 live 读取 `FeeConfig.creation_fee`（当前 0.01 SUI），不硬编码。
-4. **F1**：先解决 DBUSDC testnet faucet + agent BalanceManager 初始化。
+4. **F1/G5**：agent BalanceManager 已初始化；DBUSDC/DEEP 资金不再尝试 repo 内 faucet/mint/swap 自筹，改为外部 provider funding handoff + target proof。`worker/scripts/deep-faucet.mjs` 和 `worker/scripts/agent-onchain-setup.mjs` 仅保留为显式 force 的 obsolete probe，默认不会读取 key 或签交易。
 5. **回退方案**：未触发；独立 RescuePolicy 路线封存。
