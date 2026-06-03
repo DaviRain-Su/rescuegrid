@@ -34,6 +34,7 @@ const REQUIRED_WALLET_MANUAL_FIELDS = [
   'policy_revoked_screenshot',
   'post_revoke_activity_screenshot',
 ]
+const REQUIRED_LOCAL_OR_EXTERNAL_EVIDENCE_FIELDS = REQUIRED_WALLET_MANUAL_FIELDS.filter((field) => field.endsWith('_screenshot'))
 const SECRET_LEAK_PATTERNS = [
   { id: 'agent-key', pattern: /\bAGENT_KEY["']?\s*[:=]\s*["']?(?!TODO\b|n\/a\b|not configured\b)\S+/i },
   { id: 'owner-key', pattern: /\bOWNER_KEY["']?\s*[:=]\s*["']?(?!TODO\b|n\/a\b|not configured\b)\S+/i },
@@ -823,6 +824,101 @@ function buildClickthroughCompletedCheck(metadata = {}) {
   })
 }
 
+function normalizeEvidenceReference(value) {
+  const normalized = stripCodeFence(value)
+  const markdownLink = normalized.match(/^\[[^\]]+\]\(([^)]+)\)$/)
+  if (markdownLink) return markdownLink[1].trim()
+  return normalized.replace(/^<|>$/g, '').trim()
+}
+
+function isExternalEvidenceReference(value) {
+  return /^(https?|ipfs|ar|walrus):/i.test(value)
+}
+
+function localEvidencePath(value) {
+  if (/^file:/i.test(value)) {
+    try {
+      return new URL(value)
+    } catch {
+      return value
+    }
+  }
+  return resolve(value)
+}
+
+function buildEvidenceReferenceCheck(field, value, { readFileImpl = readFileSync } = {}) {
+  const reference = normalizeEvidenceReference(value)
+  if (!reference) {
+    return createCheck({
+      id: `manual-reference:${field}`,
+      label: `${field} evidence reference is present`,
+      passed: false,
+      expected: 'local readable file or external URL reference',
+      actual: value || '',
+    })
+  }
+  if (isExternalEvidenceReference(reference)) {
+    return createCheck({
+      id: `manual-reference:${field}`,
+      label: `${field} evidence reference is an external URL`,
+      passed: true,
+      expected: 'local readable file or external URL reference',
+      actual: reference,
+      detail: 'external references are not fetched by this secret-safe verifier',
+    })
+  }
+
+  const resolvedPath = localEvidencePath(reference)
+  try {
+    const body = readFileImpl(resolvedPath)
+    const bytes = Buffer.isBuffer(body) ? body.length : Buffer.byteLength(String(body || ''))
+    return createCheck({
+      id: `manual-reference:${field}`,
+      label: `${field} local evidence file is readable and non-empty`,
+      passed: bytes > 0,
+      expected: 'readable non-empty file',
+      actual: String(resolvedPath),
+      detail: `${bytes} bytes`,
+    })
+  } catch (e) {
+    return createCheck({
+      id: `manual-reference:${field}`,
+      label: `${field} local evidence file is readable and non-empty`,
+      passed: false,
+      expected: 'readable non-empty file',
+      actual: String(resolvedPath),
+      detail: String(e?.message || e),
+    })
+  }
+}
+
+function buildEvidenceReferenceChecks(fields, options = {}) {
+  return REQUIRED_LOCAL_OR_EXTERNAL_EVIDENCE_FIELDS.map((field) => buildEvidenceReferenceCheck(field, fields[field], options))
+}
+
+function lifecycleValue(value) {
+  return stripCodeFence(value).toLowerCase()
+}
+
+function buildManualLifecycleChecks(fields) {
+  return [
+    createCheck({
+      id: 'manual:runtime-state-after-activate',
+      label: 'Artifact records Monitoring runtime state after activation',
+      passed: lifecycleValue(fields.runtime_state_after_activate) === 'monitoring',
+      expected: 'Monitoring',
+      actual: fields.runtime_state_after_activate || '',
+    }),
+    createCheck({
+      id: 'manual:policy-status-after-revoke',
+      label: 'Artifact records revoked policy status after revoke',
+      passed: lifecycleValue(fields.policy_status_after_revoke) === 'revoked',
+      expected: 'revoked',
+      actual: fields.policy_status_after_revoke || '',
+    }),
+  ]
+}
+
 function normalizeReferencePath(value) {
   return stripCodeFence(value).replace(/\\/g, '/')
 }
@@ -1577,6 +1673,24 @@ export async function verifyWalletEvidenceArtifact({
     report.status = 'error'
     report.code = 'EVIDENCE_FIELDS_INCOMPLETE'
     report.missing_fields = missing
+    return report
+  }
+
+  const manualEvidenceChecks = [
+    ...buildManualLifecycleChecks(fields),
+    ...buildEvidenceReferenceChecks(fields, { readFileImpl }),
+  ]
+  report.checks.push(...manualEvidenceChecks)
+  const manualEvidenceFailures = manualEvidenceChecks.filter((check) => check.status === 'failed')
+  if (manualEvidenceFailures.length > 0) {
+    report.status = 'error'
+    report.code = 'WALLET_MANUAL_EVIDENCE_INVALID'
+    report.manual_evidence_failures = manualEvidenceFailures.map((check) => ({
+      field: check.id.replace(/^manual-reference:/, '').replace(/^manual:/, ''),
+      expected: check.expected,
+      actual: check.actual,
+      detail: check.detail,
+    }))
     return report
   }
 

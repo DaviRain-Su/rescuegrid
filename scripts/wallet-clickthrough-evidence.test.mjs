@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import { spawnSync } from 'node:child_process'
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { strategyHash } from '../core/strategy.js'
@@ -572,6 +572,21 @@ try {
   rmSync(applyReportCliDir, { recursive: true, force: true })
 }
 
+const screenshotDir = join(strategyFileDir, 'screenshots')
+mkdirSync(screenshotDir, { recursive: true })
+const screenshotFiles = {
+  signIn: join(screenshotDir, 'sign-in.png'),
+  createPrompt: join(screenshotDir, 'create-approval.png'),
+  policyActive: join(screenshotDir, 'policy-active.png'),
+  activityCreated: join(screenshotDir, 'activity-created.png'),
+  revokePrompt: join(screenshotDir, 'revoke-approval.png'),
+  policyRevoked: join(screenshotDir, 'policy-revoked.png'),
+  activityRevoked: join(screenshotDir, 'activity-revoked.png'),
+}
+for (const [name, filePath] of Object.entries(screenshotFiles)) {
+  writeFileSync(filePath, `local wallet evidence ${name}\n`, 'utf8')
+}
+
 const filledArtifact = `# RescueGrid Wallet Click-Through Evidence
 
 Generated: 2026-06-03T00:00:00.000Z
@@ -594,17 +609,17 @@ Owner address: ${STRATEGY_OWNER}
 - mandate_id: ${STRATEGY_MANDATE}
 - strategy_hash: ${activationStrategyHash}
 - activation_strategy_file: ${activationStrategyFile}
-- sign_in_screenshot: screenshots/sign-in.png
-- wallet_create_prompt_screenshot: screenshots/create-approval.png
+- sign_in_screenshot: ${screenshotFiles.signIn}
+- wallet_create_prompt_screenshot: ${screenshotFiles.createPrompt}
 - runtime_state_after_activate: Monitoring
-- policy_active_screenshot: screenshots/policy-active.png
-- activity_row_screenshot: screenshots/activity-created.png
+- policy_active_screenshot: ${screenshotFiles.policyActive}
+- activity_row_screenshot: ${screenshotFiles.activityCreated}
 - strict_execution_report_reference: .rescuegrid/demo-execute-report.json
-- wallet_revoke_prompt_screenshot: screenshots/revoke-approval.png
+- wallet_revoke_prompt_screenshot: ${screenshotFiles.revokePrompt}
 - revoke_tx_digest: revoke-digest
 - policy_status_after_revoke: revoked
-- policy_revoked_screenshot: screenshots/policy-revoked.png
-- post_revoke_activity_screenshot: screenshots/activity-revoked.png
+- policy_revoked_screenshot: ${screenshotFiles.policyRevoked}
+- post_revoke_activity_screenshot: ${screenshotFiles.activityRevoked}
 `
 
 const parsedArtifact = parseWalletEvidenceArtifact(filledArtifact)
@@ -648,8 +663,8 @@ assert.equal(coreOnlyReport.missing_fields.includes('strict_execution_report_ref
 
 const secretLeakReport = await verifyWalletEvidenceArtifact({
   artifactText: filledArtifact.replace(
-    'sign_in_screenshot: screenshots/sign-in.png',
-    'sign_in_screenshot: screenshots/sign-in.png AGENT_KEY=suiprivkey1qqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqq',
+    `sign_in_screenshot: ${screenshotFiles.signIn}`,
+    `sign_in_screenshot: ${screenshotFiles.signIn} AGENT_KEY=suiprivkey1qqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqq`,
   ),
   suiClient: {
     async getTransactionBlock() {
@@ -672,8 +687,8 @@ const secretLeakCases = [
 for (const [expectedPattern, secretSnippet] of secretLeakCases) {
   const report = await verifyWalletEvidenceArtifact({
     artifactText: filledArtifact.replace(
-      'sign_in_screenshot: screenshots/sign-in.png',
-      `sign_in_screenshot: screenshots/sign-in.png ${secretSnippet}`,
+      `sign_in_screenshot: ${screenshotFiles.signIn}`,
+      `sign_in_screenshot: ${screenshotFiles.signIn} ${secretSnippet}`,
     ),
     suiClient: {
       async getTransactionBlock() {
@@ -697,6 +712,21 @@ const safePublicPostureReport = await verifyWalletEvidenceArtifact({
 assert.equal(safePublicPostureReport.status, 'error')
 assert.equal(safePublicPostureReport.code, 'EVIDENCE_FIELDS_INCOMPLETE')
 assert.equal(safePublicPostureReport.secret_leak_patterns, undefined)
+
+const missingScreenshotReport = await verifyWalletEvidenceArtifact({
+  artifactText: filledArtifact.replace(screenshotFiles.signIn, join(strategyFileDir, 'missing-sign-in.png')),
+  suiClient: {
+    async getTransactionBlock() {
+      throw new Error('should not read chain when local screenshot evidence is missing')
+    },
+  },
+})
+assert.equal(missingScreenshotReport.status, 'error')
+assert.equal(missingScreenshotReport.code, 'WALLET_MANUAL_EVIDENCE_INVALID')
+assert.equal(
+  missingScreenshotReport.manual_evidence_failures.some((row) => row.field === 'sign_in_screenshot'),
+  true,
+)
 
 const missingActivationStrategyFileReport = await verifyWalletEvidenceArtifact({
   artifactText: filledArtifact.replace(activationStrategyFile, join(strategyFileDir, 'missing-wallet-strategy.json')),
@@ -846,6 +876,9 @@ assert.equal(verifiedReport.activation_strategy_file.computed_strategy_hash, act
 assert.equal(verifiedReport.activation_strategy_file.wrapper_id, STRATEGY_WRAPPER)
 assert.equal(verifiedReport.fields.strict_execution_report_reference, '.rescuegrid/demo-execute-report.json')
 assert.equal(verifiedReport.checks.every((check) => check.status === 'passed'), true)
+assert.equal(verifiedReport.checks.find((check) => check.id === 'manual:runtime-state-after-activate').status, 'passed')
+assert.equal(verifiedReport.checks.find((check) => check.id === 'manual:policy-status-after-revoke').status, 'passed')
+assert.equal(verifiedReport.checks.find((check) => check.id === 'manual-reference:sign_in_screenshot').status, 'passed')
 assert.equal(verifiedReport.checks.some((check) => check.id === 'activation-strategy:strategy-hash'), true)
 assert.equal(verifiedReport.checks.some((check) => check.id === 'worker:create-activity'), true)
 assert.equal(chainReads, 2)
