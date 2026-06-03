@@ -767,6 +767,8 @@ export function parseWalletEvidenceArtifact(text) {
         chain: json.chain || null,
         frontend_url: json.frontend?.url || null,
         worker_url: json.worker?.url || null,
+        wallet_name: json.wallet?.wallet_name || null,
+        wallet_network: json.wallet?.network || null,
         generated_at: json.generated_at || null,
         actual_clickthrough_completed: json.actual_clickthrough_completed === true,
       },
@@ -801,6 +803,16 @@ export function parseWalletEvidenceArtifact(text) {
     match = line.match(/^Chain:\s*(.*)$/i)
     if (match) {
       metadata.chain = stripCodeFence(match[1])
+      continue
+    }
+    match = line.match(/^Wallet:\s*(.*)$/i)
+    if (match) {
+      metadata.wallet_name = stripCodeFence(match[1])
+      continue
+    }
+    match = line.match(/^Network:\s*(.*)$/i)
+    if (match) {
+      metadata.wallet_network = stripCodeFence(match[1])
       continue
     }
     match = line.match(/^Generated:\s*(.*)$/i)
@@ -1000,6 +1012,25 @@ function buildManualLifecycleChecks(fields) {
       passed: lifecycleValue(fields.policy_status_after_revoke) === 'revoked',
       expected: 'revoked',
       actual: fields.policy_status_after_revoke || '',
+    }),
+  ]
+}
+
+function buildWalletMetadataChecks(metadata = {}) {
+  return [
+    createCheck({
+      id: 'wallet:wallet-name',
+      label: 'Artifact records the browser wallet used for click-through',
+      passed: evidenceValuePresent(metadata.wallet_name),
+      expected: 'Slush or another standard Sui wallet name',
+      actual: metadata.wallet_name || '',
+    }),
+    createCheck({
+      id: 'wallet:network',
+      label: 'Artifact records Sui Testnet wallet network',
+      passed: stripCodeFence(metadata.wallet_network).toLowerCase() === 'sui testnet',
+      expected: 'Sui Testnet',
+      actual: metadata.wallet_network || '',
     }),
   ]
 }
@@ -1735,6 +1766,8 @@ export async function verifyWalletEvidenceArtifact({
     verified: false,
     chain: parsed.metadata?.chain || deployment.chain,
     worker_url: workerUrl || parsed.metadata?.worker_url || null,
+    wallet_name: parsed.metadata?.wallet_name || null,
+    wallet_network: parsed.metadata?.wallet_network || null,
     fields: Object.fromEntries(requiredFields.map((field) => [field, fields[field] || ''])),
     actual_clickthrough_completed: parsed.metadata?.actual_clickthrough_completed === true,
     strict_execution_report_reference_expected: strictExecutionReportPath || null,
@@ -1762,6 +1795,7 @@ export async function verifyWalletEvidenceArtifact({
   }
 
   const manualEvidenceChecks = [
+    ...buildWalletMetadataChecks(parsed.metadata),
     ...buildManualLifecycleChecks(fields),
     ...buildEvidenceReferenceChecks(fields, { readFileImpl }),
   ]

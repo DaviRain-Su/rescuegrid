@@ -381,6 +381,8 @@ assert.equal(parsedAppliedMarkdown.fields.strategy_hash, activationStrategyHash)
 assert.equal(parsedAppliedMarkdown.fields.activation_strategy_file, activationStrategyFile)
 assert.equal(parsedAppliedMarkdown.fields.runtime_state_after_activate, 'Monitoring')
 assert.equal(parsedAppliedMarkdown.metadata.actual_clickthrough_completed, false)
+assert.equal(parsedAppliedMarkdown.metadata.wallet_name, 'Slush or standard Sui wallet')
+assert.equal(parsedAppliedMarkdown.metadata.wallet_network, 'Sui Testnet')
 
 const appliedStrategyJson = applyActivationStrategyToWalletEvidenceArtifact({
   artifactText: json,
@@ -643,6 +645,8 @@ assert.equal(parsedArtifact.status, 'ok')
 assert.equal(parsedArtifact.format, 'markdown')
 assert.equal(parsedArtifact.metadata.worker_url, 'http://worker.test')
 assert.equal(parsedArtifact.metadata.actual_clickthrough_completed, true)
+assert.equal(parsedArtifact.metadata.wallet_name, 'Slush')
+assert.equal(parsedArtifact.metadata.wallet_network, 'Sui Testnet')
 assert.equal(parsedArtifact.fields.wrapper_id, STRATEGY_WRAPPER)
 assert.equal(parsedArtifact.fields.activation_strategy_file, activationStrategyFile)
 assert.equal(parsedArtifact.fields.strict_execution_report_reference, '.rescuegrid/demo-execute-report.json')
@@ -741,6 +745,21 @@ assert.equal(missingScreenshotReport.status, 'error')
 assert.equal(missingScreenshotReport.code, 'WALLET_MANUAL_EVIDENCE_INVALID')
 assert.equal(
   missingScreenshotReport.manual_evidence_failures.some((row) => row.field === 'sign_in_screenshot'),
+  true,
+)
+
+const wrongWalletNetworkReport = await verifyWalletEvidenceArtifact({
+  artifactText: filledArtifact.replace('Network: Sui Testnet', 'Network: Sui Mainnet'),
+  suiClient: {
+    async getTransactionBlock() {
+      throw new Error('should not read chain when wallet network is not testnet')
+    },
+  },
+})
+assert.equal(wrongWalletNetworkReport.status, 'error')
+assert.equal(wrongWalletNetworkReport.code, 'WALLET_MANUAL_EVIDENCE_INVALID')
+assert.equal(
+  wrongWalletNetworkReport.manual_evidence_failures.some((row) => row.field === 'wallet:network'),
   true,
 )
 
@@ -884,6 +903,8 @@ const verifiedReport = await verifyWalletEvidenceArtifact({
 assert.equal(verifiedReport.status, 'ok')
 assert.equal(verifiedReport.verified, true)
 assert.equal(verifiedReport.actual_clickthrough_completed, true)
+assert.equal(verifiedReport.wallet_name, 'Slush')
+assert.equal(verifiedReport.wallet_network, 'Sui Testnet')
 assert.equal(verifiedReport.execution_claimed, false)
 assert.equal(verifiedReport.required_manual_fields.includes('strict_execution_report_reference'), true)
 assert.equal(verifiedReport.required_manual_fields.includes('activation_strategy_file'), true)
@@ -895,6 +916,7 @@ assert.equal(verifiedReport.checks.every((check) => check.status === 'passed'), 
 assert.equal(verifiedReport.checks.find((check) => check.id === 'manual:runtime-state-after-activate').status, 'passed')
 assert.equal(verifiedReport.checks.find((check) => check.id === 'manual:policy-status-after-revoke').status, 'passed')
 assert.equal(verifiedReport.checks.find((check) => check.id === 'manual-reference:sign_in_screenshot').status, 'passed')
+assert.equal(verifiedReport.checks.find((check) => check.id === 'wallet:network').status, 'passed')
 assert.equal(verifiedReport.checks.some((check) => check.id === 'activation-strategy:strategy-hash'), true)
 assert.equal(verifiedReport.checks.some((check) => check.id === 'worker:create-activity'), true)
 assert.equal(chainReads, 2)
