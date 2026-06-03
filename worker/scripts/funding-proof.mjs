@@ -156,6 +156,12 @@ const FUNDING_ASSETS = Object.freeze({
   DEEP: DEPLOYMENT.deepbook.deep_coin_type,
   SUI_MIST: '0x2::sui::SUI',
 })
+const FUNDING_ROLE_REQUIRED_ASSET = Object.freeze({
+  provider_funding_tx: null,
+  dbusdc_funding_tx: 'DBUSDC',
+  deep_funding_tx: 'DEEP',
+  sui_gas_funding_tx: 'SUI_MIST',
+})
 
 function fundingAssetHits({ balanceChanges = [], moveCalls = [] } = {}) {
   const hits = []
@@ -215,6 +221,16 @@ function fundingTargetEvidence({ balanceChanges = [], moveCalls = [], objectChan
     agent_gas_address_touched: agentGasAddressTouched,
     asset_target_hits: assetTargetHits,
   }
+}
+
+function targetAssetHits(row = {}) {
+  return (row.target_evidence?.asset_target_hits || []).map((hit) => hit.asset).filter(Boolean)
+}
+
+function fundingRoleAssetCheckPassed(row = {}) {
+  const requiredAsset = FUNDING_ROLE_REQUIRED_ASSET[row.role] || null
+  if (!requiredAsset) return true
+  return targetAssetHits(row).includes(requiredAsset)
 }
 
 function txStatus(effects = {}) {
@@ -289,15 +305,18 @@ export function buildFundingProofReport({
   const txChecks = Array.isArray(transactionProofs) ? transactionProofs : []
   const failedTxChecks = txChecks.filter((row) => row.passed !== true)
   const failedTargetChecks = txChecks.filter((row) => row.passed === true && row.target_evidence?.target_evidence_passed !== true)
+  const failedRoleAssetChecks = txChecks.filter((row) => row.passed === true && !fundingRoleAssetCheckPassed(row))
   const missingDigest = txChecks.length === 0
   const txEvidencePassed = !missingDigest && failedTxChecks.length === 0
   const targetEvidencePassed = txEvidencePassed && failedTargetChecks.length === 0
-  const fundingProven = txEvidencePassed && targetEvidencePassed && handoff.funding_ready === true
+  const roleAssetEvidencePassed = txEvidencePassed && failedRoleAssetChecks.length === 0
+  const fundingProven = txEvidencePassed && targetEvidencePassed && roleAssetEvidencePassed && handoff.funding_ready === true
   const readyForStrictExecution = fundingProven && handoff.ready_for_strict_execution === true
   const txBlockers = [
     missingDigest ? 'FUNDING_TX_DIGEST_MISSING' : null,
     failedTxChecks.length > 0 ? 'FUNDING_TX_NOT_PROVEN' : null,
     failedTargetChecks.length > 0 ? 'FUNDING_TX_TARGET_NOT_PROVEN' : null,
+    failedRoleAssetChecks.length > 0 ? 'FUNDING_TX_ROLE_ASSET_NOT_PROVEN' : null,
   ].filter(Boolean)
   const blockerCodes = [
     ...txBlockers,
@@ -305,7 +324,7 @@ export function buildFundingProofReport({
   ]
 
   return {
-    status: failedTxChecks.length > 0 || failedTargetChecks.length > 0 ? 'failed' : readyForStrictExecution ? 'ready' : 'blocked',
+    status: failedTxChecks.length > 0 || failedTargetChecks.length > 0 || failedRoleAssetChecks.length > 0 ? 'failed' : readyForStrictExecution ? 'ready' : 'blocked',
     purpose: 'rescuegrid_external_funding_proof',
     generated_at: generatedAt,
     chain: handoff.chain,
@@ -322,8 +341,17 @@ export function buildFundingProofReport({
       tx_digest_count: txChecks.length,
       tx_evidence_passed: txEvidencePassed,
       target_evidence_passed: targetEvidencePassed,
+      role_asset_evidence_passed: roleAssetEvidencePassed,
       failed_tx_digests: failedTxChecks.map((row) => row.digest).filter(Boolean),
       failed_target_digests: failedTargetChecks.map((row) => row.digest).filter(Boolean),
+      failed_role_asset_digests: failedRoleAssetChecks.map((row) => row.digest).filter(Boolean),
+      role_asset_requirements: txChecks.map((row) => ({
+        role: row.role || 'provider_funding_tx',
+        digest: row.digest || null,
+        required_asset: FUNDING_ROLE_REQUIRED_ASSET[row.role] || null,
+        target_asset_hits: targetAssetHits(row),
+        passed: fundingRoleAssetCheckPassed(row),
+      })),
       asset_hits: [...new Set(txChecks.flatMap((row) => (row.funding_asset_hits || []).map((hit) => hit.asset)))],
       target_asset_hits: [...new Set(txChecks.flatMap((row) => (row.target_evidence?.asset_target_hits || []).map((hit) => hit.asset)))],
     },

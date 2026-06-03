@@ -119,6 +119,7 @@ function txFixture({
   digest = 'fundingDigest',
   status = 'success',
   objectChanges = [{ type: 'mutated', objectId: DEPLOYMENT.agent.balance_manager_id }],
+  transaction = null,
   balanceChanges = [
     { coinType: DBUSDC, amount: '-100', owner: { AddressOwner: '0xprovider' } },
     { coinType: DEEP, amount: '-1', owner: { AddressOwner: '0xprovider' } },
@@ -130,7 +131,7 @@ function txFixture({
     checkpoint: '42',
     timestampMs: '1760000000000',
     effects: { status: { status } },
-    transaction: {
+    transaction: transaction || {
       data: {
         sender: '0xprovider',
         transaction: {
@@ -169,6 +170,42 @@ function unrelatedTargetTxFixture({ digest = 'unrelatedDigest' } = {}) {
   return txFixture({
     digest,
     objectChanges: [{ type: 'mutated', objectId: '0xunrelatedBalanceManager' }],
+  })
+}
+
+function singleAssetTargetTxFixture({ digest = 'singleAssetDigest', asset = 'DEEP' } = {}) {
+  const coinType = asset === 'DBUSDC' ? DBUSDC : asset === 'DEEP' ? DEEP : SUI
+  return txFixture({
+    digest,
+    objectChanges: asset === 'SUI_MIST' ? [] : [{ type: 'mutated', objectId: DEPLOYMENT.agent.balance_manager_id }],
+    balanceChanges: asset === 'SUI_MIST'
+      ? [
+        { coinType: SUI, amount: '1000000000', owner: { AddressOwner: DEPLOYMENT.agent.address } },
+        { coinType: SUI, amount: '-1000000000', owner: { AddressOwner: '0xprovider' } },
+      ]
+      : [
+        { coinType, amount: '-100', owner: { AddressOwner: '0xprovider' } },
+      ],
+    transaction: asset === 'SUI_MIST'
+      ? { data: { sender: '0xprovider', transaction: { transactions: [] } } }
+      : {
+        data: {
+          sender: '0xprovider',
+          transaction: {
+            transactions: [
+              {
+                MoveCall: {
+                  package: DEPLOYMENT.deepbook.package_id,
+                  module: 'balance_manager',
+                  function: 'deposit',
+                  type_arguments: [coinType],
+                  arguments: [],
+                },
+              },
+            ],
+          },
+        },
+      },
   })
 }
 
@@ -286,6 +323,7 @@ function assertNoSecrets(value) {
   assert.equal(report.status, 'blocked')
   assert.equal(report.transaction_evidence.tx_evidence_passed, true)
   assert.equal(report.transaction_evidence.target_evidence_passed, true)
+  assert.equal(report.transaction_evidence.role_asset_evidence_passed, true)
   assert.equal(report.funding_proven, false)
   assert.equal(report.blocker_codes.includes('INSUFFICIENT_DBUSDC'), true)
   assert.equal(report.policy_creation_allowed, false)
@@ -315,11 +353,38 @@ function assertNoSecrets(value) {
   assert.equal(report.transaction_evidence.asset_hits.includes('DBUSDC'), true)
   assert.equal(report.transaction_evidence.asset_hits.includes('DEEP'), true)
   assert.equal(report.transaction_evidence.target_evidence_passed, true)
+  assert.equal(report.transaction_evidence.role_asset_evidence_passed, true)
   assert.equal(report.transaction_evidence.target_asset_hits.includes('DBUSDC'), true)
   assert.equal(report.transaction_evidence.target_asset_hits.includes('DEEP'), true)
   assert.equal(report.cloud_per_user_signer.kind, 'cloud-per-user')
   assert.equal(report.cloud_per_user_signer.seal_walrus_required, true)
   assertNoSecrets(report)
+}
+
+{
+  const report = buildFundingProofReport({
+    readiness: readiness({ executionReady: true }),
+    transactionProofs: [
+      await verifyFundingTransaction({
+        digest: 'deepOnlyDigest',
+        role: 'dbusdc_funding_tx',
+        client: { async getTransactionBlock({ digest }) { return singleAssetTargetTxFixture({ digest, asset: 'DEEP' }) } },
+      }),
+    ],
+    generatedAt: '2026-06-03T00:00:00.000Z',
+  })
+  assert.equal(report.status, 'failed')
+  assert.equal(report.transaction_evidence.tx_evidence_passed, true)
+  assert.equal(report.transaction_evidence.target_evidence_passed, true)
+  assert.equal(report.transaction_evidence.role_asset_evidence_passed, false)
+  assert.deepEqual(report.transaction_evidence.failed_role_asset_digests, ['deepOnlyDigest'])
+  assert.equal(report.transaction_evidence.role_asset_requirements[0].role, 'dbusdc_funding_tx')
+  assert.equal(report.transaction_evidence.role_asset_requirements[0].required_asset, 'DBUSDC')
+  assert.deepEqual(report.transaction_evidence.role_asset_requirements[0].target_asset_hits, ['DEEP'])
+  assert.equal(report.transaction_evidence.role_asset_requirements[0].passed, false)
+  assert.equal(report.blocker_codes.includes('FUNDING_TX_ROLE_ASSET_NOT_PROVEN'), true)
+  assert.equal(report.funding_proven, false)
+  assert.equal(report.ready_for_strict_execution, false)
 }
 
 {
