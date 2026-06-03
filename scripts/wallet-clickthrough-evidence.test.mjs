@@ -348,6 +348,21 @@ assert.equal(coreOnlyReport.status, 'error')
 assert.equal(coreOnlyReport.code, 'EVIDENCE_FIELDS_INCOMPLETE')
 assert.equal(coreOnlyReport.missing_fields.includes('sign_in_screenshot'), true)
 
+const secretLeakReport = await verifyWalletEvidenceArtifact({
+  artifactText: filledArtifact.replace(
+    'sign_in_screenshot: screenshots/sign-in.png',
+    'sign_in_screenshot: screenshots/sign-in.png AGENT_KEY=suiprivkey1qqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqq',
+  ),
+  suiClient: {
+    async getTransactionBlock() {
+      throw new Error('should not read chain when the artifact contains a secret')
+    },
+  },
+})
+assert.equal(secretLeakReport.status, 'error')
+assert.equal(secretLeakReport.code, 'SECRET_LEAK_DETECTED')
+assert.equal(secretLeakReport.secret_leak_patterns.includes('agent-key'), true)
+
 let chainReads = 0
 const fakeSuiClient = {
   async getTransactionBlock({ digest, options }) {

@@ -30,6 +30,16 @@ const REQUIRED_WALLET_MANUAL_FIELDS = [
   'policy_revoked_screenshot',
   'post_revoke_activity_screenshot',
 ]
+const SECRET_LEAK_PATTERNS = [
+  { id: 'agent-key', pattern: /\bAGENT_KEY\s*=\s*\S+/i },
+  { id: 'owner-key', pattern: /\bOWNER_KEY\s*=\s*\S+/i },
+  { id: 'private-key', pattern: /\b(private[_ -]?key|signing[_ -]?secret|worker[_ -]?secret)\s*[:=]\s*(?!TODO\b|n\/a\b|not configured\b)\S+/i },
+  { id: 'internal-agent-tick-token', pattern: /\bINTERNAL_AGENT_TICK_TOKEN\s*=\s*\S+/i },
+  { id: 'waap-permission-token', pattern: /\b(WAAP_PERMISSION_TOKEN|RESCUEGRID_WAAP_PERMISSION_TOKEN|permission_token)\s*[:=]\s*(?!TODO\b|n\/a\b|not configured\b|false\b|true\b|null\b)\S+/i },
+  { id: 'waap-session', pattern: /\b(WAAP_SESSION|WAAP_SESSION_FILE|waap[_ -]?session)\s*[:=]\s*(?!TODO\b|n\/a\b|not configured\b)\S+/i },
+  { id: 'sui-private-key', pattern: /\bsuiprivkey[1-9A-HJ-NP-Za-km-z]{20,}/ },
+  { id: 'seed-phrase', pattern: /\b(seed phrase|mnemonic)\s*[:=]\s*(?!TODO\b|n\/a\b|not captured\b)(\S+\s+){2,}\S+/i },
+]
 
 export function parseArgs(argv = process.argv.slice(2)) {
   const flags = new Map()
@@ -743,6 +753,21 @@ function createCheck({ id, label, passed, expected = null, actual = null, detail
   }
 }
 
+function detectSecretLeaks(text) {
+  return SECRET_LEAK_PATTERNS.filter(({ pattern }) => pattern.test(String(text || ''))).map(({ id }) => id)
+}
+
+function buildSecretLeakCheck(text) {
+  const leaks = detectSecretLeaks(text)
+  return createCheck({
+    id: 'artifact:secret-scan',
+    label: 'Artifact does not contain obvious secret assignments',
+    passed: leaks.length === 0,
+    expected: 'no AGENT_KEY, owner key, private key, tick token, WaaP token or seed phrase values',
+    actual: leaks,
+  })
+}
+
 function checkEqual(id, label, actual, expected, detail = null) {
   return createCheck({
     id,
@@ -869,6 +894,8 @@ export async function verifyWalletEvidenceArtifact({
   const fields = parsed.fields || {}
   const checks = []
   const requiredFields = [...REQUIRED_WALLET_CORE_FIELDS, ...REQUIRED_WALLET_MANUAL_FIELDS]
+  const secretCheck = buildSecretLeakCheck(artifactText)
+  checks.push(secretCheck)
   checks.push(...buildMissingChecks(fields, requiredFields))
   checks.push(buildClickthroughCompletedCheck(parsed.metadata))
   const missing = checks.filter((check) => check.status === 'failed').map((check) => {
@@ -894,6 +921,12 @@ export async function verifyWalletEvidenceArtifact({
   }
 
   if (missing.length > 0) {
+    if (secretCheck.status === 'failed') {
+      report.status = 'error'
+      report.code = 'SECRET_LEAK_DETECTED'
+      report.secret_leak_patterns = secretCheck.actual || []
+      return report
+    }
     report.status = 'error'
     report.code = 'EVIDENCE_FIELDS_INCOMPLETE'
     report.missing_fields = missing
