@@ -176,6 +176,25 @@ function blockedFunding() {
   }
 }
 
+function strictAgentTradeEvent(overrides = {}) {
+  return {
+    type: 'AgentTradeExecuted',
+    tx_digest: 'tickDigest',
+    mandate_id: '0xmandate',
+    wrapper_id: '0xwrapper',
+    agent: '0xagent',
+    pool_id: '0xpool',
+    quote_amount_spent: '1000',
+    base_amount_received: '990',
+    spent_amount_after: '1000',
+    budget_ceiling: '1000000',
+    slippage_bps: 20,
+    client_order_id: '0xorder',
+    executed_at_ms: 1760000000000,
+    ...overrides,
+  }
+}
+
 function strictExecutionReport(overrides = {}) {
   return {
     purpose: 'rescuegrid_demo_execution_report',
@@ -190,6 +209,7 @@ function strictExecutionReport(overrides = {}) {
     tick_outcome: 'executed',
     execution_claimed: true,
     agent_trade_event_found: true,
+    agent_trade_event: strictAgentTradeEvent(),
     spend_increased: true,
     tick_tx_digest: 'tickDigest',
     owner_address: '0xowner',
@@ -223,8 +243,12 @@ function strictExecutionReport(overrides = {}) {
   assert.deepEqual(report.blocker_codes, [])
   assert.equal(report.checks.every((row) => row.status === 'passed'), true)
   const fundingCheck = report.checks.find((row) => row.id === 'execution_funding_readiness')
+  const executionCheck = report.checks.find((row) => row.id === 'strict_execution_evidence')
   const continuityCheck = report.checks.find((row) => row.id === 'mission_same_policy_continuity')
   assert.equal(fundingCheck.evidence.external_signer.permission_token_configured, false)
+  assert.equal(executionCheck.evidence.agent_trade_event.wrapper_id, '0xwrapper')
+  assert.equal(executionCheck.evidence.agent_trade_event.mandate_id, '0xmandate')
+  assert.equal(executionCheck.evidence.agent_trade_event.tx_digest, 'tickDigest')
   assert.equal(continuityCheck.status, 'passed')
   assert.equal(continuityCheck.evidence.wrapper_id, '0xwrapper')
   assertNoSecretSignerPosture(report)
@@ -294,6 +318,7 @@ function strictExecutionReport(overrides = {}) {
     fundingReadiness: readyFunding(),
     executionReport: strictExecutionReport({
       wrapper_id: '0xotherwrapper',
+      agent_trade_event: strictAgentTradeEvent({ wrapper_id: '0xotherwrapper' }),
       revoke_tx_digest: 'otherRevokeDigest',
       revoke_tx: { digest: 'otherRevokeDigest', status: 'success' },
     }),
@@ -351,6 +376,36 @@ function strictExecutionReport(overrides = {}) {
   assert.equal(report.status, 'failed')
   assert.equal(executionCheck.status, 'failed')
   assert.equal(executionCheck.evidence.agent_trade_event_found, false)
+}
+
+{
+  const report = buildMissionReadinessReport({
+    scripts: requiredScripts,
+    safetyReport: safetyNegativeReport(),
+    walletReport: verifiedWalletReport(),
+    fundingReadiness: readyFunding(),
+    executionReport: strictExecutionReport({ agent_trade_event: null }),
+  })
+  const executionCheck = report.checks.find((row) => row.id === 'strict_execution_evidence')
+  assert.equal(report.status, 'failed')
+  assert.equal(executionCheck.status, 'failed')
+  assert.equal(executionCheck.evidence.missing_live_evidence.includes('agent_trade_event'), true)
+}
+
+{
+  const report = buildMissionReadinessReport({
+    scripts: requiredScripts,
+    safetyReport: safetyNegativeReport(),
+    walletReport: verifiedWalletReport(),
+    fundingReadiness: readyFunding(),
+    executionReport: strictExecutionReport({
+      agent_trade_event: strictAgentTradeEvent({ wrapper_id: '0xotherwrapper' }),
+    }),
+  })
+  const executionCheck = report.checks.find((row) => row.id === 'strict_execution_evidence')
+  assert.equal(report.status, 'failed')
+  assert.equal(executionCheck.status, 'failed')
+  assert.equal(executionCheck.evidence.missing_live_evidence.includes('agent_trade_event_wrapper'), true)
 }
 
 {

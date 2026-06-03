@@ -136,6 +136,86 @@ function publicExternalSigner(posture = null) {
   return Object.keys(publicPosture).length === 0 ? null : publicPosture
 }
 
+function stringOrNull(value) {
+  return value == null ? null : String(value)
+}
+
+function numberOrNull(value) {
+  if (value == null || value === '') return null
+  const n = Number(value)
+  return Number.isFinite(n) ? n : null
+}
+
+function hexVector(value) {
+  if (Array.isArray(value)) return `0x${value.map((b) => Number(b).toString(16).padStart(2, '0')).join('')}`
+  if (value == null) return null
+  return String(value)
+}
+
+function eventType(value) {
+  if (!value) return null
+  return String(value).split('::').pop()
+}
+
+function publicAgentTradeEvent(event = null) {
+  if (!event || typeof event !== 'object' || Array.isArray(event)) return null
+  return {
+    type: eventType(event.type || event.event_type),
+    tx_digest: stringOrNull(event.tx_digest || event.txDigest || event.id?.txDigest),
+    mandate_id: stringOrNull(event.mandate_id),
+    wrapper_id: stringOrNull(event.wrapper_id),
+    agent: stringOrNull(event.agent),
+    pool_id: stringOrNull(event.pool_id),
+    quote_amount_spent: stringOrNull(event.quote_amount_spent),
+    base_amount_received: stringOrNull(event.base_amount_received),
+    spent_amount_after: stringOrNull(event.spent_amount_after),
+    budget_ceiling: stringOrNull(event.budget_ceiling),
+    slippage_bps: numberOrNull(event.slippage_bps),
+    client_order_id: hexVector(event.client_order_id),
+    executed_at_ms: numberOrNull(event.executed_at_ms ?? event.timestamp_ms),
+  }
+}
+
+function hasPresentValue(value) {
+  return value !== null && value !== undefined && String(value) !== ''
+}
+
+function missingAgentTradeEventEvidence(evidence) {
+  const event = evidence.agent_trade_event
+  if (!event) return ['agent_trade_event']
+  const missing = []
+  if (event.type !== 'AgentTradeExecuted') missing.push('agent_trade_event_type')
+  if (
+    !event.tx_digest ||
+    !evidence.tick_tx_digest ||
+    normalizeDigestAnchor(event.tx_digest) !== normalizeDigestAnchor(evidence.tick_tx_digest)
+  ) missing.push('agent_trade_event_tx_digest')
+  if (
+    !event.wrapper_id ||
+    !evidence.wrapper_id ||
+    normalizeHexAnchor(event.wrapper_id) !== normalizeHexAnchor(evidence.wrapper_id)
+  ) missing.push('agent_trade_event_wrapper')
+  if (
+    !event.mandate_id ||
+    !evidence.mandate_id ||
+    normalizeHexAnchor(event.mandate_id) !== normalizeHexAnchor(evidence.mandate_id)
+  ) missing.push('agent_trade_event_mandate')
+  for (const field of [
+    'agent',
+    'pool_id',
+    'quote_amount_spent',
+    'base_amount_received',
+    'spent_amount_after',
+    'budget_ceiling',
+    'slippage_bps',
+    'client_order_id',
+    'executed_at_ms',
+  ]) {
+    if (!hasPresentValue(event[field])) missing.push(`agent_trade_event_${field}`)
+  }
+  return missing
+}
+
 export function summarizeWalletReport(report) {
   if (!report) {
     return check({
@@ -349,6 +429,7 @@ function executionReportEvidence(report) {
     tick_outcome: report?.tick_outcome || null,
     tick_tx_digest: report?.tick_tx_digest || report?.tx_digest || null,
     agent_trade_event_found: report?.agent_trade_event_found === true,
+    agent_trade_event: publicAgentTradeEvent(report?.agent_trade_event),
     spend_increased: report?.spend_increased === true,
     post_revoke: {
       action: report?.post_revoke?.action || null,
@@ -393,6 +474,7 @@ function strictExecutionMissingEvidence(report, assertions = []) {
   for (const eventType of ['PolicyCreated', 'AgentTradeExecuted', 'PolicyRevoked']) {
     if (!evidence.post_revoke.chain_event_types.includes(eventType)) missing.push(`chain_event:${eventType}`)
   }
+  missing.push(...missingAgentTradeEventEvidence(evidence))
   return missing
 }
 

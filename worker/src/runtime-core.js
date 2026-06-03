@@ -104,6 +104,40 @@ function tradeEventsForWrapper(events, wrapperId) {
   })
 }
 
+function hexVector(value) {
+  if (Array.isArray(value)) return `0x${value.map((b) => Number(b).toString(16).padStart(2, '0')).join('')}`
+  if (value == null) return null
+  return String(value)
+}
+
+function stringOrNull(value) {
+  return value == null ? null : String(value)
+}
+
+function numberOrNull(value) {
+  const n = Number(value)
+  return Number.isFinite(n) ? n : null
+}
+
+function agentTradeEventEvidence(event, txDigest) {
+  const data = event?.parsedJson || event?.data || {}
+  return {
+    type: String(event?.type || '').split('::').pop() || null,
+    tx_digest: event?.id?.txDigest || txDigest || null,
+    mandate_id: data.mandate_id || null,
+    wrapper_id: data.wrapper_id || null,
+    agent: data.agent || null,
+    pool_id: data.pool_id || null,
+    quote_amount_spent: stringOrNull(data.quote_amount_spent),
+    base_amount_received: stringOrNull(data.base_amount_received),
+    spent_amount_after: stringOrNull(data.spent_amount_after),
+    budget_ceiling: stringOrNull(data.budget_ceiling),
+    slippage_bps: numberOrNull(data.slippage_bps),
+    client_order_id: hexVector(data.client_order_id),
+    executed_at_ms: numberOrNull(data.executed_at_ms ?? event?.timestampMs),
+  }
+}
+
 export function classifyExecutionResolution({ submitted, resolved, beforeWrapper, afterWrapper, wrapperId }) {
   const evidence = resolved ?? submitted ?? {}
   const digest = evidence.digest ?? submitted?.digest
@@ -122,6 +156,7 @@ export function classifyExecutionResolution({ submitted, resolved, beforeWrapper
   }
 
   const events = tradeEventsForWrapper(evidence.events, wrapperId)
+  const tradeEvent = events[0] || null
   const beforeSpent = toBigIntOrNull(beforeWrapper?.spent_amount)
   const afterSpent = toBigIntOrNull(afterWrapper?.spent_amount)
   const spendIncreased = beforeSpent != null && afterSpent != null && afterSpent > beforeSpent
@@ -153,6 +188,7 @@ export function classifyExecutionResolution({ submitted, resolved, beforeWrapper
     execution_success_evidence: true,
     effects_status: status,
     agent_trade_event_found: true,
+    agent_trade_event: agentTradeEventEvidence(tradeEvent, digest),
     spend_increased: true,
     spend_before: beforeWrapper.spent_amount,
     spend_after: afterWrapper.spent_amount,

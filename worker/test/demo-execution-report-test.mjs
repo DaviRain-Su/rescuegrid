@@ -16,6 +16,22 @@ function tx(digest) {
   }
 }
 
+const agentTradeEvent = {
+  type: 'AgentTradeExecuted',
+  tx_digest: 'tickDigest',
+  mandate_id: '0xmandate',
+  wrapper_id: '0xwrapper',
+  agent: '0xagent',
+  pool_id: '0xpool',
+  quote_amount_spent: '1000',
+  base_amount_received: '990',
+  spent_amount_after: '1000',
+  budget_ceiling: '1000000',
+  slippage_bps: 20,
+  client_order_id: '0x0102ff',
+  executed_at_ms: 1760000000000,
+}
+
 const executed = buildDemoExecutionReport({
   generatedAt: '2026-06-03T00:00:00.000Z',
   workerUrl: 'http://localhost:8787',
@@ -34,6 +50,7 @@ const executed = buildDemoExecutionReport({
     tx_digest: 'tickDigest',
     execution_claimed: true,
     agent_trade_event_found: true,
+    agent_trade_event: agentTradeEvent,
     spend_increased: true,
   },
   beforeTickWrapper: { spent_amount: '0' },
@@ -54,6 +71,7 @@ assert.equal(executed.phase, 'pass')
 assert.equal(executed.tick_outcome, 'executed')
 assert.equal(executed.execution_claimed, true)
 assert.equal(executed.agent_trade_event_found, true)
+assert.deepEqual(executed.agent_trade_event, agentTradeEvent)
 assert.equal(executed.spend_increased, true)
 assert.equal(executed.tick_tx_digest, 'tickDigest')
 assert.equal(executed.create_tx_digest, 'createDigest')
@@ -76,6 +94,7 @@ const gated = buildDemoExecutionReport({
 
 assert.equal(gated.execution_claimed, false)
 assert.equal(gated.agent_trade_event_found, false)
+assert.equal(gated.agent_trade_event, null)
 assert.equal(gated.spend_increased, false)
 assert.equal(gated.assertions.includes('G2-DOCUMENTED-FUNDING-GATE'), true)
 assert.equal(gated.assertions.includes('G2-EXECUTE'), false)

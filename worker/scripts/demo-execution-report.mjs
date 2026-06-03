@@ -28,6 +28,46 @@ function bigintIncreased(before, after) {
   }
 }
 
+function stringOrNull(value) {
+  return value == null ? null : String(value)
+}
+
+function numberOrNull(value) {
+  if (value == null || value === '') return null
+  const n = Number(value)
+  return Number.isFinite(n) ? n : null
+}
+
+function hexVector(value) {
+  if (Array.isArray(value)) return `0x${value.map((b) => Number(b).toString(16).padStart(2, '0')).join('')}`
+  if (value == null) return null
+  return String(value)
+}
+
+function eventType(value) {
+  if (!value) return null
+  return String(value).split('::').pop()
+}
+
+function agentTradeEventReportEvidence(event) {
+  if (!event || typeof event !== 'object' || Array.isArray(event)) return null
+  return {
+    type: eventType(event.type || event.event_type),
+    tx_digest: stringOrNull(event.tx_digest || event.txDigest || event.id?.txDigest),
+    mandate_id: stringOrNull(event.mandate_id),
+    wrapper_id: stringOrNull(event.wrapper_id),
+    agent: stringOrNull(event.agent),
+    pool_id: stringOrNull(event.pool_id),
+    quote_amount_spent: stringOrNull(event.quote_amount_spent),
+    base_amount_received: stringOrNull(event.base_amount_received),
+    spent_amount_after: stringOrNull(event.spent_amount_after),
+    budget_ceiling: stringOrNull(event.budget_ceiling),
+    slippage_bps: numberOrNull(event.slippage_bps),
+    client_order_id: hexVector(event.client_order_id),
+    executed_at_ms: numberOrNull(event.executed_at_ms ?? event.timestamp_ms),
+  }
+}
+
 function assertionsForOutcome(tickOutcome) {
   return [
     'G2-CREATE',
@@ -64,6 +104,7 @@ export function buildDemoExecutionReport({
   const spendAfter = stringBigInt(afterTickWrapper?.spent_amount ?? tick?.spend_after)
   const spendIncreased = tick?.spend_increased === true || bigintIncreased(spendBefore, spendAfter)
   const agentTradeEventFound = tick?.agent_trade_event_found === true
+  const agentTradeEvent = agentTradeEventReportEvidence(tick?.agent_trade_event)
   return {
     status: 'ok',
     purpose: 'rescuegrid_demo_execution_report',
@@ -91,6 +132,7 @@ export function buildDemoExecutionReport({
     tick_tx_digest: tick?.tx_digest ?? null,
     execution_claimed: tick?.execution_claimed === true,
     agent_trade_event_found: agentTradeEventFound,
+    agent_trade_event: agentTradeEvent,
     spend_before: spendBefore,
     spend_after: spendAfter,
     spend_increased: spendIncreased,

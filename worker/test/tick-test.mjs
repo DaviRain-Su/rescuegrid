@@ -133,7 +133,23 @@ const resolvedSuccess = classifyExecutionResolution({
   resolved: {
     digest: 'success-digest',
     effects: { status: { status: 'success' } },
-    events: [{ type: '0x1::policy::AgentTradeExecuted', parsedJson: { wrapper_id: WRAPPER_ID } }],
+    events: [{
+      type: '0x1::policy::AgentTradeExecuted',
+      id: { txDigest: 'success-digest' },
+      parsedJson: {
+        mandate_id: MID,
+        wrapper_id: WRAPPER_ID,
+        agent: AGENT,
+        pool_id: POOL,
+        quote_amount_spent: '100000',
+        base_amount_received: '99000',
+        spent_amount_after: '100000',
+        budget_ceiling: '1000000',
+        slippage_bps: 50,
+        client_order_id: [1, 2, 255],
+        executed_at_ms: '1760000000000',
+      },
+    }],
   },
   beforeWrapper,
   afterWrapper: afterSpentWrapper,
@@ -142,6 +158,11 @@ const resolvedSuccess = classifyExecutionResolution({
 check('resolved success with event and spend is executed', resolvedSuccess.action, 'executed')
 check('resolved success can claim execution', resolvedSuccess.execution_claimed, true)
 check('resolved success records spend delta', resolvedSuccess.spend_delta, '100000')
+check('resolved success records event type', resolvedSuccess.agent_trade_event.type, 'AgentTradeExecuted')
+check('resolved success records event wrapper', resolvedSuccess.agent_trade_event.wrapper_id, WRAPPER_ID)
+check('resolved success records event mandate', resolvedSuccess.agent_trade_event.mandate_id, MID)
+check('resolved success records event digest', resolvedSuccess.agent_trade_event.tx_digest, 'success-digest')
+check('resolved success records event client order id', resolvedSuccess.agent_trade_event.client_order_id, '0x0102ff')
 
 console.log(fail === 0 ? '\nALL TICK TESTS PASS' : `\n${fail} FAILED`)
 process.exit(fail === 0 ? 0 : 1)
