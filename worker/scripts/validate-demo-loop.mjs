@@ -14,7 +14,11 @@ import { strategyHash } from '../src/strategy-core.js'
 import { getClient, readPolicyCreated, DEPLOYMENT } from '../src/sui-tx.js'
 import { readMandate, readWrapper } from '../src/chain.js'
 import { loadAgentKeypairFromDevVars, readWorkerDevVar } from './agent-key-loader.mjs'
-import { buildDemoExecutionReport, writeDemoExecutionReportArtifact } from './demo-execution-report.mjs'
+import {
+  assertStrictDemoExecutionReport,
+  buildDemoExecutionReport,
+  writeDemoExecutionReportArtifact,
+} from './demo-execution-report.mjs'
 
 const args = new Map()
 for (let i = 2; i < process.argv.length; i += 1) {
@@ -46,12 +50,13 @@ gate; either way no raw secrets are printed.
 
 Options:
   --worker-url <url>       Worker URL (default: WORKER_URL or http://localhost:8787)
-  --require-execution      Fail unless the forced tick produces an AgentTradeExecuted
-                           event and spend increase. This mode preflights signer,
-                           execution and DBUSDC/DEEP/SUI funding before policy
-                           creation, so a known funding gate does not leave a
-                           test policy behind. Use this after DBUSDC/DEEP funding
-                           is available to prove the full PRD execution gate.
+  --require-execution      Fail unless the forced tick produces structured
+                           AgentTradeExecuted evidence and spend increase. This
+                           mode preflights signer, execution and DBUSDC/DEEP/SUI
+                           funding before policy creation, so a known funding gate
+                           does not leave a test policy behind. Use this after
+                           DBUSDC/DEEP funding is available to prove the full PRD
+                           execution gate.
   --out <path>             Write the final pass report as JSON after the full
                            create -> tick -> revoke -> post-revoke sequence passes.`)
   process.exit(0)
@@ -401,6 +406,7 @@ const passReport = buildDemoExecutionReport({
   finalActivity,
   strictPreflight,
 })
+if (requireExecution) assertStrictDemoExecutionReport(passReport)
 
 console.log(JSON.stringify(passReport, null, 2))
 if (reportOutPath) {

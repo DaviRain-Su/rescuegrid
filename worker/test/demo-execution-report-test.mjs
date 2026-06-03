@@ -3,7 +3,9 @@ import { mkdtempSync, readFileSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import {
+  assertStrictDemoExecutionReport,
   buildDemoExecutionReport,
+  strictDemoExecutionMissingEvidence,
   writeDemoExecutionReportArtifact,
 } from '../scripts/demo-execution-report.mjs'
 
@@ -27,44 +29,49 @@ const agentTradeEvent = {
   base_amount_received: '990',
   spent_amount_after: '1000',
   budget_ceiling: '1000000',
-  slippage_bps: 20,
+  slippage_bps: 0,
   client_order_id: '0x0102ff',
   executed_at_ms: 1760000000000,
 }
 
-const executed = buildDemoExecutionReport({
-  generatedAt: '2026-06-03T00:00:00.000Z',
-  workerUrl: 'http://localhost:8787',
-  requireExecution: true,
-  currentRunMarker: 'demo-loop-test',
-  ownerAddress: '0xowner',
-  delegatedAgentAddress: '0xagent',
-  wrapperId: '0xwrapper',
-  mandateId: '0xmandate',
-  strategyHash: '0xstrategy',
-  createResolved: tx('createDigest'),
-  revokeResolved: tx('revokeDigest'),
-  tickOutcome: 'executed',
-  tick: {
-    action: 'executed',
-    tx_digest: 'tickDigest',
-    execution_claimed: true,
-    agent_trade_event_found: true,
-    agent_trade_event: agentTradeEvent,
-    spend_increased: true,
-  },
-  beforeTickWrapper: { spent_amount: '0' },
-  afterTickWrapper: { spent_amount: '1000' },
-  postRevokeTick: { action: 'stopped_revoked', code: 'POLICY_REVOKED', execution_claimed: false },
-  finalActivity: {
-    policy: { status: 'revoked', runtime_state: 'Revoked' },
-    events: [{ type: 'PolicyCreated' }, { type: 'AgentTradeExecuted' }, { type: 'PolicyRevoked' }],
-  },
-  strictPreflight: {
-    signer: { kind: 'worker-secret', available: true },
-    funding: { execution_ready: true },
-  },
-})
+function strictReport({ tick = {}, wrapperId = '0xwrapper', mandateId = '0xmandate' } = {}) {
+  return buildDemoExecutionReport({
+    generatedAt: '2026-06-03T00:00:00.000Z',
+    workerUrl: 'http://localhost:8787',
+    requireExecution: true,
+    currentRunMarker: 'demo-loop-test',
+    ownerAddress: '0xowner',
+    delegatedAgentAddress: '0xagent',
+    wrapperId,
+    mandateId,
+    strategyHash: '0xstrategy',
+    createResolved: tx('createDigest'),
+    revokeResolved: tx('revokeDigest'),
+    tickOutcome: 'executed',
+    tick: {
+      action: 'executed',
+      tx_digest: 'tickDigest',
+      execution_claimed: true,
+      agent_trade_event_found: true,
+      agent_trade_event: agentTradeEvent,
+      spend_increased: true,
+      ...tick,
+    },
+    beforeTickWrapper: { spent_amount: '0' },
+    afterTickWrapper: { spent_amount: '1000' },
+    postRevokeTick: { action: 'stopped_revoked', code: 'POLICY_REVOKED', execution_claimed: false },
+    finalActivity: {
+      policy: { status: 'revoked', runtime_state: 'Revoked' },
+      events: [{ type: 'PolicyCreated' }, { type: 'AgentTradeExecuted' }, { type: 'PolicyRevoked' }],
+    },
+    strictPreflight: {
+      signer: { kind: 'worker-secret', available: true },
+      funding: { execution_ready: true },
+    },
+  })
+}
+
+const executed = strictReport()
 
 assert.equal(executed.purpose, 'rescuegrid_demo_execution_report')
 assert.equal(executed.phase, 'pass')
@@ -79,6 +86,27 @@ assert.equal(executed.revoke_tx_digest, 'revokeDigest')
 assert.equal(executed.assertions.includes('G2-EXECUTE'), true)
 assert.equal(executed.post_revoke.execution_claimed, false)
 assert.equal(executed.post_revoke.chain_event_types.includes('AgentTradeExecuted'), true)
+assert.deepEqual(strictDemoExecutionMissingEvidence(executed), [])
+assert.equal(assertStrictDemoExecutionReport(executed), executed)
+
+const missingStructuredEvent = strictReport({
+  tick: {
+    agent_trade_event: {
+      ...agentTradeEvent,
+      quote_amount_spent: '',
+      wrapper_id: '0xotherwrapper',
+      tx_digest: 'otherTickDigest',
+    },
+  },
+})
+const missingEvidence = strictDemoExecutionMissingEvidence(missingStructuredEvent)
+assert.equal(missingEvidence.includes('agent_trade_event_quote_amount_spent'), true)
+assert.equal(missingEvidence.includes('agent_trade_event_wrapper'), true)
+assert.equal(missingEvidence.includes('agent_trade_event_tx_digest'), true)
+assert.throws(
+  () => assertStrictDemoExecutionReport(missingStructuredEvent),
+  /STRICT_EXECUTION_EVENT_INCOMPLETE/,
+)
 
 const gated = buildDemoExecutionReport({
   tickOutcome: 'gated',

@@ -49,6 +49,18 @@ function eventType(value) {
   return String(value).split('::').pop()
 }
 
+function normalizeHexAnchor(value) {
+  return value == null ? null : String(value).toLowerCase()
+}
+
+function normalizeDigestAnchor(value) {
+  return value == null ? null : String(value)
+}
+
+function hasPresentValue(value) {
+  return value !== null && value !== undefined && String(value) !== ''
+}
+
 function agentTradeEventReportEvidence(event) {
   if (!event || typeof event !== 'object' || Array.isArray(event)) return null
   return {
@@ -66,6 +78,66 @@ function agentTradeEventReportEvidence(event) {
     client_order_id: hexVector(event.client_order_id),
     executed_at_ms: numberOrNull(event.executed_at_ms ?? event.timestamp_ms),
   }
+}
+
+const REQUIRED_AGENT_TRADE_EVENT_FIELDS = [
+  'agent',
+  'pool_id',
+  'quote_amount_spent',
+  'base_amount_received',
+  'spent_amount_after',
+  'budget_ceiling',
+  'slippage_bps',
+  'client_order_id',
+  'executed_at_ms',
+]
+
+export function strictDemoExecutionMissingEvidence(report = {}) {
+  const missing = []
+  const assertions = Array.isArray(report.assertions) ? report.assertions : []
+  const txDigest = report.tick_tx_digest || report.tx_digest || null
+  const event = report.agent_trade_event
+  if (report.phase !== 'pass') missing.push('phase')
+  if (!assertions.includes('G2-EXECUTE')) missing.push('assertions_G2_EXECUTE')
+  if (report.tick_outcome !== 'executed' && report.action !== 'executed') missing.push('tick_outcome')
+  if (report.execution_claimed !== true) missing.push('execution_claimed')
+  if (!txDigest) missing.push('tick_tx_digest')
+  if (report.agent_trade_event_found !== true) missing.push('agent_trade_event_found')
+  if (report.spend_increased !== true) missing.push('spend_increased')
+  if (!event) return [...missing, 'agent_trade_event']
+  if (event.type !== 'AgentTradeExecuted') missing.push('agent_trade_event_type')
+  if (
+    !event.tx_digest ||
+    !txDigest ||
+    normalizeDigestAnchor(event.tx_digest) !== normalizeDigestAnchor(txDigest)
+  ) missing.push('agent_trade_event_tx_digest')
+  if (
+    !event.wrapper_id ||
+    !report.wrapper_id ||
+    normalizeHexAnchor(event.wrapper_id) !== normalizeHexAnchor(report.wrapper_id)
+  ) missing.push('agent_trade_event_wrapper')
+  if (
+    !event.mandate_id ||
+    !report.mandate_id ||
+    normalizeHexAnchor(event.mandate_id) !== normalizeHexAnchor(report.mandate_id)
+  ) missing.push('agent_trade_event_mandate')
+  for (const field of REQUIRED_AGENT_TRADE_EVENT_FIELDS) {
+    if (!hasPresentValue(event[field])) missing.push(`agent_trade_event_${field}`)
+  }
+  return missing
+}
+
+export function assertStrictDemoExecutionReport(report = {}) {
+  const missingEvidence = strictDemoExecutionMissingEvidence(report)
+  if (missingEvidence.length === 0) return report
+  const detail = {
+    code: 'STRICT_EXECUTION_EVENT_INCOMPLETE',
+    missing_live_evidence: missingEvidence,
+    wrapper_id: report.wrapper_id || null,
+    mandate_id: report.mandate_id || null,
+    tick_tx_digest: report.tick_tx_digest || report.tx_digest || null,
+  }
+  throw new Error(`Strict demo execution report lacks structured AgentTradeExecuted evidence\n${JSON.stringify(detail, null, 2)}`)
 }
 
 function assertionsForOutcome(tickOutcome) {
