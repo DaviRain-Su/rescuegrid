@@ -6,6 +6,7 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { dirname, resolve } from 'node:path'
 import { pathToFileURL } from 'node:url'
 import deployment from '../core/deployment.js'
+import { strategyHash } from '../core/strategy.js'
 import { getClient } from '../worker/src/sui-tx.js'
 
 const DEFAULT_FRONTEND_URL = 'http://localhost:5175'
@@ -643,6 +644,11 @@ function normalizeStrategyHash(value) {
   return normalized.startsWith('0x') ? normalized : `0x${normalized}`
 }
 
+function stripEmbeddedStrategyHash(strategy = {}) {
+  const { strategy_hash: _strategyHash, ...unsignedStrategy } = JSON.parse(JSON.stringify(strategy || {}))
+  return unsignedStrategy
+}
+
 function mergeEvidenceField(fields, key, value) {
   const normalized = stripCodeFence(value)
   if (!normalized) return
@@ -840,6 +846,151 @@ function buildStrictExecutionReportReferenceCheck(fields, expectedPath) {
   })
 }
 
+function readActivationStrategyFile({ filePath, fields, readFileImpl = readFileSync }) {
+  const rawPath = normalizeReferencePath(filePath)
+  const resolvedPath = resolve(rawPath)
+  const checks = []
+  const summary = {
+    path: rawPath,
+    resolved_path: resolvedPath,
+    purpose: null,
+    artifact_version: null,
+    strategy_hash: null,
+    computed_strategy_hash: null,
+    owner_address: null,
+    wrapper_id: null,
+    mandate_id: null,
+    create_tx_digest: null,
+  }
+
+  let raw = ''
+  try {
+    raw = readFileImpl(resolvedPath, 'utf8')
+    checks.push(createCheck({
+      id: 'activation-strategy:file-readable',
+      label: 'Activation strategy file is readable',
+      passed: true,
+      expected: rawPath,
+      actual: resolvedPath,
+    }))
+  } catch (e) {
+    checks.push(createCheck({
+      id: 'activation-strategy:file-readable',
+      label: 'Activation strategy file is readable',
+      passed: false,
+      expected: rawPath,
+      actual: resolvedPath,
+      detail: String(e?.message || e),
+    }))
+    return { summary, checks }
+  }
+
+  const leaks = detectSecretLeaks(raw)
+  checks.push(createCheck({
+    id: 'activation-strategy:secret-scan',
+    label: 'Activation strategy file does not contain obvious secret assignments',
+    passed: leaks.length === 0,
+    expected: 'no AGENT_KEY, owner key, private key, tick token, WaaP token or seed phrase values',
+    actual: leaks,
+  }))
+  if (leaks.length > 0) return { summary, checks }
+
+  let parsed = null
+  try {
+    parsed = JSON.parse(raw)
+    checks.push(createCheck({
+      id: 'activation-strategy:json-valid',
+      label: 'Activation strategy file is valid JSON',
+      passed: true,
+      expected: 'valid JSON',
+      actual: 'valid JSON',
+    }))
+  } catch (e) {
+    checks.push(createCheck({
+      id: 'activation-strategy:json-valid',
+      label: 'Activation strategy file is valid JSON',
+      passed: false,
+      expected: 'valid JSON',
+      actual: 'parse failed',
+      detail: String(e?.message || e),
+    }))
+    return { summary, checks }
+  }
+
+  const strategy = parsed?.strategy && typeof parsed.strategy === 'object' ? parsed.strategy : parsed
+  const strategyObjectValid = strategy && typeof strategy === 'object' && !Array.isArray(strategy)
+  checks.push(createCheck({
+    id: 'activation-strategy:strategy-object',
+    label: 'Activation strategy file contains a strategy object',
+    passed: strategyObjectValid,
+    expected: 'JSON object or { strategy: object }',
+    actual: Array.isArray(strategy) ? 'array' : typeof strategy,
+  }))
+  if (!strategyObjectValid) return { summary, checks }
+
+  const unsignedStrategy = stripEmbeddedStrategyHash(strategy)
+  const computedStrategyHash = strategyHash(unsignedStrategy)
+  summary.purpose = parsed?.purpose || null
+  summary.artifact_version = parsed?.artifact_version || null
+  summary.strategy_hash = parsed?.strategy_hash || strategy?.strategy_hash || null
+  summary.computed_strategy_hash = computedStrategyHash
+  summary.owner_address = parsed?.owner_address || strategy?.owner || null
+  summary.wrapper_id = parsed?.wrapper_id || null
+  summary.mandate_id = parsed?.mandate_id || null
+  summary.create_tx_digest = parsed?.create_tx_digest || null
+
+  checks.push(
+    checkEqual(
+      'activation-strategy:strategy-hash',
+      'Activation strategy file hashes to artifact strategy_hash',
+      computedStrategyHash,
+      fields.strategy_hash,
+    ),
+    checkEqual(
+      'activation-strategy:owner',
+      'Activation strategy owner matches wallet artifact',
+      summary.owner_address,
+      fields.owner_address,
+      'owner may come from the UI evidence envelope or the strategy.owner field',
+    ),
+  )
+
+  if (summary.strategy_hash) {
+    checks.push(checkEqual(
+      'activation-strategy:envelope-strategy-hash',
+      'Activation strategy envelope strategy_hash matches wallet artifact',
+      summary.strategy_hash,
+      fields.strategy_hash,
+    ))
+  }
+  if (summary.wrapper_id) {
+    checks.push(checkEqual(
+      'activation-strategy:wrapper',
+      'Activation strategy wrapper_id matches wallet artifact',
+      summary.wrapper_id,
+      fields.wrapper_id,
+    ))
+  }
+  if (summary.mandate_id) {
+    checks.push(checkEqual(
+      'activation-strategy:mandate',
+      'Activation strategy mandate_id matches wallet artifact',
+      summary.mandate_id,
+      fields.mandate_id,
+    ))
+  }
+  if (summary.create_tx_digest) {
+    checks.push(checkEqual(
+      'activation-strategy:create-digest',
+      'Activation strategy create_tx_digest matches wallet artifact',
+      summary.create_tx_digest,
+      fields.create_tx_digest,
+    ))
+  }
+
+  return { summary, checks }
+}
+
 function activityTxDigest(row = {}) {
   return row.tx || row.tx_digest || row.digest || null
 }
@@ -927,6 +1078,7 @@ export async function verifyWalletEvidenceArtifact({
   artifactText,
   workerUrl = null,
   suiClient = null,
+  readFileImpl = readFileSync,
   fetchImpl = globalThis.fetch,
   timeoutMs = DEFAULT_TIMEOUT_MS,
   requireWorker = false,
@@ -960,6 +1112,7 @@ export async function verifyWalletEvidenceArtifact({
     checks,
     create_transaction: null,
     revoke_transaction: null,
+    activation_strategy_file: null,
     execution_claimed: false,
   }
 
@@ -988,6 +1141,22 @@ export async function verifyWalletEvidenceArtifact({
       }
       return report
     }
+  }
+
+  const activationStrategy = readActivationStrategyFile({
+    filePath: fields.activation_strategy_file,
+    fields,
+    readFileImpl,
+  })
+  report.activation_strategy_file = activationStrategy.summary
+  report.checks.push(...activationStrategy.checks)
+  const activationStrategyFailures = activationStrategy.checks.filter((check) => check.status === 'failed')
+  if (activationStrategyFailures.length > 0) {
+    const secretFailure = activationStrategyFailures.find((check) => check.id === 'activation-strategy:secret-scan')
+    report.status = 'error'
+    report.code = secretFailure ? 'ACTIVATION_STRATEGY_FILE_SECRET_LEAK' : 'ACTIVATION_STRATEGY_FILE_INVALID'
+    if (secretFailure) report.secret_leak_patterns = secretFailure.actual || []
+    return report
   }
 
   const client = suiClient || getClient()
@@ -1077,7 +1246,8 @@ prints or writes a manual Slush / standard Sui wallet evidence checklist. It
 does not create policies, submit PTBs, run demo:execute or print signing
 secrets, Worker secrets, tick tokens or WaaP approval values. With --verify it
 checks a filled artifact against public Sui transaction events and optional
-Worker detail reads, and --execution-report requires the artifact's
+Worker detail reads, verifies activation_strategy_file hashes to the recorded
+strategy_hash without leaking secrets, and --execution-report requires the artifact's
 strict_execution_report_reference to point at that report path. With
 --require-frontend / --require-worker it fails before
 the manual click-through when the local services or login guardrails are not
@@ -1121,6 +1291,7 @@ export async function main(argv = process.argv.slice(2), env = process.env, opti
       artifactText,
       workerUrl: configuredWorkerUrl ? normalizeUrl(configuredWorkerUrl) : null,
       suiClient: options.suiClient,
+      readFileImpl: options.readFileImpl,
       fetchImpl: options.fetchImpl,
       timeoutMs: Number.isFinite(timeoutMs) && timeoutMs > 0 ? timeoutMs : DEFAULT_TIMEOUT_MS,
       requireWorker: flags.has('--require-worker'),

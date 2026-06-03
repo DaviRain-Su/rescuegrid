@@ -1,8 +1,9 @@
 import assert from 'node:assert/strict'
 import { spawnSync } from 'node:child_process'
-import { mkdtempSync, readFileSync, rmSync } from 'node:fs'
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
+import { strategyHash } from '../core/strategy.js'
 import {
   buildWalletEvidence,
   collectFrontendPreflight,
@@ -299,6 +300,37 @@ assert.equal(buildWalletEvidence({
   },
 }).frontend.preflight_passed, false)
 
+const STRATEGY_OWNER = '0x1111111111111111111111111111111111111111111111111111111111111111'
+const STRATEGY_WRAPPER = '0x2222222222222222222222222222222222222222222222222222222222222222'
+const STRATEGY_MANDATE = '0x3333333333333333333333333333333333333333333333333333333333333333'
+const strategyFileDir = mkdtempSync(join(tmpdir(), 'rescuegrid-wallet-strategy-'))
+const activationStrategy = {
+  owner: STRATEGY_OWNER,
+  agent: deployment.agent.address,
+  pool_id: deployment.deepbook.pools.SUI_DBUSDC.pool_id,
+  execution: {
+    max_single_trade_amount: '100000000',
+    max_slippage_bps: 100,
+  },
+}
+const activationStrategyHash = strategyHash(activationStrategy)
+const activationStrategyFile = join(strategyFileDir, 'wallet-strategy.json')
+const activationStrategyArtifact = {
+  purpose: 'rescuegrid_activation_strategy',
+  artifact_version: 1,
+  generated_at: '2026-06-03T00:00:00.000Z',
+  chain: deployment.chain,
+  network: 'Sui Testnet',
+  owner_address: STRATEGY_OWNER,
+  wrapper_id: STRATEGY_WRAPPER,
+  mandate_id: STRATEGY_MANDATE,
+  create_tx_digest: 'create-digest',
+  strategy_hash: activationStrategyHash,
+  strategy_file_suggested_path: '.rescuegrid/wallet-strategy.json',
+  strategy: activationStrategy,
+}
+writeFileSync(activationStrategyFile, `${JSON.stringify(activationStrategyArtifact, null, 2)}\n`, 'utf8')
+
 const filledArtifact = `# RescueGrid Wallet Click-Through Evidence
 
 Generated: 2026-06-03T00:00:00.000Z
@@ -311,16 +343,16 @@ Actual click-through completed: true
 
 Wallet: Slush
 Network: Sui Testnet
-Owner address: 0x1111111111111111111111111111111111111111111111111111111111111111
+Owner address: ${STRATEGY_OWNER}
 
 ## Evidence Fields
 
-- owner_address: 0x1111111111111111111111111111111111111111111111111111111111111111
+- owner_address: ${STRATEGY_OWNER}
 - create_tx_digest: create-digest
-- wrapper_id: 0x2222222222222222222222222222222222222222222222222222222222222222
-- mandate_id: 0x3333333333333333333333333333333333333333333333333333333333333333
-- strategy_hash: 0xabc123
-- activation_strategy_file: .rescuegrid/wallet-strategy.json
+- wrapper_id: ${STRATEGY_WRAPPER}
+- mandate_id: ${STRATEGY_MANDATE}
+- strategy_hash: ${activationStrategyHash}
+- activation_strategy_file: ${activationStrategyFile}
 - sign_in_screenshot: screenshots/sign-in.png
 - wallet_create_prompt_screenshot: screenshots/create-approval.png
 - runtime_state_after_activate: Monitoring
@@ -339,8 +371,8 @@ assert.equal(parsedArtifact.status, 'ok')
 assert.equal(parsedArtifact.format, 'markdown')
 assert.equal(parsedArtifact.metadata.worker_url, 'http://worker.test')
 assert.equal(parsedArtifact.metadata.actual_clickthrough_completed, true)
-assert.equal(parsedArtifact.fields.wrapper_id, '0x2222222222222222222222222222222222222222222222222222222222222222')
-assert.equal(parsedArtifact.fields.activation_strategy_file, '.rescuegrid/wallet-strategy.json')
+assert.equal(parsedArtifact.fields.wrapper_id, STRATEGY_WRAPPER)
+assert.equal(parsedArtifact.fields.activation_strategy_file, activationStrategyFile)
 assert.equal(parsedArtifact.fields.strict_execution_report_reference, '.rescuegrid/demo-execute-report.json')
 
 const coreOnlyArtifact = `# RescueGrid Wallet Click-Through Evidence
@@ -352,11 +384,11 @@ Actual click-through completed: true
 
 ## Evidence Fields
 
-- owner_address: 0x1111111111111111111111111111111111111111111111111111111111111111
+- owner_address: ${STRATEGY_OWNER}
 - create_tx_digest: create-digest
-- wrapper_id: 0x2222222222222222222222222222222222222222222222222222222222222222
-- mandate_id: 0x3333333333333333333333333333333333333333333333333333333333333333
-- strategy_hash: 0xabc123
+- wrapper_id: ${STRATEGY_WRAPPER}
+- mandate_id: ${STRATEGY_MANDATE}
+- strategy_hash: ${activationStrategyHash}
 - revoke_tx_digest: revoke-digest
 `
 const coreOnlyReport = await verifyWalletEvidenceArtifact({
@@ -425,6 +457,68 @@ assert.equal(safePublicPostureReport.status, 'error')
 assert.equal(safePublicPostureReport.code, 'EVIDENCE_FIELDS_INCOMPLETE')
 assert.equal(safePublicPostureReport.secret_leak_patterns, undefined)
 
+const missingActivationStrategyFileReport = await verifyWalletEvidenceArtifact({
+  artifactText: filledArtifact.replace(activationStrategyFile, join(strategyFileDir, 'missing-wallet-strategy.json')),
+  suiClient: {
+    async getTransactionBlock() {
+      throw new Error('should not read chain when activation strategy file is missing')
+    },
+  },
+})
+assert.equal(missingActivationStrategyFileReport.status, 'error')
+assert.equal(missingActivationStrategyFileReport.code, 'ACTIVATION_STRATEGY_FILE_INVALID')
+assert.equal(
+  missingActivationStrategyFileReport.checks.find((check) => check.id === 'activation-strategy:file-readable').status,
+  'failed',
+)
+
+const mismatchedActivationStrategyFile = join(strategyFileDir, 'wallet-strategy-mismatch.json')
+writeFileSync(
+  mismatchedActivationStrategyFile,
+  `${JSON.stringify({
+    ...activationStrategyArtifact,
+    wrapper_id: '0x9999999999999999999999999999999999999999999999999999999999999999',
+    strategy: { ...activationStrategy, execution: { ...activationStrategy.execution, max_single_trade_amount: '1' } },
+  }, null, 2)}\n`,
+  'utf8',
+)
+const mismatchedActivationStrategyReport = await verifyWalletEvidenceArtifact({
+  artifactText: filledArtifact.replace(activationStrategyFile, mismatchedActivationStrategyFile),
+  suiClient: {
+    async getTransactionBlock() {
+      throw new Error('should not read chain when activation strategy file mismatches')
+    },
+  },
+})
+assert.equal(mismatchedActivationStrategyReport.status, 'error')
+assert.equal(mismatchedActivationStrategyReport.code, 'ACTIVATION_STRATEGY_FILE_INVALID')
+assert.equal(
+  mismatchedActivationStrategyReport.checks.find((check) => check.id === 'activation-strategy:strategy-hash').status,
+  'failed',
+)
+assert.equal(
+  mismatchedActivationStrategyReport.checks.find((check) => check.id === 'activation-strategy:wrapper').status,
+  'failed',
+)
+
+const secretActivationStrategyFile = join(strategyFileDir, 'wallet-strategy-secret.json')
+writeFileSync(
+  secretActivationStrategyFile,
+  `${JSON.stringify({ ...activationStrategyArtifact, AGENT_KEY: 'suiprivkey1qqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqq' }, null, 2)}\n`,
+  'utf8',
+)
+const secretActivationStrategyReport = await verifyWalletEvidenceArtifact({
+  artifactText: filledArtifact.replace(activationStrategyFile, secretActivationStrategyFile),
+  suiClient: {
+    async getTransactionBlock() {
+      throw new Error('should not read chain when activation strategy file contains a secret')
+    },
+  },
+})
+assert.equal(secretActivationStrategyReport.status, 'error')
+assert.equal(secretActivationStrategyReport.code, 'ACTIVATION_STRATEGY_FILE_SECRET_LEAK')
+assert.equal(secretActivationStrategyReport.secret_leak_patterns.includes('agent-key'), true)
+
 let chainReads = 0
 const fakeSuiClient = {
   async getTransactionBlock({ digest, options }) {
@@ -439,10 +533,10 @@ const fakeSuiClient = {
         events: [{
           type: `${deployment.rescuegrid.package_id}::policy::PolicyCreated`,
           parsedJson: {
-            owner: '0x1111111111111111111111111111111111111111111111111111111111111111',
-            wrapper_id: '0x2222222222222222222222222222222222222222222222222222222222222222',
-            mandate_id: '0x3333333333333333333333333333333333333333333333333333333333333333',
-            strategy_hash: '0xabc123',
+            owner: STRATEGY_OWNER,
+            wrapper_id: STRATEGY_WRAPPER,
+            mandate_id: STRATEGY_MANDATE,
+            strategy_hash: activationStrategyHash,
           },
         }],
       }
@@ -456,9 +550,9 @@ const fakeSuiClient = {
         events: [{
           type: `${deployment.rescuegrid.package_id}::policy::PolicyRevoked`,
           parsedJson: {
-            owner: '0x1111111111111111111111111111111111111111111111111111111111111111',
-            wrapper_id: '0x2222222222222222222222222222222222222222222222222222222222222222',
-            mandate_id: '0x3333333333333333333333333333333333333333333333333333333333333333',
+            owner: STRATEGY_OWNER,
+            wrapper_id: STRATEGY_WRAPPER,
+            mandate_id: STRATEGY_MANDATE,
           },
         }],
       }
@@ -467,7 +561,7 @@ const fakeSuiClient = {
   },
 }
 const fakeWorkerFetch = async (url) => {
-  assert.equal(String(url), 'http://worker.test/api/policies/0x2222222222222222222222222222222222222222222222222222222222222222/activity')
+  assert.equal(String(url), `http://worker.test/api/policies/${STRATEGY_WRAPPER}/activity`)
   return {
     ok: true,
     status: 200,
@@ -475,7 +569,7 @@ const fakeWorkerFetch = async (url) => {
       return JSON.stringify({
         status: 'ok',
         policy: {
-          wrapper_id: '0x2222222222222222222222222222222222222222222222222222222222222222',
+          wrapper_id: STRATEGY_WRAPPER,
           revoked: true,
           runtime_state: 'Revoked',
         },
@@ -498,9 +592,12 @@ assert.equal(verifiedReport.actual_clickthrough_completed, true)
 assert.equal(verifiedReport.execution_claimed, false)
 assert.equal(verifiedReport.required_manual_fields.includes('strict_execution_report_reference'), true)
 assert.equal(verifiedReport.required_manual_fields.includes('activation_strategy_file'), true)
-assert.equal(verifiedReport.fields.activation_strategy_file, '.rescuegrid/wallet-strategy.json')
+assert.equal(verifiedReport.fields.activation_strategy_file, activationStrategyFile)
+assert.equal(verifiedReport.activation_strategy_file.computed_strategy_hash, activationStrategyHash)
+assert.equal(verifiedReport.activation_strategy_file.wrapper_id, STRATEGY_WRAPPER)
 assert.equal(verifiedReport.fields.strict_execution_report_reference, '.rescuegrid/demo-execute-report.json')
 assert.equal(verifiedReport.checks.every((check) => check.status === 'passed'), true)
+assert.equal(verifiedReport.checks.some((check) => check.id === 'activation-strategy:strategy-hash'), true)
 assert.equal(verifiedReport.checks.some((check) => check.id === 'worker:create-activity'), true)
 assert.equal(chainReads, 2)
 
@@ -539,7 +636,7 @@ const missingCreateActivityReport = await verifyWalletEvidenceArtifact({
       return JSON.stringify({
         status: 'ok',
         policy: {
-          wrapper_id: '0x2222222222222222222222222222222222222222222222222222222222222222',
+          wrapper_id: STRATEGY_WRAPPER,
           revoked: true,
           runtime_state: 'Revoked',
         },
@@ -596,5 +693,7 @@ assert.match(help.stdout, /--require-frontend/)
 assert.match(help.stdout, /--execution-report/)
 assert.equal(help.stdout.includes('AGENT_KEY='), false)
 assert.equal(help.stdout.includes('INTERNAL_AGENT_TICK_TOKEN='), false)
+
+rmSync(strategyFileDir, { recursive: true, force: true })
 
 console.log('\nALL WALLET CLICK-THROUGH EVIDENCE TESTS PASS')
