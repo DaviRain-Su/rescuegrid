@@ -1,8 +1,12 @@
 import assert from 'node:assert/strict'
 import {
   apiFailure,
+  buildActivationStrategyArtifact,
   createPolicyWithWallet,
   policyCreatedWrapperId,
+  serializeActivationStrategyArtifact,
+  walletActivationStrategyFilename,
+  walletActivationStrategyPath,
   revokePolicyWithWallet,
 } from './wallet-flow.js'
 
@@ -38,7 +42,7 @@ assert.equal(policyCreatedWrapperId({ events: [{ type: '0x1::policy::Other', par
           events: [
             {
               type: '0x92::policy::PolicyCreated',
-              parsedJson: { wrapper_id: '0xwrapper' },
+              parsedJson: { wrapper_id: '0xwrapper', mandate_id: '0xmandate' },
             },
           ],
         }
@@ -52,8 +56,23 @@ assert.equal(policyCreatedWrapperId({ events: [{ type: '0x1::policy::Other', par
     sleep: async () => {},
   })
   assert.equal(result.wrapperId, '0xwrapper')
+  assert.equal(result.mandateId, '0xmandate')
   assert.equal(result.digest, 'tx-create')
   assert.equal(result.strategyHash, 'hash-1')
+  assert.equal(result.activationStrategyFilename, 'wallet-strategy-wrapper.json')
+  assert.equal(result.activationStrategyPath, '.rescuegrid/wallet-strategy-wrapper.json')
+  assert.equal(result.activationStrategyArtifact.purpose, 'rescuegrid_activation_strategy')
+  assert.equal(result.activationStrategyArtifact.chain, 'sui:testnet')
+  assert.equal(result.activationStrategyArtifact.owner_address, owner)
+  assert.equal(result.activationStrategyArtifact.wrapper_id, '0xwrapper')
+  assert.equal(result.activationStrategyArtifact.mandate_id, '0xmandate')
+  assert.equal(result.activationStrategyArtifact.create_tx_digest, 'tx-create')
+  assert.equal(result.activationStrategyArtifact.strategy_hash, 'hash-1')
+  assert.deepEqual(result.activationStrategyArtifact.strategy, strategy)
+  assert.equal(result.activationStrategyArtifact.activation.runtime_state, 'Monitoring')
+  assert.match(result.activationStrategyArtifact.next_commands.strict_execution_report, /demo:execute:wallet-report/)
+  assert.match(result.activationStrategyArtifact.next_commands.strict_execution_report, /--wrapper-id 0xwrapper/)
+  assert.match(result.activationStrategyArtifact.next_commands.strict_execution_report, /--create-tx-digest tx-create/)
   assert.equal(calls[0][0], 'parse')
   assert.match(calls[0][2], /500 USDC rescue grid/)
   assert.deepEqual(calls[1], ['build', owner, strategy, 'hash-1'])
@@ -63,6 +82,29 @@ assert.equal(policyCreatedWrapperId({ events: [{ type: '0x1::policy::Other', par
     options: { showObjectChanges: true, showEvents: true },
   })
   assert.deepEqual(calls[4], ['activate', '0xwrapper', strategy])
+}
+
+{
+  assert.equal(walletActivationStrategyFilename('0xabcdef0123456789abcdef'), 'wallet-strategy-abcdef01-89abcdef.json')
+  assert.equal(walletActivationStrategyPath('0xabcdef0123456789abcdef'), '.rescuegrid/wallet-strategy-abcdef01-89abcdef.json')
+  const artifact = buildActivationStrategyArtifact({
+    owner,
+    wrapperId: '0xabcdef0123456789abcdef',
+    mandateId: '0xmandate',
+    createTxDigest: 'tx-create-direct',
+    strategy: { ...strategy, strategy_hash: 'nested-hash' },
+    strategyHash: '0xhash',
+    activation: { status: 'ok', wrapper_id: '0xabcdef0123456789abcdef', runtime_state: 'Monitoring' },
+    generatedAt: '2026-06-03T00:00:00.000Z',
+  })
+  assert.equal(artifact.generated_at, '2026-06-03T00:00:00.000Z')
+  assert.equal(artifact.strategy_hash, '0xhash')
+  assert.equal(artifact.strategy.strategy_hash, undefined)
+  assert.deepEqual(artifact.strategy, strategy)
+  const serialized = serializeActivationStrategyArtifact(artifact)
+  assert.equal(serialized.endsWith('\n'), true)
+  assert.equal(JSON.parse(serialized).strategy_hash, '0xhash')
+  assert.equal(JSON.parse(serialized).strategy.strategy_hash, undefined)
 }
 
 {

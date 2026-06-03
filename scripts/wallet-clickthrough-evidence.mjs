@@ -420,7 +420,7 @@ export function buildWalletEvidence({
       },
       {
         id: 'activation',
-        action: 'Save the exact parsed strategy JSON used for creation, then wait for the UI and Worker activity to show the created policy and Monitoring runtime state.',
+        action: 'Use the UI Activation strategy evidence banner to download the exact parsed strategy JSON used for creation, then wait for the UI and Worker activity to show the created policy and Monitoring runtime state.',
         record: ['activation_strategy_file', 'runtime_state_after_activate', 'policy_active_screenshot', 'activity_row_screenshot'],
       },
       {
@@ -464,7 +464,7 @@ export function buildWalletEvidence({
       'PolicyCreated event yields a wrapper_id and mandate_id that match the UI/API row.',
       'Activation reaches Monitoring after the create transaction finalizes.',
       'Before revocation, the same active wrapper is available for demo:execute:wallet-report; the wallet artifact itself still does not claim DeepBook execution.',
-      'The exact parsed strategy JSON used to create the wrapper is saved locally and hashes to the on-chain strategy_hash during wallet-report validation.',
+      'The UI activation strategy evidence JSON used to create the wrapper is saved locally and hashes to the on-chain strategy_hash during wallet-report validation.',
       'The artifact records the strict execution report reference for this wrapper before the revoke step.',
       'Revoke flow uses Worker-built tx_json and the browser wallet returns a revoke tx digest.',
       'Post-revoke reads show chain-authoritative revoked status for the same wrapper and mandate.',

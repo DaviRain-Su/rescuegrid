@@ -21,7 +21,7 @@ import {
   setRiskControl,
 } from './api.js'
 import { EMPTY_LIVE_DASHBOARD, liveDashboardOwnerKey, useLiveDashboard } from './queries/live.js'
-import { apiFailure, createPolicyWithWallet, revokePolicyWithWallet } from './queries/wallet-flow.js'
+import { apiFailure, createPolicyWithWallet, revokePolicyWithWallet, serializeActivationStrategyArtifact } from './queries/wallet-flow.js'
 import { sessionCapabilities } from './session-mode.js'
 import { Icon, Logo, Token, hexToRgba } from './components/primitives.jsx'
 import { ZkLogin } from './components/ZkLogin.jsx'
@@ -73,6 +73,64 @@ function cleanAppSearch(search) {
   if (!next.strategy) delete next.strategy
   if (!next.live) delete next.live
   return next
+}
+
+const WALLET_STRATEGY_STORAGE_KEY = 'rescuegrid:last-wallet-strategy-evidence'
+
+function readStoredWalletStrategyEvidence() {
+  try {
+    if (typeof localStorage === 'undefined') return null
+    const raw = localStorage.getItem(WALLET_STRATEGY_STORAGE_KEY)
+    return raw ? JSON.parse(raw) : null
+  } catch {
+    return null
+  }
+}
+
+function storeWalletStrategyEvidence(evidence) {
+  try {
+    if (typeof localStorage !== 'undefined') {
+      localStorage.setItem(WALLET_STRATEGY_STORAGE_KEY, JSON.stringify(evidence))
+    }
+  } catch {
+    /* ignore storage failures */
+  }
+}
+
+function clearWalletStrategyEvidenceStorage() {
+  try {
+    if (typeof localStorage !== 'undefined') localStorage.removeItem(WALLET_STRATEGY_STORAGE_KEY)
+  } catch {
+    /* ignore storage failures */
+  }
+}
+
+function walletStrategyEvidenceFromResult(result) {
+  if (!result?.activationStrategyArtifact) return null
+  const command = result.activationStrategyArtifact.next_commands?.strict_execution_report || ''
+  return {
+    ownerAddress: result.activationStrategyArtifact.owner_address || null,
+    wrapperId: result.wrapperId,
+    mandateId: result.mandateId,
+    createTxDigest: result.digest,
+    strategyHash: result.strategyHash,
+    filename: result.activationStrategyFilename,
+    path: result.activationStrategyPath,
+    command,
+    json: serializeActivationStrategyArtifact(result.activationStrategyArtifact),
+  }
+}
+
+function downloadWalletStrategyEvidenceFile(evidence) {
+  const blob = new Blob([evidence.json], { type: 'application/json' })
+  const href = URL.createObjectURL(blob)
+  const link = document.createElement('a')
+  link.href = href
+  link.download = evidence.filename
+  document.body.appendChild(link)
+  link.click()
+  link.remove()
+  setTimeout(() => URL.revokeObjectURL(href), 0)
 }
 
 // blend a hex toward another hex by t (0..1) — deepens accent for light mode
@@ -189,6 +247,7 @@ export default function App({ onExit }) {
   const [activity, setActivity] = useState(RG.activity)
   const [policies, setPolicies] = useState(RG.policies)
   const [toast, setToast] = useState(null)
+  const [walletStrategyEvidence, setWalletStrategyEvidence] = useState(() => readStoredWalletStrategyEvidence())
   const [halted, setHalted] = useState(false)
   const [notifs, setNotifs] = useState(RG.notifications)
   const [notifOpen, setNotifOpen] = useState(false)
@@ -329,12 +388,48 @@ export default function App({ onExit }) {
   const pushNotif = (kind, title) => setNotifs(n => [{ id: ++notifId.current, kind, title, time: 'now', read: false }, ...n])
   const unread = notifs.filter(n => !n.read).length
 
+  const downloadWalletStrategyEvidence = () => {
+    if (!walletStrategyEvidence) return
+    try {
+      downloadWalletStrategyEvidenceFile(walletStrategyEvidence)
+      showToast(`Downloaded ${walletStrategyEvidence.filename}`, 'var(--accent)')
+    } catch (e) {
+      showToast(`Download failed: ${String(e?.message || e).slice(0, 80)}`, 'var(--danger)')
+    }
+  }
+
+  const copyWalletStrategyCommand = async () => {
+    if (!walletStrategyEvidence?.command) return
+    try {
+      const clipboard = globalThis.navigator?.clipboard
+      if (!clipboard) throw new Error('clipboard unavailable')
+      await clipboard.writeText(walletStrategyEvidence.command)
+      showToast('Wallet report command copied', 'var(--accent)')
+    } catch {
+      showToast('Clipboard unavailable — use the visible command', 'var(--warn)')
+    }
+  }
+
+  const dismissWalletStrategyEvidence = () => {
+    setWalletStrategyEvidence(null)
+    clearWalletStrategyEvidenceStorage()
+  }
+
   useEffect(() => {
     if (authed && sessionMode === 'wallet' && !account) {
       setSessionMode('signed-out')
       setAuthed(false)
     }
   }, [account, authed, sessionMode])
+
+  useEffect(() => {
+    if (!walletStrategyEvidence || !liveMode || !owner) return
+    const evidenceOwner = String(walletStrategyEvidence.ownerAddress || '').toLowerCase()
+    if (evidenceOwner && evidenceOwner !== String(owner).toLowerCase()) {
+      setWalletStrategyEvidence(null)
+      clearWalletStrategyEvidenceStorage()
+    }
+  }, [liveMode, owner, walletStrategyEvidence])
 
   const clearTimers = () => { timers.current.forEach(clearTimeout); timers.current = [] }
   const after = (ms, fn) => timers.current.push(setTimeout(fn, ms))
@@ -470,8 +565,19 @@ export default function App({ onExit }) {
         activatePolicy,
       })
     },
-    onSuccess: ({ meta }) => {
-      showToast('Policy created on-chain — agent authorized within limits', 'var(--accent)')
+    onSuccess: (result) => {
+      const { meta } = result
+      const evidence = walletStrategyEvidenceFromResult(result)
+      if (evidence) {
+        setWalletStrategyEvidence(evidence)
+        storeWalletStrategyEvidence(evidence)
+      }
+      showToast(
+        evidence
+          ? 'Policy created on-chain — download strategy JSON before strict report'
+          : 'Policy created on-chain — agent authorized within limits',
+        'var(--accent)',
+      )
       pushNotif('policy', `Policy deployed on-chain · ${meta.name}`)
       setView('policies')
       queryClient.invalidateQueries({ queryKey: liveDashboardOwnerKey(owner) })
@@ -885,6 +991,35 @@ export default function App({ onExit }) {
                 </div>
                 <span className={`badge ${sourceMeta.badgeClass}`} style={{ fontSize: 9.5 }}>
                   <span className="dot"></span>{sourceMeta.label}</span>
+              </div>
+            )}
+            {liveMode && walletStrategyEvidence && (
+              <div data-testid="wallet-strategy-evidence-panel" className="fade-up" style={{ display: 'flex', alignItems: 'center', gap: 14, flexWrap: 'wrap',
+                padding: '14px 16px', borderRadius: 'var(--r-lg)', marginBottom: 18,
+                background: 'var(--sui-dim)', border: '1px solid rgba(90,166,255,0.38)' }}>
+                <div style={{ width: 38, height: 38, borderRadius: 10, background: 'var(--sui)', color: '#061524', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                  <Icon name="key" size={18} stroke={2.1} />
+                </div>
+                <div style={{ flex: '1 1 320px', minWidth: 0 }}>
+                  <div className="display" style={{ fontWeight: 600, fontSize: 14.5 }}>Activation strategy evidence ready</div>
+                  <div style={{ fontSize: 12.5, color: 'var(--t1)', marginTop: 2, lineHeight: 1.45 }}>
+                    Save the downloaded JSON as <span className="mono" style={{ color: 'var(--sui)' }}>{walletStrategyEvidence.path}</span> before running the same-wrapper strict report.
+                  </div>
+                  <div className="mono" style={{ fontSize: 10.5, color: 'var(--t2)', marginTop: 6, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                    {walletStrategyEvidence.command}
+                  </div>
+                </div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                  <Button size="sm" className="rg-btn-2" onPress={downloadWalletStrategyEvidence} startContent={<Icon name="arrowDown" size={13} />}>
+                    Download JSON
+                  </Button>
+                  <Button size="sm" className="rg-btn-2" onPress={copyWalletStrategyCommand} startContent={<Icon name="copy" size={13} />}>
+                    Copy command
+                  </Button>
+                  <Button isIconOnly size="sm" variant="light" className="rg-btn-ghost" aria-label="Dismiss activation strategy evidence" onPress={dismissWalletStrategyEvidence}>
+                    <Icon name="x" size={15} />
+                  </Button>
+                </div>
               </div>
             )}
             {globalStopActive && (
