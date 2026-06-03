@@ -319,6 +319,7 @@ function strictExecutionReport(overrides = {}) {
   assert.equal(report.blocker_codes.includes('MISSION_CONTINUITY_MISMATCH'), false)
   assert.equal(report.next_actions.some((row) => /wallet:evidence -- --format markdown/.test(row)), true)
   assert.equal(report.next_actions.some((row) => /wallet:evidence:preflight/.test(row)), true)
+  assert.equal(report.next_actions.some((row) => /wallet:evidence:verify -- --input \.rescuegrid\/wallet-clickthrough-evidence\.md --require-worker/.test(row)), true)
   assertNoSecretSignerPosture(report)
 }
 

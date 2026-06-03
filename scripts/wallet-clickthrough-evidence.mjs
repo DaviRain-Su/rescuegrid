@@ -466,6 +466,7 @@ export function buildWalletEvidence({
       session_boundary_test: 'npm run test:session-mode',
       live_smoke_after_clickthrough: 'RESCUEGRID_FRONTEND_URL=http://localhost:5175 RESCUEGRID_WORKER_URL=http://localhost:8787 npm run baseline:smoke',
       preflight: 'npm run wallet:evidence:preflight',
+      final_verify: 'npm run wallet:evidence:verify -- --input .rescuegrid/wallet-clickthrough-evidence.md --require-worker',
     },
   }
 }
@@ -578,10 +579,12 @@ function markdown(evidence) {
     '',
     '## Next Commands',
     '',
+    `- ${evidence.next_commands.generate_artifact}`,
     `- ${evidence.next_commands.mock_flow_test}`,
     `- ${evidence.next_commands.auth_wallet_test}`,
     `- ${evidence.next_commands.session_boundary_test}`,
     `- ${evidence.next_commands.preflight}`,
+    `- ${evidence.next_commands.final_verify}`,
     `- ${evidence.next_commands.live_smoke_after_clickthrough}`,
     '',
   ].join('\n')
@@ -1012,7 +1015,7 @@ Usage:
   npm run wallet:evidence -- --format markdown
   npm run wallet:evidence -- --format markdown --out .rescuegrid/wallet-clickthrough-evidence.md
   npm run wallet:evidence -- --frontend-url http://localhost:5175 --worker-url http://localhost:8787 --owner 0x...
-  npm run wallet:evidence -- --verify --input .rescuegrid/wallet-clickthrough-evidence.md
+  npm run wallet:evidence:verify -- --input .rescuegrid/wallet-clickthrough-evidence.md --require-worker
 
 This is read-only. It may fetch public Worker status/readiness endpoints, then
 prints or writes a manual Slush / standard Sui wallet evidence checklist. It

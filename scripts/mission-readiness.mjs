@@ -672,7 +672,7 @@ function nextActions({ safetyCheck, walletCheck, fundingCheck, strictExecutionCh
     actions.push('Run npm run safety:negative:report with a live local Worker to write .rescuegrid/safety-negative-report.json proving all required validate-plan blockers.')
   }
   if (walletCheck?.status !== 'passed') {
-    actions.push('Run npm run wallet:evidence -- --format markdown --out .rescuegrid/wallet-clickthrough-evidence.md, then npm run wallet:evidence:preflight before the real Slush / standard Sui wallet create+revoke flow; after the browser run, set Actual click-through completed: true, fill tx/object plus screenshot evidence fields, then run npm run wallet:evidence:verify -- --input .rescuegrid/wallet-clickthrough-evidence.md.')
+    actions.push('Run npm run wallet:evidence -- --format markdown --out .rescuegrid/wallet-clickthrough-evidence.md, then npm run wallet:evidence:preflight before the real Slush / standard Sui wallet create+revoke flow; after the browser run, set Actual click-through completed: true, fill tx/object plus screenshot evidence fields, then run npm run wallet:evidence:verify -- --input .rescuegrid/wallet-clickthrough-evidence.md --require-worker.')
   }
   if (fundingCheck?.status !== 'passed') {
     actions.push('Send the DBUSDC/DEEP funding handoff to an external funding provider, then rerun npm run funding:watch -- --json and npm run funding:watch:report.')
