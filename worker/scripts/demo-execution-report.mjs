@@ -222,6 +222,7 @@ export function buildDemoExecutionReport({
 
 export function writeDemoExecutionReportArtifact(report, { outPath } = {}) {
   if (!outPath) throw new Error('outPath is required')
+  if (report?.require_execution === true) assertStrictDemoExecutionReport(report)
   const resolvedPath = resolve(String(outPath))
   const payload = `${JSON.stringify(report, null, 2)}\n`
   mkdirSync(dirname(resolvedPath), { recursive: true })

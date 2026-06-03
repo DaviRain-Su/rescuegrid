@@ -127,6 +127,21 @@ assert.equal(gated.spend_increased, false)
 assert.equal(gated.assertions.includes('G2-DOCUMENTED-FUNDING-GATE'), true)
 assert.equal(gated.assertions.includes('G2-EXECUTE'), false)
 
+const strictGated = buildDemoExecutionReport({
+  requireExecution: true,
+  tickOutcome: 'gated',
+  tick: {
+    action: 'blocked',
+    code: 'INSUFFICIENT_DBUSDC',
+    blocker_codes: ['INSUFFICIENT_DBUSDC'],
+    execution_claimed: false,
+  },
+})
+assert.throws(
+  () => writeDemoExecutionReportArtifact(strictGated, { outPath: join(tmpdir(), 'strict-gated-demo-execute-report.json') }),
+  /STRICT_EXECUTION_EVENT_INCOMPLETE/,
+)
+
 const artifactDir = mkdtempSync(join(tmpdir(), 'rescuegrid-demo-execution-report-'))
 try {
   const artifactPath = join(artifactDir, 'demo-execute-report.json')
