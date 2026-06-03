@@ -4,8 +4,10 @@ import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { strategyHash } from '../core/strategy.js'
+import { buildDemoExecutionReport } from '../worker/scripts/demo-execution-report.mjs'
 import {
   applyActivationStrategyToWalletEvidenceArtifact,
+  applyStrictExecutionReportToWalletEvidenceArtifact,
   buildWalletEvidence,
   collectFrontendPreflight,
   collectFrontendSourceGuardrails,
@@ -412,6 +414,164 @@ try {
   rmSync(applyCliDir, { recursive: true, force: true })
 }
 
+function reportTx(digest, timestampMs) {
+  return {
+    digest,
+    checkpoint: String(timestampMs),
+    timestampMs: String(timestampMs),
+    effects: { status: { status: 'success' } },
+  }
+}
+
+const strictTickDigest = 'tick-digest'
+const strictExecutionReportFile = join(strategyFileDir, 'demo-execute-report.json')
+const strictExecutionReport = buildDemoExecutionReport({
+  generatedAt: '2026-06-03T00:00:00.000Z',
+  workerUrl: 'http://worker.test',
+  chain: deployment.chain,
+  requireExecution: true,
+  currentRunMarker: `wallet-policy-${STRATEGY_WRAPPER}`,
+  ownerAddress: STRATEGY_OWNER,
+  delegatedAgentAddress: deployment.agent.address,
+  poolId: activationStrategy.pool_id,
+  wrapperId: STRATEGY_WRAPPER,
+  mandateId: STRATEGY_MANDATE,
+  strategyHash: activationStrategyHash,
+  createResolved: reportTx('create-digest', 1000),
+  revokeResolved: reportTx('revoke-digest', 3000),
+  tick: {
+    action: 'executed',
+    tx_digest: strictTickDigest,
+    execution_claimed: true,
+    agent_trade_event_found: true,
+    agent_trade_event: {
+      type: 'AgentTradeExecuted',
+      tx_digest: strictTickDigest,
+      mandate_id: STRATEGY_MANDATE,
+      wrapper_id: STRATEGY_WRAPPER,
+      agent: deployment.agent.address,
+      pool_id: activationStrategy.pool_id,
+      quote_amount_spent: '1000',
+      base_amount_received: '990',
+      spent_amount_after: '1000',
+      budget_ceiling: '100000000',
+      slippage_bps: 0,
+      client_order_id: '0x0102',
+      executed_at_ms: 2000,
+    },
+    spend_increased: true,
+  },
+  tickOutcome: 'executed',
+  beforeTickWrapper: { spent_amount: '0' },
+  afterTickWrapper: { spent_amount: '1000' },
+  postRevokeTick: { action: 'stopped_revoked', code: 'POLICY_REVOKED', execution_claimed: false },
+  finalActivity: {
+    policy: { status: 'revoked', runtime_state: 'Revoked' },
+    events: [{ type: 'PolicyCreated' }, { type: 'AgentTradeExecuted' }, { type: 'PolicyRevoked' }],
+  },
+  strictPreflight: {
+    signer: { kind: 'worker-secret', available: true },
+    funding: { execution_ready: true },
+  },
+})
+strictExecutionReport.report_mode = 'wallet_created_policy'
+writeFileSync(strictExecutionReportFile, `${JSON.stringify(strictExecutionReport, null, 2)}\n`, 'utf8')
+
+const appliedReportMarkdown = applyStrictExecutionReportToWalletEvidenceArtifact({
+  artifactText: appliedStrategyMarkdown.artifact_text,
+  reportFilePath: strictExecutionReportFile,
+})
+assert.equal(appliedReportMarkdown.status, 'ok')
+assert.equal(appliedReportMarkdown.purpose, 'browser_wallet_clickthrough_evidence_apply_report')
+assert.equal(appliedReportMarkdown.format, 'markdown')
+assert.equal(appliedReportMarkdown.applied_fields.includes('strict_execution_report_reference'), true)
+assert.equal(appliedReportMarkdown.applied_fields.includes('revoke_tx_digest'), true)
+assert.equal(appliedReportMarkdown.strict_execution_report.report_mode, 'wallet_created_policy')
+assert.match(appliedReportMarkdown.artifact_text, /Actual click-through completed: false/)
+assert.match(appliedReportMarkdown.artifact_text, /revoke_tx_digest: revoke-digest/)
+assert.match(appliedReportMarkdown.artifact_text, /policy_status_after_revoke: revoked/)
+assert.match(appliedReportMarkdown.artifact_text, new RegExp(`strict_execution_report_reference: ${strictExecutionReportFile.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}`))
+const parsedAppliedReportMarkdown = parseWalletEvidenceArtifact(appliedReportMarkdown.artifact_text)
+assert.equal(parsedAppliedReportMarkdown.fields.revoke_tx_digest, 'revoke-digest')
+assert.equal(parsedAppliedReportMarkdown.fields.policy_status_after_revoke, 'revoked')
+assert.equal(parsedAppliedReportMarkdown.fields.strict_execution_report_reference, strictExecutionReportFile)
+assert.equal(parsedAppliedReportMarkdown.metadata.actual_clickthrough_completed, false)
+
+const appliedReportJson = applyStrictExecutionReportToWalletEvidenceArtifact({
+  artifactText: appliedStrategyJson.artifact_text,
+  reportFilePath: strictExecutionReportFile,
+})
+assert.equal(appliedReportJson.status, 'ok')
+assert.equal(appliedReportJson.format, 'json')
+const appliedReportJsonArtifact = JSON.parse(appliedReportJson.artifact_text)
+assert.equal(appliedReportJsonArtifact.actual_clickthrough_completed, false)
+assert.equal(appliedReportJsonArtifact.evidence_fields.revoke_tx_digest, 'revoke-digest')
+assert.equal(appliedReportJsonArtifact.evidence_fields.policy_status_after_revoke, 'revoked')
+assert.equal(appliedReportJsonArtifact.evidence_fields.strict_execution_report_reference, strictExecutionReportFile)
+
+const applyReportConflict = applyStrictExecutionReportToWalletEvidenceArtifact({
+  artifactText: appliedStrategyMarkdown.artifact_text.replace('- revoke_tx_digest: TODO', '- revoke_tx_digest: other-revoke-digest'),
+  reportFilePath: strictExecutionReportFile,
+})
+assert.equal(applyReportConflict.status, 'error')
+assert.equal(applyReportConflict.code, 'STRICT_EXECUTION_REPORT_ARTIFACT_MISMATCH')
+assert.equal(applyReportConflict.conflicts[0].field, 'revoke_tx_digest')
+
+const nonWalletStrictReportFile = join(strategyFileDir, 'demo-execute-report-non-wallet.json')
+writeFileSync(
+  nonWalletStrictReportFile,
+  `${JSON.stringify({ ...strictExecutionReport, report_mode: 'self_contained_demo' }, null, 2)}\n`,
+  'utf8',
+)
+const nonWalletStrictApplyReport = applyStrictExecutionReportToWalletEvidenceArtifact({
+  artifactText: appliedStrategyMarkdown.artifact_text,
+  reportFilePath: nonWalletStrictReportFile,
+})
+assert.equal(nonWalletStrictApplyReport.status, 'error')
+assert.equal(nonWalletStrictApplyReport.code, 'STRICT_EXECUTION_REPORT_INVALID')
+assert.equal(
+  nonWalletStrictApplyReport.checks.find((check) => check.id === 'strict-execution:wallet-report-mode').status,
+  'failed',
+)
+
+const secretStrictReportFile = join(strategyFileDir, 'demo-execute-report-secret.json')
+writeFileSync(
+  secretStrictReportFile,
+  `${JSON.stringify({ ...strictExecutionReport, AGENT_KEY: 'suiprivkey1qqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqq' }, null, 2)}\n`,
+  'utf8',
+)
+const secretStrictApplyReport = applyStrictExecutionReportToWalletEvidenceArtifact({
+  artifactText: appliedStrategyMarkdown.artifact_text,
+  reportFilePath: secretStrictReportFile,
+})
+assert.equal(secretStrictApplyReport.status, 'error')
+assert.equal(secretStrictApplyReport.code, 'STRICT_EXECUTION_REPORT_SECRET_LEAK')
+assert.equal(secretStrictApplyReport.secret_leak_patterns.includes('agent-key'), true)
+
+const applyReportCliDir = mkdtempSync(join(tmpdir(), 'rescuegrid-wallet-apply-report-cli-'))
+try {
+  const applyReportCliArtifactPath = join(applyReportCliDir, 'wallet-clickthrough-evidence.md')
+  writeFileSync(applyReportCliArtifactPath, appliedStrategyMarkdown.artifact_text, 'utf8')
+  const applyReportCli = spawnSync(process.execPath, [
+    'scripts/wallet-clickthrough-evidence.mjs',
+    '--apply-report',
+    '--input',
+    applyReportCliArtifactPath,
+    '--execution-report',
+    strictExecutionReportFile,
+  ], {
+    cwd: new URL('..', import.meta.url),
+    encoding: 'utf8',
+  })
+  assert.equal(applyReportCli.status, 0, applyReportCli.stderr)
+  assert.match(applyReportCli.stdout, /browser_wallet_clickthrough_evidence_apply_report/)
+  const appliedReportCliBody = readFileSync(applyReportCliArtifactPath, 'utf8')
+  assert.match(appliedReportCliBody, /revoke_tx_digest: revoke-digest/)
+  assert.match(appliedReportCliBody, /Actual click-through completed: false/)
+} finally {
+  rmSync(applyReportCliDir, { recursive: true, force: true })
+}
+
 const filledArtifact = `# RescueGrid Wallet Click-Through Evidence
 
 Generated: 2026-06-03T00:00:00.000Z
@@ -781,6 +941,7 @@ assert.match(help.stdout, /--out/)
 assert.match(help.stdout, /--require-frontend/)
 assert.match(help.stdout, /--execution-report/)
 assert.match(help.stdout, /--apply-strategy/)
+assert.match(help.stdout, /--apply-report/)
 assert.equal(help.stdout.includes('AGENT_KEY='), false)
 assert.equal(help.stdout.includes('INTERNAL_AGENT_TICK_TOKEN='), false)
 

@@ -8,6 +8,7 @@ import { pathToFileURL } from 'node:url'
 import deployment from '../core/deployment.js'
 import { strategyHash } from '../core/strategy.js'
 import { getClient } from '../worker/src/sui-tx.js'
+import { strictDemoExecutionMissingEvidence } from '../worker/scripts/demo-execution-report.mjs'
 
 const DEFAULT_FRONTEND_URL = 'http://localhost:5175'
 const DEFAULT_WORKER_URL = 'http://localhost:8787'
@@ -1009,6 +1010,12 @@ function mergeableFieldValuesMatch(key, existing, next) {
   if (['owner_address', 'wrapper_id', 'mandate_id', 'strategy_hash'].includes(key)) {
     return normalizeHexLike(existing) === normalizeHexLike(next)
   }
+  if (['activation_strategy_file', 'strict_execution_report_reference'].includes(key)) {
+    return sameReportReference(existing, next)
+  }
+  if (['runtime_state_after_activate', 'policy_status_after_revoke'].includes(key)) {
+    return stripCodeFence(existing).toLowerCase() === stripCodeFence(next).toLowerCase()
+  }
   return stripCodeFence(existing) === stripCodeFence(next)
 }
 
@@ -1037,6 +1044,158 @@ function buildActivationStrategyApplyConflicts(fields, updates) {
       next: value,
     }]
   })
+}
+
+function buildEvidenceApplyConflicts(fields, updates, { allowedOverwriteFields = [] } = {}) {
+  const allowed = new Set(allowedOverwriteFields)
+  return Object.entries(updates).flatMap(([key, value]) => {
+    if (allowed.has(key)) return []
+    if (mergeableFieldValuesMatch(key, fields[key], value)) return []
+    return [{
+      field: key,
+      existing: fields[key],
+      next: value,
+    }]
+  })
+}
+
+function readStrictExecutionReportFile({ filePath, readFileImpl = readFileSync }) {
+  const rawPath = normalizeReferencePath(filePath)
+  const resolvedPath = resolve(rawPath)
+  const checks = []
+  const summary = {
+    path: rawPath,
+    resolved_path: resolvedPath,
+    purpose: null,
+    report_mode: null,
+    chain: null,
+    phase: null,
+    owner_address: null,
+    wrapper_id: null,
+    mandate_id: null,
+    strategy_hash: null,
+    create_tx_digest: null,
+    tick_tx_digest: null,
+    revoke_tx_digest: null,
+    policy_status_after_revoke: null,
+    execution_claimed: null,
+  }
+
+  let raw = ''
+  try {
+    raw = readFileImpl(resolvedPath, 'utf8')
+    checks.push(createCheck({
+      id: 'strict-execution:file-readable',
+      label: 'Strict execution report file is readable',
+      passed: true,
+      expected: rawPath,
+      actual: resolvedPath,
+    }))
+  } catch (e) {
+    checks.push(createCheck({
+      id: 'strict-execution:file-readable',
+      label: 'Strict execution report file is readable',
+      passed: false,
+      expected: rawPath,
+      actual: resolvedPath,
+      detail: String(e?.message || e),
+    }))
+    return { summary, checks }
+  }
+
+  const leaks = detectSecretLeaks(raw)
+  checks.push(createCheck({
+    id: 'strict-execution:secret-scan',
+    label: 'Strict execution report does not contain obvious secret assignments',
+    passed: leaks.length === 0,
+    expected: 'no AGENT_KEY, owner key, private key, tick token, WaaP token or seed phrase values',
+    actual: leaks,
+  }))
+  if (leaks.length > 0) return { summary, checks }
+
+  let parsed = null
+  try {
+    parsed = JSON.parse(raw)
+    checks.push(createCheck({
+      id: 'strict-execution:json-valid',
+      label: 'Strict execution report is valid JSON',
+      passed: true,
+      expected: 'valid JSON',
+      actual: 'valid JSON',
+    }))
+  } catch (e) {
+    checks.push(createCheck({
+      id: 'strict-execution:json-valid',
+      label: 'Strict execution report is valid JSON',
+      passed: false,
+      expected: 'valid JSON',
+      actual: 'parse failed',
+      detail: String(e?.message || e),
+    }))
+    return { summary, checks }
+  }
+
+  summary.purpose = parsed?.purpose || null
+  summary.report_mode = parsed?.report_mode || null
+  summary.chain = parsed?.chain || null
+  summary.phase = parsed?.phase || null
+  summary.owner_address = parsed?.owner_address || null
+  summary.wrapper_id = parsed?.wrapper_id || null
+  summary.mandate_id = parsed?.mandate_id || null
+  summary.strategy_hash = parsed?.strategy_hash || null
+  summary.create_tx_digest = parsed?.create_tx_digest || parsed?.create_tx?.digest || null
+  summary.tick_tx_digest = parsed?.tick_tx_digest || parsed?.tx_digest || null
+  summary.revoke_tx_digest = parsed?.revoke_tx_digest || parsed?.revoke_tx?.digest || null
+  summary.policy_status_after_revoke = parsed?.post_revoke?.final_policy_status || parsed?.post_revoke?.final_runtime_state || null
+  summary.execution_claimed = parsed?.execution_claimed === true
+
+  const missingEvidence = strictDemoExecutionMissingEvidence(parsed)
+  checks.push(
+    createCheck({
+      id: 'strict-execution:purpose',
+      label: 'Strict execution report has the expected purpose',
+      passed: summary.purpose === 'rescuegrid_demo_execution_report',
+      expected: 'rescuegrid_demo_execution_report',
+      actual: summary.purpose,
+    }),
+    createCheck({
+      id: 'strict-execution:wallet-report-mode',
+      label: 'Strict execution report comes from the browser-wallet same-wrapper validator',
+      passed: summary.report_mode === 'wallet_created_policy',
+      expected: 'wallet_created_policy',
+      actual: summary.report_mode,
+    }),
+    createCheck({
+      id: 'strict-execution:chain',
+      label: 'Strict execution report is for the deployed chain',
+      passed: summary.chain === deployment.chain,
+      expected: deployment.chain,
+      actual: summary.chain,
+    }),
+    createCheck({
+      id: 'strict-execution:structured-evidence',
+      label: 'Strict execution report proves structured AgentTradeExecuted evidence',
+      passed: missingEvidence.length === 0,
+      expected: 'no missing strict execution evidence',
+      actual: missingEvidence,
+    }),
+  )
+
+  return { summary, checks }
+}
+
+function strictExecutionReportUpdates(summary, reportFilePath) {
+  const updates = {
+    owner_address: summary.owner_address,
+    create_tx_digest: summary.create_tx_digest,
+    wrapper_id: summary.wrapper_id,
+    mandate_id: summary.mandate_id,
+    strategy_hash: summary.strategy_hash,
+    revoke_tx_digest: summary.revoke_tx_digest,
+    policy_status_after_revoke: summary.policy_status_after_revoke,
+    strict_execution_report_reference: normalizeReferencePath(reportFilePath),
+  }
+  return Object.fromEntries(Object.entries(updates).filter(([, value]) => evidenceValuePresent(value)))
 }
 
 function withTrailingNewline(text) {
@@ -1159,6 +1318,71 @@ export function applyActivationStrategyToWalletEvidenceArtifact({
     applied_fields: Object.keys(updates),
     activation_strategy_file: activationStrategy.summary,
     checks: activationStrategy.checks,
+    artifact_text,
+  }
+}
+
+export function applyStrictExecutionReportToWalletEvidenceArtifact({
+  artifactText,
+  reportFilePath,
+  readFileImpl = readFileSync,
+} = {}) {
+  if (!reportFilePath) {
+    return {
+      status: 'error',
+      code: 'STRICT_EXECUTION_REPORT_REQUIRED',
+      message: '--execution-report is required',
+    }
+  }
+
+  const parsed = parseWalletEvidenceArtifact(artifactText)
+  if (parsed.status !== 'ok') {
+    return {
+      status: 'error',
+      code: parsed.code || 'WALLET_EVIDENCE_ARTIFACT_INVALID',
+      message: 'wallet evidence artifact could not be parsed',
+    }
+  }
+
+  const strictReport = readStrictExecutionReportFile({
+    filePath: reportFilePath,
+    readFileImpl,
+  })
+  const strictReportFailures = strictReport.checks.filter((check) => check.status === 'failed')
+  if (strictReportFailures.length > 0) {
+    const secretFailure = strictReportFailures.find((check) => check.id === 'strict-execution:secret-scan')
+    return {
+      status: 'error',
+      code: secretFailure ? 'STRICT_EXECUTION_REPORT_SECRET_LEAK' : 'STRICT_EXECUTION_REPORT_INVALID',
+      strict_execution_report: strictReport.summary,
+      checks: strictReport.checks,
+      secret_leak_patterns: secretFailure ? (secretFailure.actual || []) : undefined,
+    }
+  }
+
+  const updates = strictExecutionReportUpdates(strictReport.summary, reportFilePath)
+  const conflicts = buildEvidenceApplyConflicts(parsed.fields || {}, updates)
+  if (conflicts.length > 0) {
+    return {
+      status: 'error',
+      code: 'STRICT_EXECUTION_REPORT_ARTIFACT_MISMATCH',
+      strict_execution_report: strictReport.summary,
+      conflicts,
+      checks: strictReport.checks,
+    }
+  }
+
+  const artifact_text = parsed.format === 'json'
+    ? applyUpdatesToJsonEvidenceArtifact(artifactText, updates)
+    : applyUpdatesToMarkdownEvidenceArtifact(artifactText, updates)
+
+  return {
+    status: 'ok',
+    purpose: 'browser_wallet_clickthrough_evidence_apply_report',
+    format: parsed.format,
+    applied_fields: Object.keys(updates),
+    strict_execution_report: strictReport.summary,
+    checks: strictReport.checks,
     artifact_text,
   }
 }
@@ -1411,6 +1635,7 @@ Usage:
   npm run wallet:evidence -- --format markdown --out .rescuegrid/wallet-clickthrough-evidence.md
   npm run wallet:evidence -- --frontend-url http://localhost:5175 --worker-url http://localhost:8787 --owner 0x...
   npm run wallet:evidence -- --apply-strategy --input .rescuegrid/wallet-clickthrough-evidence.md --strategy-file .rescuegrid/wallet-strategy-....json
+  npm run wallet:evidence -- --apply-report --input .rescuegrid/wallet-clickthrough-evidence.md --execution-report .rescuegrid/demo-execute-report.json
   npm run wallet:evidence:verify -- --input .rescuegrid/wallet-clickthrough-evidence.md --require-worker
   npm run wallet:evidence:verify -- --input .rescuegrid/wallet-clickthrough-evidence.md --execution-report .rescuegrid/demo-execute-report.json
 
@@ -1425,6 +1650,9 @@ strict_execution_report_reference to point at that report path. With --apply-str
 it reads the UI-downloaded activation strategy JSON, recomputes the canonical
 hash, and fills only the matching owner/create/wrapper/mandate/hash fields in an
 existing wallet evidence artifact without marking click-through complete. With
+--apply-report it reads the wallet-created strict execution report, requires
+structured AgentTradeExecuted evidence, and fills only the report reference plus
+matching revoke/status lifecycle fields without marking click-through complete. With
 --require-frontend / --require-worker it fails before
 the manual click-through when the local services or login guardrails are not
 ready. For final same-wrapper execution evidence, keep the wallet-created policy
@@ -1437,6 +1665,14 @@ export async function main(argv = process.argv.slice(2), env = process.env, opti
   if (flags.has('--help') || flags.has('-h')) {
     help()
     return 0
+  }
+  if (flags.has('--apply-strategy') && flags.has('--apply-report')) {
+    console.error(JSON.stringify({
+      status: 'error',
+      code: 'APPLY_MODE_CONFLICT',
+      message: '--apply-strategy and --apply-report must be run separately',
+    }, null, 2))
+    return 1
   }
 
   const envFile = readSelectedEnv(flags.get('--env-file') || '.env.local')
@@ -1485,6 +1721,33 @@ export async function main(argv = process.argv.slice(2), env = process.env, opti
     const result = applyActivationStrategyToWalletEvidenceArtifact({
       artifactText,
       strategyFilePath,
+      readFileImpl: options.readFileImpl,
+    })
+    if (result.status !== 'ok') {
+      console.error(JSON.stringify(result, null, 2))
+      return 1
+    }
+    const resolvedOut = resolve(String(outPath))
+    mkdirSync(dirname(resolvedOut), { recursive: true })
+    writeFileSync(resolvedOut, result.artifact_text, 'utf8')
+    const { artifact_text: _artifactText, ...summary } = result
+    console.log(JSON.stringify({
+      ...summary,
+      input: resolve(String(inputPath)),
+      out: resolvedOut,
+      bytes: Buffer.byteLength(result.artifact_text),
+    }, null, 2))
+    return 0
+  }
+
+  if (flags.has('--apply-report')) {
+    const inputPath = flags.get('--input') || flags.get('--artifact') || '.rescuegrid/wallet-clickthrough-evidence.md'
+    const reportFilePath = flags.get('--execution-report') || flags.get('--strict-execution-report') || flags.get('--report-file')
+    const outPath = flags.get('--out') || inputPath
+    const artifactText = readFileSync(resolve(String(inputPath)), 'utf8')
+    const result = applyStrictExecutionReportToWalletEvidenceArtifact({
+      artifactText,
+      reportFilePath,
       readFileImpl: options.readFileImpl,
     })
     if (result.status !== 'ok') {

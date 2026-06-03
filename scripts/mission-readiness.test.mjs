@@ -16,6 +16,7 @@ const requiredScripts = {
   'test:demo-execution-report': 'npm --prefix worker run test:demo-execution-report',
   'test:safety-negative-report': 'npm --prefix worker run test:safety-negative-report',
   'wallet:evidence': 'node scripts/wallet-clickthrough-evidence.mjs',
+  'wallet:evidence:apply-report': 'node scripts/wallet-clickthrough-evidence.mjs --apply-report',
   'wallet:evidence:apply-strategy': 'node scripts/wallet-clickthrough-evidence.mjs --apply-strategy',
   'wallet:evidence:preflight': 'node scripts/wallet-clickthrough-evidence.mjs --require-frontend --require-worker',
   'wallet:evidence:verify': 'node scripts/wallet-clickthrough-evidence.mjs --verify',
@@ -345,6 +346,7 @@ function strictExecutionReport(overrides = {}) {
   assert.equal(report.next_actions.some((row) => /wallet:evidence -- --format markdown/.test(row)), true)
   assert.equal(report.next_actions.some((row) => /wallet:evidence:preflight/.test(row)), true)
   assert.equal(report.next_actions.some((row) => /wallet:evidence:apply-strategy/.test(row)), true)
+  assert.equal(report.next_actions.some((row) => /wallet:evidence:apply-report/.test(row)), true)
   assert.equal(report.next_actions.some((row) => /demo:execute:wallet-report/.test(row)), true)
   assert.equal(report.next_actions.some((row) => /awaiting_wallet_revoke/.test(row)), true)
   assert.equal(report.next_actions.some((row) => /strict_execution_report_reference/.test(row)), true)
