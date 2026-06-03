@@ -111,8 +111,15 @@ function blockedFunding() {
 
 function strictExecutionReport(overrides = {}) {
   return {
+    purpose: 'rescuegrid_demo_execution_report',
+    chain: 'sui:testnet',
     phase: 'pass',
-    assertions: ['G2-EXECUTE'],
+    require_execution: true,
+    assertions: ['G2-CREATE', 'G2-ACTIVATE-MONITOR', 'G2-EXECUTE', 'G2-REVOKE', 'G2-POST-REVOKE-NO-EXECUTION'],
+    create_tx_digest: 'createDigest',
+    create_tx: { digest: 'createDigest', status: 'success' },
+    revoke_tx_digest: 'revokeDigest',
+    revoke_tx: { digest: 'revokeDigest', status: 'success' },
     tick_outcome: 'executed',
     execution_claimed: true,
     agent_trade_event_found: true,
@@ -120,6 +127,15 @@ function strictExecutionReport(overrides = {}) {
     tick_tx_digest: 'tickDigest',
     wrapper_id: '0xwrapper',
     mandate_id: '0xmandate',
+    strategy_hash: '0xstrategy',
+    post_revoke: {
+      action: 'stopped_revoked',
+      code: 'POLICY_REVOKED',
+      execution_claimed: false,
+      final_policy_status: 'revoked',
+      final_runtime_state: 'Revoked',
+      chain_event_types: ['PolicyCreated', 'AgentTradeExecuted', 'PolicyRevoked'],
+    },
     ...overrides,
   }
 }
@@ -233,6 +249,80 @@ function strictExecutionReport(overrides = {}) {
   assert.equal(report.status, 'failed')
   assert.equal(executionCheck.status, 'failed')
   assert.equal(executionCheck.evidence.agent_trade_event_found, false)
+}
+
+{
+  const report = buildMissionReadinessReport({
+    scripts: requiredScripts,
+    safetyReport: safetyNegativeReport(),
+    walletReport: verifiedWalletReport(),
+    fundingReadiness: readyFunding(),
+    executionReport: strictExecutionReport({ revoke_tx: { digest: 'revokeDigest', status: 'failure' } }),
+  })
+  const executionCheck = report.checks.find((row) => row.id === 'strict_execution_evidence')
+  assert.equal(report.status, 'failed')
+  assert.equal(executionCheck.status, 'failed')
+  assert.equal(executionCheck.evidence.missing_live_evidence.includes('revoke_tx_success'), true)
+}
+
+{
+  const report = buildMissionReadinessReport({
+    scripts: requiredScripts,
+    safetyReport: safetyNegativeReport(),
+    walletReport: verifiedWalletReport(),
+    fundingReadiness: readyFunding(),
+    executionReport: strictExecutionReport({
+      post_revoke: {
+        action: 'blocked',
+        code: 'EXECUTION_DISABLED',
+        execution_claimed: false,
+        final_policy_status: 'active',
+        final_runtime_state: 'Monitoring',
+        chain_event_types: ['PolicyCreated', 'AgentTradeExecuted'],
+      },
+    }),
+  })
+  const executionCheck = report.checks.find((row) => row.id === 'strict_execution_evidence')
+  assert.equal(report.status, 'failed')
+  assert.equal(executionCheck.status, 'failed')
+  assert.equal(executionCheck.evidence.missing_live_evidence.includes('post_revoke_action'), true)
+  assert.equal(executionCheck.evidence.missing_live_evidence.includes('chain_event:PolicyRevoked'), true)
+}
+
+{
+  const report = buildMissionReadinessReport({
+    scripts: requiredScripts,
+    safetyReport: safetyNegativeReport(),
+    walletReport: verifiedWalletReport(),
+    fundingReadiness: readyFunding(),
+    executionReport: strictExecutionReport({
+      post_revoke: {
+        action: 'stopped_revoked',
+        code: 'POLICY_REVOKED',
+        final_policy_status: 'revoked',
+        final_runtime_state: 'Revoked',
+        chain_event_types: ['PolicyCreated', 'AgentTradeExecuted', 'PolicyRevoked'],
+      },
+    }),
+  })
+  const executionCheck = report.checks.find((row) => row.id === 'strict_execution_evidence')
+  assert.equal(report.status, 'failed')
+  assert.equal(executionCheck.status, 'failed')
+  assert.equal(executionCheck.evidence.missing_live_evidence.includes('post_revoke_execution_unclaimed'), true)
+}
+
+{
+  const report = buildMissionReadinessReport({
+    scripts: requiredScripts,
+    safetyReport: safetyNegativeReport(),
+    walletReport: verifiedWalletReport(),
+    fundingReadiness: readyFunding(),
+    executionReport: strictExecutionReport({ assertions: ['G2-EXECUTE'] }),
+  })
+  const executionCheck = report.checks.find((row) => row.id === 'strict_execution_evidence')
+  assert.equal(report.status, 'failed')
+  assert.equal(executionCheck.status, 'failed')
+  assert.equal(executionCheck.evidence.missing_live_evidence.includes('assertion:G2-REVOKE'), true)
 }
 
 {

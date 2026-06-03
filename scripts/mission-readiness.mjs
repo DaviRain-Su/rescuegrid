@@ -269,16 +269,66 @@ export function summarizeSafetyNegativeEvidence(report) {
 
 function executionReportEvidence(report) {
   const assertions = Array.isArray(report?.assertions) ? report.assertions : []
+  const postRevokeExecutionClaimed = report?.post_revoke?.execution_claimed
   return {
+    purpose: report?.purpose || null,
+    chain: report?.chain || null,
     phase: report?.phase || null,
+    require_execution: report?.require_execution === true,
     wrapper_id: report?.wrapper_id || null,
     mandate_id: report?.mandate_id || null,
+    strategy_hash: report?.strategy_hash || null,
+    create_tx_digest: report?.create_tx_digest || report?.create_tx?.digest || null,
+    create_tx_status: report?.create_tx?.status || null,
+    revoke_tx_digest: report?.revoke_tx_digest || report?.revoke_tx?.digest || null,
+    revoke_tx_status: report?.revoke_tx?.status || null,
     tick_outcome: report?.tick_outcome || null,
     tick_tx_digest: report?.tick_tx_digest || report?.tx_digest || null,
     agent_trade_event_found: report?.agent_trade_event_found === true,
     spend_increased: report?.spend_increased === true,
+    post_revoke: {
+      action: report?.post_revoke?.action || null,
+      code: report?.post_revoke?.code || null,
+      execution_claimed: typeof postRevokeExecutionClaimed === 'boolean' ? postRevokeExecutionClaimed : null,
+      final_policy_status: report?.post_revoke?.final_policy_status || null,
+      final_runtime_state: report?.post_revoke?.final_runtime_state || null,
+      chain_event_types: Array.isArray(report?.post_revoke?.chain_event_types) ? report.post_revoke.chain_event_types : [],
+    },
     assertions,
   }
+}
+
+const STRICT_EXECUTION_REQUIRED_ASSERTIONS = [
+  'G2-CREATE',
+  'G2-ACTIVATE-MONITOR',
+  'G2-EXECUTE',
+  'G2-REVOKE',
+  'G2-POST-REVOKE-NO-EXECUTION',
+]
+
+function strictExecutionMissingEvidence(report, assertions = []) {
+  const evidence = executionReportEvidence(report)
+  const missing = []
+  if (evidence.purpose !== 'rescuegrid_demo_execution_report') missing.push('purpose')
+  if (evidence.chain !== 'sui:testnet') missing.push('chain')
+  if (evidence.require_execution !== true) missing.push('require_execution')
+  if (!evidence.wrapper_id) missing.push('wrapper_id')
+  if (!evidence.mandate_id) missing.push('mandate_id')
+  if (!evidence.strategy_hash) missing.push('strategy_hash')
+  if (!evidence.create_tx_digest || evidence.create_tx_status !== 'success') missing.push('create_tx_success')
+  if (!evidence.revoke_tx_digest || evidence.revoke_tx_status !== 'success') missing.push('revoke_tx_success')
+  for (const id of STRICT_EXECUTION_REQUIRED_ASSERTIONS) {
+    if (!assertions.includes(id)) missing.push(`assertion:${id}`)
+  }
+  if (evidence.post_revoke.action !== 'stopped_revoked') missing.push('post_revoke_action')
+  if (evidence.post_revoke.code !== 'POLICY_REVOKED') missing.push('post_revoke_code')
+  if (evidence.post_revoke.execution_claimed !== false) missing.push('post_revoke_execution_unclaimed')
+  if (evidence.post_revoke.final_policy_status !== 'revoked') missing.push('post_revoke_policy_revoked')
+  if (evidence.post_revoke.final_runtime_state !== 'Revoked') missing.push('post_revoke_runtime_revoked')
+  for (const eventType of ['PolicyCreated', 'AgentTradeExecuted', 'PolicyRevoked']) {
+    if (!evidence.post_revoke.chain_event_types.includes(eventType)) missing.push(`chain_event:${eventType}`)
+  }
+  return missing
 }
 
 export function summarizeStrictExecutionEvidence(report, fundingCheck) {
@@ -302,12 +352,22 @@ export function summarizeStrictExecutionEvidence(report, fundingCheck) {
   const eventProven = report.agent_trade_event_found === true
   const spendProven = report.spend_increased === true
   const tickExecuted = report.tick_outcome === 'executed' || report.action === 'executed'
-  if (report.phase === 'pass' && hasExecutionAssertion && executionClaimed && txDigest && eventProven && spendProven && tickExecuted) {
+  const missingLiveEvidence = strictExecutionMissingEvidence(report, assertions)
+  if (
+    report.phase === 'pass' &&
+    hasExecutionAssertion &&
+    executionClaimed &&
+    txDigest &&
+    eventProven &&
+    spendProven &&
+    tickExecuted &&
+    missingLiveEvidence.length === 0
+  ) {
     return check({
       id: 'strict_execution_evidence',
       label: 'AgentTradeExecuted strict execution evidence',
       status: 'passed',
-      detail: 'strict demo execution report includes G2-EXECUTE, AgentTradeExecuted evidence, spend increase and a tick tx digest',
+      detail: 'strict demo execution report proves create, execute, revoke and post-revoke no-execution for one wrapper',
       evidence: executionReportEvidence(report),
     })
   }
@@ -317,7 +377,10 @@ export function summarizeStrictExecutionEvidence(report, fundingCheck) {
     status: 'failed',
     detail: 'execution report does not prove AgentTradeExecuted strict execution',
     blocker_codes: ['STRICT_EXECUTION_NOT_PROVEN'],
-    evidence: executionReportEvidence(report),
+    evidence: {
+      ...executionReportEvidence(report),
+      missing_live_evidence: missingLiveEvidence,
+    },
   })
 }
 
