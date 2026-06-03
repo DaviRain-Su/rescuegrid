@@ -27,6 +27,7 @@ const sourceFiles = new Map([
   ['src/providers.jsx', '<WalletProvider autoConnect={false}><RegisterEnoki /></WalletProvider>'],
   ['src/components/ZkLogin.jsx', "Connect a Sui wallet. The agent never touches your keys. <Button onPress={() => onAuth('demo')}>Explore the demo (no wallet)</Button><Button onPress={() => onAuth('readonly')}>Open Worker read-only</Button>"],
   ['src/api.js', "const BASE = import.meta.env.VITE_WORKER_URL || ''; function workerMissing(){ return { code: 'WORKER_NOT_CONFIGURED' } } if (!WORKER_CONFIGURED) return workerMissing()"],
+  ['src/App.jsx', "function downloadWalletStrategyEvidenceFile() {} const walletStrategyEvidence = {}; <div>Activation strategy evidence ready</div>"],
 ])
 const readFileImpl = (path) => {
   if (!sourceFiles.has(path)) throw new Error(`unexpected source read ${path}`)
@@ -37,6 +38,7 @@ const sourceGuardrails = collectFrontendSourceGuardrails({ readFileImpl })
 assert.equal(sourceGuardrails.all_passed, true)
 assert.equal(sourceGuardrails.wallet_auto_connect_disabled, true)
 assert.equal(sourceGuardrails.explicit_worker_read_only_entry, true)
+assert.equal(sourceGuardrails.activation_strategy_evidence_export, true)
 
 const frontendState = await collectFrontendPreflight('http://frontend.test', {
   readFileImpl,
@@ -64,6 +66,7 @@ assert.equal(frontendState.root.contains_rescuegrid, true)
 assert.equal(frontendState.root.has_vite_dev_entry, true)
 assert.equal(frontendState.api_module.has_worker_url_binding, true)
 assert.equal(frontendState.source_guardrails.all_passed, true)
+assert.equal(frontendState.source_guardrails.activation_strategy_evidence_export, true)
 
 const workerState = await collectWorkerPublicState('http://worker.test', {
   fetchImpl: async (url) => {
@@ -263,6 +266,7 @@ assert.match(markdown, /Public state preflight: true/)
 assert.match(markdown, /activation_strategy_file: TODO/)
 assert.match(markdown, /strict_execution_report_reference: TODO/)
 assert.match(markdown, /Wallet auto-connect disabled: true/)
+assert.match(markdown, /Activation strategy export present: true/)
 assert.match(markdown, /Known signer kinds: worker-secret, waap/)
 assert.match(markdown, /Runtime external signer: waap/)
 assert.match(markdown, /Readiness signer posture: worker-secret/)

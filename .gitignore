@@ -44,6 +44,10 @@ lerna-debug.log*
 .rescuegrid/
 worker/.rescuegrid/
 
+# Local private-key funding sketches; use funding:request/proof/watch instead
+scripts/fund-agent.mjs
+scripts/swap-for-agent.mjs
+
 # Sui Move build output
 move/**/build/
 

@@ -189,12 +189,16 @@ export function collectFrontendSourceGuardrails(options = {}) {
   const providers = readSource('src/providers.jsx', options)
   const signIn = readSource('src/components/ZkLogin.jsx', options)
   const api = readSource('src/api.js', options)
+  const app = readSource('src/App.jsx', options)
   const checks = {
     wallet_auto_connect_disabled: /<WalletProvider\s+autoConnect=\{false\}/.test(providers),
     explicit_worker_read_only_entry: signIn.includes('Open Worker read-only') && signIn.includes("onAuth('readonly')"),
     explicit_no_wallet_demo_entry: signIn.includes('Explore the demo (no wallet)') && signIn.includes("onAuth('demo')"),
     signer_copy_keeps_keys_out: signIn.includes('never your keys') || signIn.includes('never touches your keys'),
     writes_require_worker_config: api.includes('WORKER_NOT_CONFIGURED') && api.includes('workerMissing'),
+    activation_strategy_evidence_export: app.includes('downloadWalletStrategyEvidenceFile') &&
+      app.includes('Activation strategy evidence ready') &&
+      app.includes('walletStrategyEvidence'),
   }
   return {
     ...checks,
@@ -634,6 +638,7 @@ function markdown(evidence) {
     `Wallet auto-connect disabled: ${valueOrTodo(evidence.frontend.public_state?.source_guardrails?.wallet_auto_connect_disabled)}`,
     `Worker read-only entry explicit: ${valueOrTodo(evidence.frontend.public_state?.source_guardrails?.explicit_worker_read_only_entry)}`,
     `No-wallet demo entry explicit: ${valueOrTodo(evidence.frontend.public_state?.source_guardrails?.explicit_no_wallet_demo_entry)}`,
+    `Activation strategy export present: ${valueOrTodo(evidence.frontend.public_state?.source_guardrails?.activation_strategy_evidence_export)}`,
     `Writes require Worker config: ${valueOrTodo(evidence.frontend.public_state?.source_guardrails?.writes_require_worker_config)}`,
     '',
     '## Deployment',
