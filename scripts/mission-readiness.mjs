@@ -142,6 +142,27 @@ function publicExternalSigner(posture = null) {
   return Object.keys(publicPosture).length === 0 ? null : publicPosture
 }
 
+function publicCodeArray(rows = []) {
+  if (!Array.isArray(rows)) return []
+  return rows.map(String).filter((row) => /^[A-Z][A-Z0-9_]{1,80}$/.test(row))
+}
+
+function publicDigestArray(rows = []) {
+  if (!Array.isArray(rows)) return []
+  return rows.map(String).filter((row) => /^[1-9A-HJ-NP-Za-km-z]{20,128}$/.test(row))
+}
+
+function publicFundingAssets(rows = []) {
+  if (!Array.isArray(rows)) return []
+  const allowed = new Set(['DBUSDC', 'DEEP', 'SUI_MIST'])
+  return rows.map(String).filter((row) => allowed.has(row))
+}
+
+function publicSuiId(value) {
+  const text = String(value || '').trim()
+  return /^0x[0-9a-fA-F]{1,128}$/.test(text) ? text : null
+}
+
 function stringOrNull(value) {
   return value == null ? null : String(value)
 }
@@ -363,18 +384,23 @@ export function summarizeFundingReadiness(readiness) {
 
 function publicFundingTargetHits(rows = []) {
   if (!Array.isArray(rows)) return []
-  return rows.map((row) => pickPublicFields(row, ['asset', 'target_kind', 'target']))
+  const allowedKinds = new Set(['deepbook_balance_manager', 'agent_gas_address'])
+  return rows.map((row) => ({
+    asset: publicFundingAssets([row?.asset])[0] || null,
+    target_kind: allowedKinds.has(row?.target_kind) ? row.target_kind : null,
+    target: publicSuiId(row?.target),
+  })).filter((row) => row.asset && row.target_kind && row.target)
 }
 
 function publicFundingTargetEvidence(evidence = null) {
   const publicEvidence = pickPublicFields(evidence, [
-      'required',
-      'target_evidence_passed',
-      'balance_manager_id',
-      'agent_address',
-      'balance_manager_object_touched',
-      'agent_gas_address_touched',
-    ])
+    'required',
+    'target_evidence_passed',
+    'balance_manager_object_touched',
+    'agent_gas_address_touched',
+  ])
+  publicEvidence.balance_manager_id = publicSuiId(evidence?.balance_manager_id)
+  publicEvidence.agent_address = publicSuiId(evidence?.agent_address)
   publicEvidence.asset_target_hits = publicFundingTargetHits(evidence?.asset_target_hits)
   return publicEvidence
 }
@@ -395,6 +421,9 @@ function publicFundingProofTransactions(rows = []) {
 
 function fundingProofSummaryEvidence(report = null) {
   const txEvidence = report?.transaction_evidence || {}
+  const blockerCodes = Array.isArray(report?.blocker_codes) ? report.blocker_codes : []
+  const failedTxDigests = Array.isArray(txEvidence.failed_tx_digests) ? txEvidence.failed_tx_digests : []
+  const failedTargetDigests = Array.isArray(txEvidence.failed_target_digests) ? txEvidence.failed_target_digests : []
   return {
     status: report?.status || null,
     purpose: report?.purpose || null,
@@ -402,16 +431,19 @@ function fundingProofSummaryEvidence(report = null) {
     funding_proven: report?.funding_proven === true,
     ready_for_strict_execution: report?.ready_for_strict_execution === true,
     execution_claimed: typeof report?.execution_claimed === 'boolean' ? report.execution_claimed : null,
-    blocker_codes: Array.isArray(report?.blocker_codes) ? report.blocker_codes : [],
+    blocker_code_count: blockerCodes.length,
+    blocker_codes: publicCodeArray(blockerCodes),
     transaction_evidence: {
       required: txEvidence.required === true,
       tx_digest_count: Number(txEvidence.tx_digest_count || 0),
       tx_evidence_passed: txEvidence.tx_evidence_passed === true,
       target_evidence_passed: txEvidence.target_evidence_passed === true,
-      failed_tx_digests: Array.isArray(txEvidence.failed_tx_digests) ? txEvidence.failed_tx_digests : [],
-      failed_target_digests: Array.isArray(txEvidence.failed_target_digests) ? txEvidence.failed_target_digests : [],
-      asset_hits: Array.isArray(txEvidence.asset_hits) ? txEvidence.asset_hits : [],
-      target_asset_hits: Array.isArray(txEvidence.target_asset_hits) ? txEvidence.target_asset_hits : [],
+      failed_tx_digest_count: failedTxDigests.length,
+      failed_tx_digests: publicDigestArray(failedTxDigests),
+      failed_target_digest_count: failedTargetDigests.length,
+      failed_target_digests: publicDigestArray(failedTargetDigests),
+      asset_hits: publicFundingAssets(txEvidence.asset_hits),
+      target_asset_hits: publicFundingAssets(txEvidence.target_asset_hits),
     },
     execution_gate: pickPublicFields(report?.execution_gate, [
       'readiness_only',
@@ -433,12 +465,13 @@ function fundingProofMissingEvidence(evidence) {
   if (evidence.funding_proven !== true) missing.push('funding_proven')
   if (evidence.ready_for_strict_execution !== true) missing.push('ready_for_strict_execution')
   if (evidence.execution_claimed !== false) missing.push('execution_unclaimed')
+  if (evidence.blocker_code_count > 0) missing.push('blocker_codes_empty')
   if (evidence.transaction_evidence.required !== true) missing.push('transaction_evidence_required')
   if (evidence.transaction_evidence.tx_digest_count < 1) missing.push('tx_digest')
   if (evidence.transaction_evidence.tx_evidence_passed !== true) missing.push('tx_evidence_passed')
   if (evidence.transaction_evidence.target_evidence_passed !== true) missing.push('target_evidence_passed')
-  if (evidence.transaction_evidence.failed_tx_digests.length > 0) missing.push('failed_tx_digests_empty')
-  if (evidence.transaction_evidence.failed_target_digests.length > 0) missing.push('failed_target_digests_empty')
+  if (evidence.transaction_evidence.failed_tx_digest_count > 0) missing.push('failed_tx_digests_empty')
+  if (evidence.transaction_evidence.failed_target_digest_count > 0) missing.push('failed_target_digests_empty')
   if (evidence.transaction_evidence.target_asset_hits.length < 1) missing.push('target_asset_hits')
   if (evidence.execution_gate.readiness_only !== true) missing.push('execution_gate_readiness_only')
   if (evidence.execution_gate.execution_claimed !== false) missing.push('execution_gate_unclaimed')

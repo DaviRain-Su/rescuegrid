@@ -139,13 +139,13 @@ function readyFundingProof(overrides = {}) {
         target_evidence: {
           required: true,
           target_evidence_passed: true,
-          balance_manager_id: '0xbm',
-          agent_address: '0xagent',
+          balance_manager_id: '0xbadbeef',
+          agent_address: '0xa9e17',
           balance_manager_object_touched: true,
           agent_gas_address_touched: false,
           asset_target_hits: [
-            { asset: 'DBUSDC', target_kind: 'deepbook_balance_manager', target: '0xbm' },
-            { asset: 'DEEP', target_kind: 'deepbook_balance_manager', target: '0xbm' },
+            { asset: 'DBUSDC', target_kind: 'deepbook_balance_manager', target: '0xbadbeef' },
+            { asset: 'DEEP', target_kind: 'deepbook_balance_manager', target: '0xbadbeef' },
           ],
         },
       },
@@ -341,6 +341,34 @@ function strictExecutionReport(overrides = {}) {
 }
 
 {
+  const fundingProof = readyFundingProof()
+  fundingProof.transaction_evidence.asset_hits = ['DBUSDC', 'super-secret']
+  fundingProof.transaction_evidence.target_asset_hits = ['DEEP', 'super-secret']
+  fundingProof.transactions[0].target_evidence.agent_address = 'super-secret'
+  fundingProof.transactions[0].target_evidence.asset_target_hits.push({
+    asset: 'super-secret',
+    target_kind: 'agent_gas_address',
+    target: '0xa9e17',
+    raw_runner_output: 'super-secret-output',
+  })
+  const report = buildMissionReadinessReport({
+    scripts: requiredScripts,
+    safetyReport: safetyNegativeReport(),
+    walletReport: verifiedWalletReport(),
+    fundingReadiness: readyFunding(),
+    fundingProofReport: fundingProof,
+    executionReport: strictExecutionReport(),
+  })
+  const fundingProofCheck = report.checks.find((row) => row.id === 'external_funding_proof')
+  assert.equal(report.status, 'ready')
+  assert.deepEqual(fundingProofCheck.evidence.transaction_evidence.asset_hits, ['DBUSDC'])
+  assert.deepEqual(fundingProofCheck.evidence.transaction_evidence.target_asset_hits, ['DEEP'])
+  assert.equal(fundingProofCheck.evidence.transactions[0].target_evidence.agent_address, null)
+  assert.equal(JSON.stringify(fundingProofCheck.evidence).includes('super-secret'), false)
+  assertNoSecretSignerPosture(report)
+}
+
+{
   const report = buildMissionReadinessReport({
     scripts: requiredScripts,
     safetyReport: safetyNegativeReport(),
@@ -375,7 +403,7 @@ function strictExecutionReport(overrides = {}) {
         tx_evidence_passed: true,
         target_evidence_passed: false,
         failed_tx_digests: [],
-        failed_target_digests: ['unrelatedDigest'],
+        failed_target_digests: ['4Unre1atedDigest11111111111111111111111'],
         asset_hits: ['DBUSDC', 'DEEP'],
         target_asset_hits: [],
       },
@@ -390,7 +418,8 @@ function strictExecutionReport(overrides = {}) {
   assert.equal(report.blocker_codes.includes('FUNDING_TX_TARGET_NOT_PROVEN'), true)
   assert.equal(report.blocker_codes.includes('FUNDING_PROOF_NOT_PROVEN'), true)
   assert.equal(fundingProofCheck.evidence.missing_live_evidence.includes('target_evidence_passed'), true)
-  assert.deepEqual(fundingProofCheck.evidence.transaction_evidence.failed_target_digests, ['unrelatedDigest'])
+  assert.equal(fundingProofCheck.evidence.missing_live_evidence.includes('blocker_codes_empty'), true)
+  assert.deepEqual(fundingProofCheck.evidence.transaction_evidence.failed_target_digests, ['4Unre1atedDigest11111111111111111111111'])
 }
 
 {
