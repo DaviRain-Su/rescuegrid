@@ -77,6 +77,65 @@ function missingScripts(scripts = {}) {
   return REQUIRED_SCRIPTS.filter((name) => !scripts[name])
 }
 
+function pickPublicFields(row, fields = []) {
+  if (!row || typeof row !== 'object' || Array.isArray(row)) return {}
+  const out = {}
+  for (const field of fields) {
+    if (row[field] !== undefined) out[field] = row[field]
+  }
+  return out
+}
+
+function publicSignerCapabilities(rows = []) {
+  if (!Array.isArray(rows)) return []
+  return rows
+    .map((row) => pickPublicFields(row, [
+      'kind',
+      'selected',
+      'runtime_scope',
+      'custody_model',
+      'address',
+      'expected_address',
+      'signer_matches_expected',
+      'available',
+      'execution_enabled',
+      'unavailable_code',
+      'unavailable_detail',
+      'runner_configured',
+      'cloud_worker_supported',
+      'local_daemon_supported',
+      'external_approval_required',
+      'production_mainnet_allowed',
+    ]))
+    .filter((row) => Object.keys(row).length > 0)
+}
+
+function publicExternalSigner(posture = null) {
+  const publicPosture = pickPublicFields(posture, [
+    'kind',
+    'selected',
+    'status',
+    'available',
+    'local_daemon_only',
+    'cloud_worker_supported',
+    'local_daemon_supported',
+    'daemon_mode',
+    'waap_cli_enabled',
+    'submission_runner_configured',
+    'waap_chain',
+    'waap_rpc_configured',
+    'permission_token_configured',
+    'address',
+    'expected_address',
+    'signer_matches_expected',
+    'unavailable_code',
+    'unavailable_detail',
+    'approval_state',
+    'secrets_returned',
+  ])
+  return Object.keys(publicPosture).length === 0 ? null : publicPosture
+}
+
 export function summarizeWalletReport(report) {
   if (!report) {
     return check({
@@ -147,8 +206,8 @@ export function summarizeFundingReadiness(readiness) {
         signer_kind: readiness.signer?.kind || null,
         signer_available: Boolean(readiness.signer?.available),
         signer_execution_enabled: Boolean(readiness.signer?.execution_enabled || readiness.execution?.enabled),
-        signer_capabilities: readiness.signer_capabilities || [],
-        external_signer: readiness.external_signer || null,
+        signer_capabilities: publicSignerCapabilities(readiness.signer_capabilities),
+        external_signer: publicExternalSigner(readiness.external_signer),
       },
     })
   }
@@ -167,8 +226,8 @@ export function summarizeFundingReadiness(readiness) {
       signer_available: Boolean(readiness.signer?.available),
       signer_execution_enabled: Boolean(readiness.signer?.execution_enabled || readiness.execution?.enabled),
       signer_unavailable_code: readiness.signer?.unavailable_code || readiness.execution?.blocker_code || null,
-      signer_capabilities: readiness.signer_capabilities || [],
-      external_signer: readiness.external_signer || null,
+      signer_capabilities: publicSignerCapabilities(readiness.signer_capabilities),
+      external_signer: publicExternalSigner(readiness.external_signer),
       execution_claimed: readiness.execution_claimed === true,
     },
   })

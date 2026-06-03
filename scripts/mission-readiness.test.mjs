@@ -74,10 +74,39 @@ function readyFunding() {
     funding_blocker_codes: [],
     execution_claimed: false,
     signer: { kind: 'worker-secret', available: true },
-    signer_capabilities: [{ kind: 'worker-secret', selected: true, available: true, execution_enabled: true }],
-    external_signer: { kind: 'waap', selected: false, status: 'not_selected', secrets_returned: false },
+    signer_capabilities: [
+      {
+        kind: 'worker-secret',
+        selected: true,
+        available: true,
+        execution_enabled: true,
+        permission_token: 'super-secret',
+        session_value: 'super-secret-session',
+        raw_runner_output: 'super-secret-output',
+      },
+    ],
+    external_signer: {
+      kind: 'waap',
+      selected: false,
+      status: 'not_selected',
+      permission_token_configured: false,
+      secrets_returned: false,
+      permission_token: 'super-secret',
+      session_value: 'super-secret-session',
+      raw_runner_output: 'super-secret-output',
+    },
     balance_manager: { balances: { DBUSDC: '1000000', DEEP: '1' } },
   }
+}
+
+function assertNoSecretSignerPosture(value) {
+  const json = JSON.stringify(value)
+  assert.equal(json.includes('super-secret'), false)
+  assert.equal(json.includes('super-secret-session'), false)
+  assert.equal(json.includes('super-secret-output'), false)
+  assert.equal(json.includes('"permission_token":'), false)
+  assert.equal(json.includes('"session_value":'), false)
+  assert.equal(json.includes('"raw_runner_output":'), false)
 }
 
 function safetyNegativeReport(overrides = {}) {
@@ -123,9 +152,26 @@ function blockedFunding() {
     execution: { enabled: false, blocker_code: 'EXECUTION_DISABLED' },
     signer_capabilities: [
       { kind: 'worker-secret', selected: true, available: true, execution_enabled: false },
-      { kind: 'waap', selected: false, available: false, runner_configured: false },
+      {
+        kind: 'waap',
+        selected: false,
+        available: false,
+        runner_configured: false,
+        permission_token: 'super-secret',
+        session_value: 'super-secret-session',
+        raw_runner_output: 'super-secret-output',
+      },
     ],
-    external_signer: { kind: 'waap', selected: false, status: 'not_selected', secrets_returned: false },
+    external_signer: {
+      kind: 'waap',
+      selected: false,
+      status: 'not_selected',
+      permission_token_configured: true,
+      secrets_returned: false,
+      permission_token: 'super-secret',
+      session_value: 'super-secret-session',
+      raw_runner_output: 'super-secret-output',
+    },
     balance_manager: { balances: { DBUSDC: '0', DEEP: '0' } },
   }
 }
@@ -175,6 +221,9 @@ function strictExecutionReport(overrides = {}) {
   assert.equal(report.execution_claimed, true)
   assert.deepEqual(report.blocker_codes, [])
   assert.equal(report.checks.every((row) => row.status === 'passed'), true)
+  const fundingCheck = report.checks.find((row) => row.id === 'execution_funding_readiness')
+  assert.equal(fundingCheck.evidence.external_signer.permission_token_configured, false)
+  assertNoSecretSignerPosture(report)
 }
 
 {
@@ -226,6 +275,8 @@ function strictExecutionReport(overrides = {}) {
   assert.equal(fundingCheck.evidence.signer_unavailable_code, 'EXECUTION_DISABLED')
   assert.equal(fundingCheck.evidence.signer_capabilities.some((row) => row.kind === 'waap'), true)
   assert.equal(fundingCheck.evidence.external_signer.kind, 'waap')
+  assert.equal(fundingCheck.evidence.external_signer.permission_token_configured, true)
+  assertNoSecretSignerPosture(report)
 }
 
 {
