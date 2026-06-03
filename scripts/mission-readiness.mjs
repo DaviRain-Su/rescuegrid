@@ -83,9 +83,11 @@ const REQUIRED_SCRIPT_COMMAND_CONTRACTS = [
     name: 'wallet:evidence:verify',
     requirements: [
       requiredFlag('--verify'),
+      requiredFlag('--require-worker'),
       requiredFlagValue('--execution-report', DEFAULT_EXECUTION_REPORT),
     ],
     forbidden: [
+      requiredFlag('--skip-worker-detail'),
       requiredFlag('--skip-strict-execution-report'),
     ],
   },

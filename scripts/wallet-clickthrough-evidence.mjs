@@ -1987,10 +1987,11 @@ This is read-only. It may fetch public Worker status/readiness endpoints, then
 prints or writes a manual Slush / standard Sui wallet evidence checklist. It
 does not create policies, submit PTBs, run demo:execute or print signing
 secrets, Worker secrets, tick tokens or WaaP approval values. With --verify the
-CLI defaults to --execution-report ${DEFAULT_STRICT_EXECUTION_REPORT}; use
+CLI defaults to --require-worker and --execution-report
+${DEFAULT_STRICT_EXECUTION_REPORT}; use --skip-worker-detail or
 --skip-strict-execution-report only for lower-strength local debugging. The
 strict verifier checks a filled artifact against public Sui transaction events
-and optional Worker detail reads, verifies activation_strategy_file hashes to the
+and required Worker detail reads, verifies activation_strategy_file hashes to the
 recorded strategy_hash without leaking secrets, requires the artifact's
 strict_execution_report_reference to point at that report path, and verifies the
 wallet-created strict report describes the same owner/wrapper lifecycle. With --apply-strategy
@@ -2049,6 +2050,7 @@ export async function main(argv = process.argv.slice(2), env = process.env, opti
     const strictExecutionReportPath = flags.has('--skip-strict-execution-report')
       ? null
       : flags.get('--execution-report') || flags.get('--strict-execution-report') || DEFAULT_STRICT_EXECUTION_REPORT
+    const requireWorkerDetail = flags.has('--require-worker') || !flags.has('--skip-worker-detail')
     const report = await verifyWalletEvidenceArtifact({
       artifactText,
       workerUrl: configuredWorkerUrl ? normalizeUrl(configuredWorkerUrl) : null,
@@ -2056,7 +2058,7 @@ export async function main(argv = process.argv.slice(2), env = process.env, opti
       readFileImpl: options.readFileImpl,
       fetchImpl: options.fetchImpl,
       timeoutMs: Number.isFinite(timeoutMs) && timeoutMs > 0 ? timeoutMs : DEFAULT_TIMEOUT_MS,
-      requireWorker: flags.has('--require-worker'),
+      requireWorker: requireWorkerDetail,
       strictExecutionReportPath,
     })
     console.log(JSON.stringify(report, null, 2))

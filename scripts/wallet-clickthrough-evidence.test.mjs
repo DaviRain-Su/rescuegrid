@@ -25,6 +25,7 @@ import packageJson from '../package.json' with { type: 'json' }
 assert.equal(parseArgs(['--format', 'markdown']).get('--format'), 'markdown')
 assert.equal(parseArgs(['--owner=0xabc']).get('--owner'), '0xabc')
 assert.match(packageJson.scripts['wallet:evidence:verify'], /--execution-report \.rescuegrid\/demo-execute-report\.json/)
+assert.match(packageJson.scripts['wallet:evidence:verify'], /--require-worker/)
 
 const sourceFiles = new Map([
   ['src/providers.jsx', '<WalletProvider autoConnect={false}><RegisterEnoki /></WalletProvider>'],
@@ -1020,6 +1021,8 @@ assert.equal(chainReads, 4)
   try {
     const code = await main([
       '--verify',
+      '--worker-url',
+      'http://worker.test',
       '--input',
       verifyCliArtifactPath,
     ], {}, {
@@ -1045,6 +1048,83 @@ assert.equal(chainReads, 4)
   assert.equal(cliReport.strict_execution_report_reference_expected, '.rescuegrid/demo-execute-report.json')
   assert.equal(cliReport.strict_execution_report.report_mode, 'wallet_created_policy')
   assert.equal(cliReport.strict_execution_report.wrapper_id, STRATEGY_WRAPPER)
+  assert.equal(cliReport.checks.find((check) => check.id === 'worker:detail').status, 'passed')
+}
+
+{
+  const verifyCliDir = mkdtempSync(join(tmpdir(), 'rescuegrid-wallet-verify-cli-worker-required-'))
+  const verifyCliArtifactPath = join(verifyCliDir, 'wallet-clickthrough-evidence.md')
+  writeFileSync(verifyCliArtifactPath, filledArtifact, 'utf8')
+  const originalLog = console.log
+  let output = ''
+  console.log = (value) => {
+    output += `${value}\n`
+  }
+  try {
+    const code = await main([
+      '--verify',
+      '--worker-url',
+      'http://worker.test',
+      '--input',
+      verifyCliArtifactPath,
+    ], {}, {
+      suiClient: fakeSuiClient,
+      fetchImpl: async () => { throw new Error('worker offline') },
+      readFileImpl: (filePath, ...args) => {
+        const normalized = String(filePath).replace(/\\/g, '/')
+        if (normalized.endsWith('/.rescuegrid/demo-execute-report.json')) {
+          return `${JSON.stringify(strictExecutionReport, null, 2)}\n`
+        }
+        return readFileSync(filePath, ...args)
+      },
+    })
+    assert.equal(code, 1)
+  } finally {
+    console.log = originalLog
+    rmSync(verifyCliDir, { recursive: true, force: true })
+  }
+  const cliReport = JSON.parse(output)
+  assert.equal(cliReport.verified, false)
+  assert.equal(cliReport.code, 'EVIDENCE_VERIFICATION_FAILED')
+  assert.equal(cliReport.checks.find((check) => check.id === 'worker:detail').status, 'failed')
+}
+
+{
+  const verifyCliDir = mkdtempSync(join(tmpdir(), 'rescuegrid-wallet-verify-cli-worker-skip-'))
+  const verifyCliArtifactPath = join(verifyCliDir, 'wallet-clickthrough-evidence.md')
+  writeFileSync(verifyCliArtifactPath, filledArtifact, 'utf8')
+  const originalLog = console.log
+  let output = ''
+  console.log = (value) => {
+    output += `${value}\n`
+  }
+  try {
+    const code = await main([
+      '--verify',
+      '--skip-worker-detail',
+      '--worker-url',
+      'http://worker.test',
+      '--input',
+      verifyCliArtifactPath,
+    ], {}, {
+      suiClient: fakeSuiClient,
+      fetchImpl: async () => { throw new Error('worker offline') },
+      readFileImpl: (filePath, ...args) => {
+        const normalized = String(filePath).replace(/\\/g, '/')
+        if (normalized.endsWith('/.rescuegrid/demo-execute-report.json')) {
+          return `${JSON.stringify(strictExecutionReport, null, 2)}\n`
+        }
+        return readFileSync(filePath, ...args)
+      },
+    })
+    assert.equal(code, 0)
+  } finally {
+    console.log = originalLog
+    rmSync(verifyCliDir, { recursive: true, force: true })
+  }
+  const cliReport = JSON.parse(output)
+  assert.equal(cliReport.verified, true)
+  assert.equal(cliReport.checks.find((check) => check.id === 'worker:detail').status, 'skipped')
 }
 
 {
@@ -1060,6 +1140,8 @@ assert.equal(chainReads, 4)
     const code = await main([
       '--verify',
       '--skip-strict-execution-report',
+      '--worker-url',
+      'http://worker.test',
       '--input',
       verifyCliArtifactPath,
     ], {}, {
@@ -1203,6 +1285,7 @@ assert.match(help.stdout, /--out/)
 assert.match(help.stdout, /--require-frontend/)
 assert.match(help.stdout, /--execution-report/)
 assert.match(help.stdout, /--skip-strict-execution-report/)
+assert.match(help.stdout, /--skip-worker-detail/)
 assert.match(
   help.stdout,
   /wallet:evidence:verify -- --input \.rescuegrid\/wallet-clickthrough-evidence\.md --require-worker --execution-report \.rescuegrid\/demo-execute-report\.json/,
