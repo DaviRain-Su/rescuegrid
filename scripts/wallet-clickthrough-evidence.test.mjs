@@ -850,15 +850,22 @@ assert.equal(verifiedReport.checks.some((check) => check.id === 'activation-stra
 assert.equal(verifiedReport.checks.some((check) => check.id === 'worker:create-activity'), true)
 assert.equal(chainReads, 2)
 
-const absoluteReferenceReport = await verifyWalletEvidenceArtifact({
-  artifactText: filledArtifact,
+const filledArtifactWithStrictReport = filledArtifact.replace(
+  '.rescuegrid/demo-execute-report.json',
+  strictExecutionReportFile,
+)
+const strictExecutionReferenceReport = await verifyWalletEvidenceArtifact({
+  artifactText: filledArtifactWithStrictReport,
   suiClient: fakeSuiClient,
   fetchImpl: fakeWorkerFetch,
-  strictExecutionReportPath: join(process.cwd(), '.rescuegrid/demo-execute-report.json'),
+  strictExecutionReportPath: strictExecutionReportFile,
 })
-assert.equal(absoluteReferenceReport.verified, true)
-assert.equal(absoluteReferenceReport.strict_execution_report_reference_expected, join(process.cwd(), '.rescuegrid/demo-execute-report.json'))
-assert.equal(absoluteReferenceReport.checks.find((check) => check.id === 'manual:strict-execution-report-reference').status, 'passed')
+assert.equal(strictExecutionReferenceReport.verified, true)
+assert.equal(strictExecutionReferenceReport.strict_execution_report_reference_expected, strictExecutionReportFile)
+assert.equal(strictExecutionReferenceReport.strict_execution_report.wrapper_id, STRATEGY_WRAPPER)
+assert.equal(strictExecutionReferenceReport.checks.find((check) => check.id === 'manual:strict-execution-report-reference').status, 'passed')
+assert.equal(strictExecutionReferenceReport.checks.find((check) => check.id === 'strict-execution:structured-evidence').status, 'passed')
+assert.equal(strictExecutionReferenceReport.checks.find((check) => check.id === 'strict-execution:wrapper').status, 'passed')
 assert.equal(chainReads, 4)
 
 const referenceMismatchReport = await verifyWalletEvidenceArtifact({
@@ -874,6 +881,45 @@ assert.equal(referenceMismatchReport.status, 'error')
 assert.equal(referenceMismatchReport.code, 'STRICT_EXECUTION_REFERENCE_MISMATCH')
 assert.equal(referenceMismatchReport.strict_execution_report_reference_mismatch.expected, '.rescuegrid/other-demo-execute-report.json')
 assert.equal(referenceMismatchReport.strict_execution_report_reference_mismatch.actual, '.rescuegrid/demo-execute-report.json')
+
+const strictExecutionReportMismatchFile = join(strategyFileDir, 'demo-execute-report-wrapper-mismatch.json')
+writeFileSync(
+  strictExecutionReportMismatchFile,
+  `${JSON.stringify({
+    ...strictExecutionReport,
+    wrapper_id: '0x9999999999999999999999999999999999999999999999999999999999999999',
+    agent_trade_event: {
+      ...strictExecutionReport.agent_trade_event,
+      wrapper_id: '0x9999999999999999999999999999999999999999999999999999999999999999',
+    },
+  }, null, 2)}\n`,
+  'utf8',
+)
+const strictExecutionMismatchReport = await verifyWalletEvidenceArtifact({
+  artifactText: filledArtifact.replace('.rescuegrid/demo-execute-report.json', strictExecutionReportMismatchFile),
+  strictExecutionReportPath: strictExecutionReportMismatchFile,
+  suiClient: {
+    async getTransactionBlock() {
+      throw new Error('should not read chain when strict execution report mismatches wallet artifact')
+    },
+  },
+})
+assert.equal(strictExecutionMismatchReport.status, 'error')
+assert.equal(strictExecutionMismatchReport.code, 'STRICT_EXECUTION_REPORT_MISMATCH')
+assert.equal(strictExecutionMismatchReport.strict_execution_report_mismatches.some((row) => row.field === 'wrapper'), true)
+
+const secretStrictVerifyReport = await verifyWalletEvidenceArtifact({
+  artifactText: filledArtifact.replace('.rescuegrid/demo-execute-report.json', secretStrictReportFile),
+  strictExecutionReportPath: secretStrictReportFile,
+  suiClient: {
+    async getTransactionBlock() {
+      throw new Error('should not read chain when strict execution report contains a secret')
+    },
+  },
+})
+assert.equal(secretStrictVerifyReport.status, 'error')
+assert.equal(secretStrictVerifyReport.code, 'STRICT_EXECUTION_REPORT_SECRET_LEAK')
+assert.equal(secretStrictVerifyReport.secret_leak_patterns.includes('agent-key'), true)
 
 const missingCreateActivityReport = await verifyWalletEvidenceArtifact({
   artifactText: filledArtifact,

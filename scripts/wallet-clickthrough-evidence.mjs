@@ -847,6 +847,19 @@ function buildStrictExecutionReportReferenceCheck(fields, expectedPath) {
   })
 }
 
+function checkDigestEqual(id, label, actual, expected, detail = null) {
+  const normalizedActual = stripCodeFence(actual)
+  const normalizedExpected = stripCodeFence(expected)
+  return createCheck({
+    id,
+    label,
+    passed: normalizedActual !== '' && normalizedActual === normalizedExpected,
+    expected,
+    actual,
+    detail,
+  })
+}
+
 function readActivationStrategyFile({ filePath, fields = {}, readFileImpl = readFileSync, compareFields = true }) {
   const rawPath = normalizeReferencePath(filePath)
   const resolvedPath = resolve(rawPath)
@@ -1198,6 +1211,47 @@ function strictExecutionReportUpdates(summary, reportFilePath) {
   return Object.fromEntries(Object.entries(updates).filter(([, value]) => evidenceValuePresent(value)))
 }
 
+function buildStrictExecutionReportContinuityChecks(fields, summary = {}) {
+  return [
+    checkEqual(
+      'strict-execution:owner',
+      'Strict execution report owner matches wallet artifact',
+      summary.owner_address,
+      fields.owner_address,
+    ),
+    checkEqual(
+      'strict-execution:wrapper',
+      'Strict execution report wrapper_id matches wallet artifact',
+      summary.wrapper_id,
+      fields.wrapper_id,
+    ),
+    checkEqual(
+      'strict-execution:mandate',
+      'Strict execution report mandate_id matches wallet artifact',
+      summary.mandate_id,
+      fields.mandate_id,
+    ),
+    checkEqual(
+      'strict-execution:strategy-hash',
+      'Strict execution report strategy_hash matches wallet artifact',
+      summary.strategy_hash,
+      fields.strategy_hash,
+    ),
+    checkDigestEqual(
+      'strict-execution:create-digest',
+      'Strict execution report create_tx_digest matches wallet artifact',
+      summary.create_tx_digest,
+      fields.create_tx_digest,
+    ),
+    checkDigestEqual(
+      'strict-execution:revoke-digest',
+      'Strict execution report revoke_tx_digest matches wallet artifact',
+      summary.revoke_tx_digest,
+      fields.revoke_tx_digest,
+    ),
+  ]
+}
+
 function withTrailingNewline(text) {
   return String(text || '').endsWith('\n') ? String(text || '') : `${text}\n`
 }
@@ -1509,6 +1563,7 @@ export async function verifyWalletEvidenceArtifact({
     create_transaction: null,
     revoke_transaction: null,
     activation_strategy_file: null,
+    strict_execution_report: null,
     execution_claimed: false,
   }
 
@@ -1535,6 +1590,34 @@ export async function verifyWalletEvidenceArtifact({
         expected: referenceCheck.expected,
         actual: referenceCheck.actual,
       }
+      return report
+    }
+    const strictExecutionReport = readStrictExecutionReportFile({
+      filePath: strictExecutionReportPath,
+      readFileImpl,
+    })
+    report.strict_execution_report = strictExecutionReport.summary
+    report.checks.push(...strictExecutionReport.checks)
+    const strictReportFailures = strictExecutionReport.checks.filter((check) => check.status === 'failed')
+    if (strictReportFailures.length > 0) {
+      const secretFailure = strictReportFailures.find((check) => check.id === 'strict-execution:secret-scan')
+      report.status = 'error'
+      report.code = secretFailure ? 'STRICT_EXECUTION_REPORT_SECRET_LEAK' : 'STRICT_EXECUTION_REPORT_INVALID'
+      if (secretFailure) report.secret_leak_patterns = secretFailure.actual || []
+      return report
+    }
+
+    const strictContinuityChecks = buildStrictExecutionReportContinuityChecks(fields, strictExecutionReport.summary)
+    report.checks.push(...strictContinuityChecks)
+    const strictContinuityFailures = strictContinuityChecks.filter((check) => check.status === 'failed')
+    if (strictContinuityFailures.length > 0) {
+      report.status = 'error'
+      report.code = 'STRICT_EXECUTION_REPORT_MISMATCH'
+      report.strict_execution_report_mismatches = strictContinuityFailures.map((check) => ({
+        field: check.id.replace('strict-execution:', ''),
+        expected: check.expected,
+        actual: check.actual,
+      }))
       return report
     }
   }
@@ -1646,7 +1729,8 @@ secrets, Worker secrets, tick tokens or WaaP approval values. With --verify it
 checks a filled artifact against public Sui transaction events and optional
 Worker detail reads, verifies activation_strategy_file hashes to the recorded
 strategy_hash without leaking secrets, and --execution-report requires the artifact's
-strict_execution_report_reference to point at that report path. With --apply-strategy
+strict_execution_report_reference to point at that report path and verifies the
+wallet-created strict report describes the same owner/wrapper lifecycle. With --apply-strategy
 it reads the UI-downloaded activation strategy JSON, recomputes the canonical
 hash, and fills only the matching owner/create/wrapper/mandate/hash fields in an
 existing wallet evidence artifact without marking click-through complete. With
