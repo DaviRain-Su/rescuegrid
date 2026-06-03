@@ -5,6 +5,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { strategyHash } from '../core/strategy.js'
 import {
+  applyActivationStrategyToWalletEvidenceArtifact,
   buildWalletEvidence,
   collectFrontendPreflight,
   collectFrontendSourceGuardrails,
@@ -328,8 +329,88 @@ const activationStrategyArtifact = {
   strategy_hash: activationStrategyHash,
   strategy_file_suggested_path: '.rescuegrid/wallet-strategy.json',
   strategy: activationStrategy,
+  activation: {
+    status: 'ok',
+    wrapper_id: STRATEGY_WRAPPER,
+    runtime_state: 'Monitoring',
+  },
 }
 writeFileSync(activationStrategyFile, `${JSON.stringify(activationStrategyArtifact, null, 2)}\n`, 'utf8')
+
+const appliedStrategyMarkdown = applyActivationStrategyToWalletEvidenceArtifact({
+  artifactText: markdown,
+  strategyFilePath: activationStrategyFile,
+})
+assert.equal(appliedStrategyMarkdown.status, 'ok')
+assert.equal(appliedStrategyMarkdown.purpose, 'browser_wallet_clickthrough_evidence_apply_strategy')
+assert.equal(appliedStrategyMarkdown.format, 'markdown')
+assert.equal(appliedStrategyMarkdown.applied_fields.includes('owner_address'), true)
+assert.equal(appliedStrategyMarkdown.applied_fields.includes('activation_strategy_file'), true)
+assert.equal(appliedStrategyMarkdown.applied_fields.includes('runtime_state_after_activate'), true)
+assert.equal(appliedStrategyMarkdown.activation_strategy_file.computed_strategy_hash, activationStrategyHash)
+assert.match(appliedStrategyMarkdown.artifact_text, /Actual click-through completed: false/)
+assert.match(appliedStrategyMarkdown.artifact_text, new RegExp(`create_tx_digest: ${activationStrategyArtifact.create_tx_digest}`))
+assert.match(appliedStrategyMarkdown.artifact_text, new RegExp(`wrapper_id: ${STRATEGY_WRAPPER}`))
+assert.match(appliedStrategyMarkdown.artifact_text, new RegExp(`mandate_id: ${STRATEGY_MANDATE}`))
+assert.match(appliedStrategyMarkdown.artifact_text, new RegExp(`strategy_hash: ${activationStrategyHash}`))
+assert.match(appliedStrategyMarkdown.artifact_text, /runtime_state_after_activate: Monitoring/)
+assert.match(appliedStrategyMarkdown.artifact_text, /revoke_tx_digest: TODO/)
+const parsedAppliedMarkdown = parseWalletEvidenceArtifact(appliedStrategyMarkdown.artifact_text)
+assert.equal(parsedAppliedMarkdown.fields.create_tx_digest, 'create-digest')
+assert.equal(parsedAppliedMarkdown.fields.wrapper_id, STRATEGY_WRAPPER)
+assert.equal(parsedAppliedMarkdown.fields.mandate_id, STRATEGY_MANDATE)
+assert.equal(parsedAppliedMarkdown.fields.strategy_hash, activationStrategyHash)
+assert.equal(parsedAppliedMarkdown.fields.activation_strategy_file, activationStrategyFile)
+assert.equal(parsedAppliedMarkdown.fields.runtime_state_after_activate, 'Monitoring')
+assert.equal(parsedAppliedMarkdown.metadata.actual_clickthrough_completed, false)
+
+const appliedStrategyJson = applyActivationStrategyToWalletEvidenceArtifact({
+  artifactText: json,
+  strategyFilePath: activationStrategyFile,
+})
+assert.equal(appliedStrategyJson.status, 'ok')
+assert.equal(appliedStrategyJson.format, 'json')
+const appliedJsonArtifact = JSON.parse(appliedStrategyJson.artifact_text)
+assert.equal(appliedJsonArtifact.actual_clickthrough_completed, false)
+assert.equal(appliedJsonArtifact.wallet.owner_address, STRATEGY_OWNER)
+assert.equal(appliedJsonArtifact.evidence_fields.create_tx_digest, 'create-digest')
+assert.equal(appliedJsonArtifact.evidence_fields.wrapper_id, STRATEGY_WRAPPER)
+assert.equal(appliedJsonArtifact.evidence_fields.mandate_id, STRATEGY_MANDATE)
+assert.equal(appliedJsonArtifact.evidence_fields.strategy_hash, activationStrategyHash)
+assert.equal(appliedJsonArtifact.evidence_fields.activation_strategy_file, activationStrategyFile)
+assert.equal(appliedJsonArtifact.evidence_fields.runtime_state_after_activate, 'Monitoring')
+
+const applyStrategyConflict = applyActivationStrategyToWalletEvidenceArtifact({
+  artifactText: markdown.replace('- wrapper_id: TODO', '- wrapper_id: 0x9999999999999999999999999999999999999999999999999999999999999999'),
+  strategyFilePath: activationStrategyFile,
+})
+assert.equal(applyStrategyConflict.status, 'error')
+assert.equal(applyStrategyConflict.code, 'ACTIVATION_STRATEGY_ARTIFACT_MISMATCH')
+assert.equal(applyStrategyConflict.conflicts[0].field, 'wrapper_id')
+
+const applyCliDir = mkdtempSync(join(tmpdir(), 'rescuegrid-wallet-apply-cli-'))
+try {
+  const applyCliArtifactPath = join(applyCliDir, 'wallet-clickthrough-evidence.md')
+  writeFileSync(applyCliArtifactPath, markdown, 'utf8')
+  const applyCli = spawnSync(process.execPath, [
+    'scripts/wallet-clickthrough-evidence.mjs',
+    '--apply-strategy',
+    '--input',
+    applyCliArtifactPath,
+    '--strategy-file',
+    activationStrategyFile,
+  ], {
+    cwd: new URL('..', import.meta.url),
+    encoding: 'utf8',
+  })
+  assert.equal(applyCli.status, 0, applyCli.stderr)
+  assert.match(applyCli.stdout, /browser_wallet_clickthrough_evidence_apply_strategy/)
+  const appliedCliBody = readFileSync(applyCliArtifactPath, 'utf8')
+  assert.match(appliedCliBody, new RegExp(`wrapper_id: ${STRATEGY_WRAPPER}`))
+  assert.match(appliedCliBody, /Actual click-through completed: false/)
+} finally {
+  rmSync(applyCliDir, { recursive: true, force: true })
+}
 
 const filledArtifact = `# RescueGrid Wallet Click-Through Evidence
 
@@ -519,6 +600,14 @@ assert.equal(secretActivationStrategyReport.status, 'error')
 assert.equal(secretActivationStrategyReport.code, 'ACTIVATION_STRATEGY_FILE_SECRET_LEAK')
 assert.equal(secretActivationStrategyReport.secret_leak_patterns.includes('agent-key'), true)
 
+const secretActivationStrategyApplyReport = applyActivationStrategyToWalletEvidenceArtifact({
+  artifactText: markdown,
+  strategyFilePath: secretActivationStrategyFile,
+})
+assert.equal(secretActivationStrategyApplyReport.status, 'error')
+assert.equal(secretActivationStrategyApplyReport.code, 'ACTIVATION_STRATEGY_FILE_SECRET_LEAK')
+assert.equal(secretActivationStrategyApplyReport.secret_leak_patterns.includes('agent-key'), true)
+
 let chainReads = 0
 const fakeSuiClient = {
   async getTransactionBlock({ digest, options }) {
@@ -691,6 +780,7 @@ assert.match(help.stdout, /--verify/)
 assert.match(help.stdout, /--out/)
 assert.match(help.stdout, /--require-frontend/)
 assert.match(help.stdout, /--execution-report/)
+assert.match(help.stdout, /--apply-strategy/)
 assert.equal(help.stdout.includes('AGENT_KEY='), false)
 assert.equal(help.stdout.includes('INTERNAL_AGENT_TICK_TOKEN='), false)
 

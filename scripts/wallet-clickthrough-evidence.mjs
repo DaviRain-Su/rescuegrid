@@ -846,7 +846,7 @@ function buildStrictExecutionReportReferenceCheck(fields, expectedPath) {
   })
 }
 
-function readActivationStrategyFile({ filePath, fields, readFileImpl = readFileSync }) {
+function readActivationStrategyFile({ filePath, fields = {}, readFileImpl = readFileSync, compareFields = true }) {
   const rawPath = normalizeReferencePath(filePath)
   const resolvedPath = resolve(rawPath)
   const checks = []
@@ -861,6 +861,7 @@ function readActivationStrategyFile({ filePath, fields, readFileImpl = readFileS
     wrapper_id: null,
     mandate_id: null,
     create_tx_digest: null,
+    activation_runtime_state: null,
   }
 
   let raw = ''
@@ -938,57 +939,228 @@ function readActivationStrategyFile({ filePath, fields, readFileImpl = readFileS
   summary.wrapper_id = parsed?.wrapper_id || null
   summary.mandate_id = parsed?.mandate_id || null
   summary.create_tx_digest = parsed?.create_tx_digest || null
-
-  checks.push(
-    checkEqual(
-      'activation-strategy:strategy-hash',
-      'Activation strategy file hashes to artifact strategy_hash',
-      computedStrategyHash,
-      fields.strategy_hash,
-    ),
-    checkEqual(
-      'activation-strategy:owner',
-      'Activation strategy owner matches wallet artifact',
-      summary.owner_address,
-      fields.owner_address,
-      'owner may come from the UI evidence envelope or the strategy.owner field',
-    ),
-  )
+  summary.activation_runtime_state = parsed?.activation?.runtime_state || null
 
   if (summary.strategy_hash) {
     checks.push(checkEqual(
-      'activation-strategy:envelope-strategy-hash',
-      'Activation strategy envelope strategy_hash matches wallet artifact',
+      'activation-strategy:envelope-computed-strategy-hash',
+      'Activation strategy envelope strategy_hash matches computed canonical hash',
       summary.strategy_hash,
-      fields.strategy_hash,
-    ))
-  }
-  if (summary.wrapper_id) {
-    checks.push(checkEqual(
-      'activation-strategy:wrapper',
-      'Activation strategy wrapper_id matches wallet artifact',
-      summary.wrapper_id,
-      fields.wrapper_id,
-    ))
-  }
-  if (summary.mandate_id) {
-    checks.push(checkEqual(
-      'activation-strategy:mandate',
-      'Activation strategy mandate_id matches wallet artifact',
-      summary.mandate_id,
-      fields.mandate_id,
-    ))
-  }
-  if (summary.create_tx_digest) {
-    checks.push(checkEqual(
-      'activation-strategy:create-digest',
-      'Activation strategy create_tx_digest matches wallet artifact',
-      summary.create_tx_digest,
-      fields.create_tx_digest,
+      computedStrategyHash,
     ))
   }
 
+  if (compareFields) {
+    checks.push(
+      checkEqual(
+        'activation-strategy:strategy-hash',
+        'Activation strategy file hashes to artifact strategy_hash',
+        computedStrategyHash,
+        fields.strategy_hash,
+      ),
+      checkEqual(
+        'activation-strategy:owner',
+        'Activation strategy owner matches wallet artifact',
+        summary.owner_address,
+        fields.owner_address,
+        'owner may come from the UI evidence envelope or the strategy.owner field',
+      ),
+    )
+
+    if (summary.strategy_hash) {
+      checks.push(checkEqual(
+        'activation-strategy:envelope-strategy-hash',
+        'Activation strategy envelope strategy_hash matches wallet artifact',
+        summary.strategy_hash,
+        fields.strategy_hash,
+      ))
+    }
+    if (summary.wrapper_id) {
+      checks.push(checkEqual(
+        'activation-strategy:wrapper',
+        'Activation strategy wrapper_id matches wallet artifact',
+        summary.wrapper_id,
+        fields.wrapper_id,
+      ))
+    }
+    if (summary.mandate_id) {
+      checks.push(checkEqual(
+        'activation-strategy:mandate',
+        'Activation strategy mandate_id matches wallet artifact',
+        summary.mandate_id,
+        fields.mandate_id,
+      ))
+    }
+    if (summary.create_tx_digest) {
+      checks.push(checkEqual(
+        'activation-strategy:create-digest',
+        'Activation strategy create_tx_digest matches wallet artifact',
+        summary.create_tx_digest,
+        fields.create_tx_digest,
+      ))
+    }
+  }
+
   return { summary, checks }
+}
+
+function mergeableFieldValuesMatch(key, existing, next) {
+  if (!evidenceValuePresent(existing)) return true
+  if (['owner_address', 'wrapper_id', 'mandate_id', 'strategy_hash'].includes(key)) {
+    return normalizeHexLike(existing) === normalizeHexLike(next)
+  }
+  return stripCodeFence(existing) === stripCodeFence(next)
+}
+
+function activationSummaryUpdates(summary, strategyFilePath) {
+  const updates = {
+    owner_address: summary.owner_address,
+    create_tx_digest: summary.create_tx_digest,
+    wrapper_id: summary.wrapper_id,
+    mandate_id: summary.mandate_id,
+    strategy_hash: summary.computed_strategy_hash,
+    activation_strategy_file: normalizeReferencePath(strategyFilePath),
+  }
+  if (summary.activation_runtime_state) {
+    updates.runtime_state_after_activate = summary.activation_runtime_state
+  }
+  return Object.fromEntries(Object.entries(updates).filter(([, value]) => evidenceValuePresent(value)))
+}
+
+function buildActivationStrategyApplyConflicts(fields, updates) {
+  return Object.entries(updates).flatMap(([key, value]) => {
+    if (key === 'runtime_state_after_activate') return []
+    if (mergeableFieldValuesMatch(key, fields[key], value)) return []
+    return [{
+      field: key,
+      existing: fields[key],
+      next: value,
+    }]
+  })
+}
+
+function withTrailingNewline(text) {
+  return String(text || '').endsWith('\n') ? String(text || '') : `${text}\n`
+}
+
+function applyUpdatesToJsonEvidenceArtifact(text, updates) {
+  const artifact = JSON.parse(String(text || '{}'))
+  artifact.evidence_fields = {
+    ...(artifact.evidence_fields || {}),
+    ...updates,
+  }
+  if (updates.owner_address) {
+    artifact.wallet = {
+      ...(artifact.wallet || {}),
+      owner_address: updates.owner_address,
+    }
+  }
+  return `${JSON.stringify(artifact, null, 2)}\n`
+}
+
+function replaceMarkdownFieldLine(line, updates, seen) {
+  const field = line.match(/^(-\s*)([A-Za-z0-9_]+)(:\s*)(.*)$/)
+  if (field && Object.prototype.hasOwnProperty.call(updates, field[2])) {
+    seen.add(field[2])
+    return `${field[1]}${field[2]}${field[3] || ': '}${updates[field[2]]}`
+  }
+  const owner = line.match(/^(Owner address:\s*)(.*)$/i)
+  if (owner && updates.owner_address) {
+    return `${owner[1]}${updates.owner_address}`
+  }
+  return line
+}
+
+function insertMissingMarkdownEvidenceFields(lines, updates, seen) {
+  const missing = Object.entries(updates).filter(([key]) => !seen.has(key))
+  if (missing.length === 0) return lines
+  const headingIndex = lines.findIndex((line) => /^## Evidence Fields\s*$/i.test(line.trim()))
+  const fieldLines = missing.map(([key, value]) => `- ${key}: ${value}`)
+  if (headingIndex < 0) {
+    return [...lines, '', '## Evidence Fields', '', ...fieldLines]
+  }
+
+  let insertIndex = headingIndex + 1
+  while (insertIndex < lines.length && lines[insertIndex].trim() === '') insertIndex += 1
+  return [
+    ...lines.slice(0, insertIndex),
+    ...fieldLines,
+    ...lines.slice(insertIndex),
+  ]
+}
+
+function applyUpdatesToMarkdownEvidenceArtifact(text, updates) {
+  const seen = new Set()
+  const lines = String(text || '').split(/\r?\n/)
+  const replaced = lines.map((line) => replaceMarkdownFieldLine(line, updates, seen))
+  return withTrailingNewline(insertMissingMarkdownEvidenceFields(replaced, updates, seen).join('\n'))
+}
+
+export function applyActivationStrategyToWalletEvidenceArtifact({
+  artifactText,
+  strategyFilePath,
+  readFileImpl = readFileSync,
+} = {}) {
+  if (!strategyFilePath) {
+    return {
+      status: 'error',
+      code: 'ACTIVATION_STRATEGY_FILE_REQUIRED',
+      message: '--strategy-file is required',
+    }
+  }
+
+  const parsed = parseWalletEvidenceArtifact(artifactText)
+  if (parsed.status !== 'ok') {
+    return {
+      status: 'error',
+      code: parsed.code || 'WALLET_EVIDENCE_ARTIFACT_INVALID',
+      message: 'wallet evidence artifact could not be parsed',
+    }
+  }
+
+  const activationStrategy = readActivationStrategyFile({
+    filePath: strategyFilePath,
+    fields: {},
+    readFileImpl,
+    compareFields: false,
+  })
+  const activationStrategyFailures = activationStrategy.checks.filter((check) => check.status === 'failed')
+  if (activationStrategyFailures.length > 0) {
+    const secretFailure = activationStrategyFailures.find((check) => check.id === 'activation-strategy:secret-scan')
+    return {
+      status: 'error',
+      code: secretFailure ? 'ACTIVATION_STRATEGY_FILE_SECRET_LEAK' : 'ACTIVATION_STRATEGY_FILE_INVALID',
+      activation_strategy_file: activationStrategy.summary,
+      checks: activationStrategy.checks,
+      secret_leak_patterns: secretFailure ? (secretFailure.actual || []) : undefined,
+    }
+  }
+
+  const updates = activationSummaryUpdates(activationStrategy.summary, strategyFilePath)
+  const conflicts = buildActivationStrategyApplyConflicts(parsed.fields || {}, updates)
+  if (conflicts.length > 0) {
+    return {
+      status: 'error',
+      code: 'ACTIVATION_STRATEGY_ARTIFACT_MISMATCH',
+      activation_strategy_file: activationStrategy.summary,
+      conflicts,
+      checks: activationStrategy.checks,
+    }
+  }
+
+  const artifact_text = parsed.format === 'json'
+    ? applyUpdatesToJsonEvidenceArtifact(artifactText, updates)
+    : applyUpdatesToMarkdownEvidenceArtifact(artifactText, updates)
+
+  return {
+    status: 'ok',
+    purpose: 'browser_wallet_clickthrough_evidence_apply_strategy',
+    format: parsed.format,
+    applied_fields: Object.keys(updates),
+    activation_strategy_file: activationStrategy.summary,
+    checks: activationStrategy.checks,
+    artifact_text,
+  }
 }
 
 function activityTxDigest(row = {}) {
@@ -1238,6 +1410,7 @@ Usage:
   npm run wallet:evidence -- --format markdown
   npm run wallet:evidence -- --format markdown --out .rescuegrid/wallet-clickthrough-evidence.md
   npm run wallet:evidence -- --frontend-url http://localhost:5175 --worker-url http://localhost:8787 --owner 0x...
+  npm run wallet:evidence -- --apply-strategy --input .rescuegrid/wallet-clickthrough-evidence.md --strategy-file .rescuegrid/wallet-strategy-....json
   npm run wallet:evidence:verify -- --input .rescuegrid/wallet-clickthrough-evidence.md --require-worker
   npm run wallet:evidence:verify -- --input .rescuegrid/wallet-clickthrough-evidence.md --execution-report .rescuegrid/demo-execute-report.json
 
@@ -1248,7 +1421,10 @@ secrets, Worker secrets, tick tokens or WaaP approval values. With --verify it
 checks a filled artifact against public Sui transaction events and optional
 Worker detail reads, verifies activation_strategy_file hashes to the recorded
 strategy_hash without leaking secrets, and --execution-report requires the artifact's
-strict_execution_report_reference to point at that report path. With
+strict_execution_report_reference to point at that report path. With --apply-strategy
+it reads the UI-downloaded activation strategy JSON, recomputes the canonical
+hash, and fills only the matching owner/create/wrapper/mandate/hash fields in an
+existing wallet evidence artifact without marking click-through complete. With
 --require-frontend / --require-worker it fails before
 the manual click-through when the local services or login guardrails are not
 ready. For final same-wrapper execution evidence, keep the wallet-created policy
@@ -1299,6 +1475,33 @@ export async function main(argv = process.argv.slice(2), env = process.env, opti
     })
     console.log(JSON.stringify(report, null, 2))
     return report.verified ? 0 : 1
+  }
+
+  if (flags.has('--apply-strategy')) {
+    const inputPath = flags.get('--input') || flags.get('--artifact') || '.rescuegrid/wallet-clickthrough-evidence.md'
+    const strategyFilePath = flags.get('--strategy-file') || flags.get('--activation-strategy-file')
+    const outPath = flags.get('--out') || inputPath
+    const artifactText = readFileSync(resolve(String(inputPath)), 'utf8')
+    const result = applyActivationStrategyToWalletEvidenceArtifact({
+      artifactText,
+      strategyFilePath,
+      readFileImpl: options.readFileImpl,
+    })
+    if (result.status !== 'ok') {
+      console.error(JSON.stringify(result, null, 2))
+      return 1
+    }
+    const resolvedOut = resolve(String(outPath))
+    mkdirSync(dirname(resolvedOut), { recursive: true })
+    writeFileSync(resolvedOut, result.artifact_text, 'utf8')
+    const { artifact_text: _artifactText, ...summary } = result
+    console.log(JSON.stringify({
+      ...summary,
+      input: resolve(String(inputPath)),
+      out: resolvedOut,
+      bytes: Buffer.byteLength(result.artifact_text),
+    }, null, 2))
+    return 0
   }
 
   const [frontendState, workerState] = await Promise.all([
