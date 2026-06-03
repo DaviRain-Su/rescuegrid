@@ -12,8 +12,10 @@ export const SIGNER_CODE_WAAP_APPROVAL_PENDING = 'WAAP_APPROVAL_PENDING'
 export const SIGNER_CODE_WAAP_APPROVAL_DENIED = 'WAAP_APPROVAL_DENIED'
 export const SIGNER_CODE_WAAP_POLICY_BLOCKED = 'WAAP_POLICY_BLOCKED'
 export const SIGNER_CODE_WAAP_TIMEOUT = 'WAAP_TIMEOUT'
+export const SIGNER_CODE_PER_USER_CLOUD_SIGNER_NOT_VALIDATED = 'PER_USER_CLOUD_SIGNER_NOT_VALIDATED'
 
 export const SIGNER_KIND_WORKER_SECRET = 'worker-secret'
+export const SIGNER_KIND_CLOUD_PER_USER = 'cloud-per-user'
 export const SIGNER_KIND_LOCAL_DAEMON = 'local-daemon'
 export const SIGNER_KIND_WAAP = 'waap'
 export const SIGNER_KIND_HARDWARE = 'hardware'
@@ -21,6 +23,7 @@ export const SIGNER_KIND_REMOTE = 'remote-signer'
 
 export const KNOWN_SIGNER_KINDS = [
   SIGNER_KIND_WORKER_SECRET,
+  SIGNER_KIND_CLOUD_PER_USER,
   SIGNER_KIND_LOCAL_DAEMON,
   SIGNER_KIND_WAAP,
   SIGNER_KIND_HARDWARE,
@@ -357,10 +360,29 @@ function waapSignerAdapter(env, expectedAddress, waapCliRunner) {
   }
 }
 
+function cloudPerUserSignerAdapter(expectedAddress) {
+  const unavailableDetail = 'cloud-per-user signer requires Seal/Walrus per-user agent-key provisioning and is not implemented in this runtime.'
+  return {
+    kind: SIGNER_KIND_CLOUD_PER_USER,
+    address: null,
+    expected_address: expectedAddress,
+    signer_matches_expected: false,
+    available: false,
+    unavailable_code: SIGNER_CODE_PER_USER_CLOUD_SIGNER_NOT_VALIDATED,
+    unavailable_detail: unavailableDetail,
+    async signAndSubmit() {
+      const error = new Error(unavailableDetail)
+      error.code = SIGNER_CODE_PER_USER_CLOUD_SIGNER_NOT_VALIDATED
+      throw error
+    },
+  }
+}
+
 export function resolveSignerAdapter(env, { client, expectedAgentAddress = DEPLOYMENT.agent.address, waapCliRunner = null } = {}) {
   const kind = signerKindFromEnv(env)
   const expectedAddress = expectedAgentAddress
   if (kind === SIGNER_KIND_WORKER_SECRET) return workerSecretSignerAdapter(env, client, expectedAddress)
+  if (kind === SIGNER_KIND_CLOUD_PER_USER) return cloudPerUserSignerAdapter(expectedAddress)
   if (kind === SIGNER_KIND_LOCAL_DAEMON) return localDaemonSignerAdapter(env, client, expectedAddress)
   if (kind === SIGNER_KIND_WAAP) return waapSignerAdapter(env, expectedAddress, waapCliRunner)
   return unsupportedSignerAdapter(kind, expectedAddress)
@@ -390,12 +412,14 @@ export function signerAdapterStatus(env, options = {}) {
 
 function signerRuntimeScope(kind) {
   if (kind === SIGNER_KIND_WORKER_SECRET) return 'cloud-worker'
+  if (kind === SIGNER_KIND_CLOUD_PER_USER) return 'cloud-worker'
   if (kind === SIGNER_KIND_LOCAL_DAEMON) return 'local-daemon'
   return 'external-signer'
 }
 
 function signerCustodyModel(kind) {
   if (kind === SIGNER_KIND_WORKER_SECRET) return 'worker-held-agent-key'
+  if (kind === SIGNER_KIND_CLOUD_PER_USER) return 'seal-walrus-per-user-agent-key'
   if (kind === SIGNER_KIND_LOCAL_DAEMON) return 'local-agent-key'
   if (kind === SIGNER_KIND_WAAP) return 'external-policy-signer'
   if (kind === SIGNER_KIND_HARDWARE) return 'owner-controlled-hardware'
@@ -410,6 +434,18 @@ function signerCapabilities(kind) {
       local_daemon_supported: false,
       external_approval_required: false,
       production_mainnet_allowed: false,
+    }
+  }
+  if (kind === SIGNER_KIND_CLOUD_PER_USER) {
+    return {
+      cloud_worker_supported: true,
+      local_daemon_supported: false,
+      external_approval_required: false,
+      production_mainnet_allowed: false,
+      seal_walrus_required: true,
+      per_user_agent_required: true,
+      user_registration_required: true,
+      implementation_status: 'planned',
     }
   }
   if (kind === SIGNER_KIND_LOCAL_DAEMON) {
@@ -487,6 +523,36 @@ export function externalSignerPosture(env = {}, options = {}) {
     unavailable_code: adapter.available ? null : adapter.unavailable_code,
     unavailable_detail: adapter.available ? null : adapter.unavailable_detail,
     approval_state: available ? 'ready_for_approval' : selected ? 'unavailable' : 'not_selected',
+    secrets_returned: false,
+  }
+}
+
+export function cloudPerUserSignerPosture(env = {}, options = {}) {
+  const expectedAddress = options.expectedAgentAddress || DEPLOYMENT.agent.address
+  const selected = signerKindFromEnv(env) === SIGNER_KIND_CLOUD_PER_USER
+  const adapter = resolveSignerAdapter(
+    { ...env, SIGNER_KIND: SIGNER_KIND_CLOUD_PER_USER },
+    { ...options, expectedAgentAddress: expectedAddress },
+  )
+  return {
+    kind: SIGNER_KIND_CLOUD_PER_USER,
+    selected,
+    status: selected ? 'unavailable' : 'not_selected',
+    available: false,
+    cloud_worker_supported: true,
+    local_daemon_supported: false,
+    seal_walrus_required: true,
+    per_user_agent_required: true,
+    user_registration_required: true,
+    movegate_passport_required: true,
+    decryptor_identity_required: true,
+    mvp_shared_key_fallback_kind: SIGNER_KIND_WORKER_SECRET,
+    production_mainnet_allowed: false,
+    address: null,
+    expected_address: expectedAddress,
+    signer_matches_expected: false,
+    unavailable_code: adapter.unavailable_code,
+    unavailable_detail: adapter.unavailable_detail,
     secrets_returned: false,
   }
 }

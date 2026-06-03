@@ -1,12 +1,13 @@
 import { configuredChainDataProviderKind, configuredGraphqlEndpoint } from './chain-data-provider.js'
 import { getMonitoringProviderStatus } from './monitoring-provider.js'
 import { DEPLOYMENT } from './sui-tx.js'
-import { externalSignerPosture, signerAdapterStatus, signerCapabilityMatrix } from './signer-adapters.js'
+import { cloudPerUserSignerPosture, externalSignerPosture, signerAdapterStatus, signerCapabilityMatrix } from './signer-adapters.js'
 
 export function getRuntimeStatus(env = {}, options = {}) {
   const signer = signerAdapterStatus(env, options)
   const signerCapabilities = signerCapabilityMatrix(env, options)
   const externalSigner = externalSignerPosture(env, options)
+  const cloudPerUserSigner = cloudPerUserSignerPosture(env, options)
   const chainDataProviderKind = configuredChainDataProviderKind(env)
   const daemonMode = env.RESCUEGRID_DAEMON_MODE === 'true'
   return {
@@ -20,6 +21,7 @@ export function getRuntimeStatus(env = {}, options = {}) {
     signer,
     signer_capabilities: signerCapabilities,
     external_signer: externalSigner,
+    cloud_per_user_signer: cloudPerUserSigner,
     execution: {
       configured: env.EXECUTION_ENABLED === 'true',
       enabled: signer.execution_enabled,
@@ -38,6 +40,8 @@ export function getRuntimeStatus(env = {}, options = {}) {
       local_daemon_supported: true,
       mainnet_requires_external_signer: true,
       external_signer_supported: true,
+      per_user_cloud_signer_supported: true,
+      per_user_cloud_signer_validated: false,
     },
   }
 }

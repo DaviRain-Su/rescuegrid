@@ -40,6 +40,40 @@ assert.equal(workerRows.find((row) => row.id === 'external-waap-signer').warning
 assert.match(workerRows.find((row) => row.id === 'external-waap-signer').detail, /not selected/)
 assert.match(workerRows.find((row) => row.id === 'external-waap-signer').detail, /mainnet requires external signer/)
 
+const cloudPerUser = {
+  signer: {
+    kind: 'cloud-per-user',
+    address: null,
+    expected_address: agent,
+    signer_matches_expected: false,
+    available: false,
+    execution_enabled: false,
+    unavailable_code: 'PER_USER_CLOUD_SIGNER_NOT_VALIDATED',
+    unavailable_detail: 'cloud-per-user signer requires Seal/Walrus per-user agent-key provisioning and is not implemented in this runtime.',
+    known_signer_kinds: ['worker-secret', 'cloud-per-user', 'local-daemon', 'waap'],
+  },
+  execution: {
+    enabled: false,
+    blocker_code: 'PER_USER_CLOUD_SIGNER_NOT_VALIDATED',
+  },
+  runtime: {
+    cloud_worker: true,
+    local_daemon_supported: true,
+    mainnet_requires_external_signer: true,
+  },
+  external_signer: {
+    kind: 'waap',
+    submission_runner_configured: false,
+  },
+}
+
+const cloudPerUserRows = signerHealthRows(cloudPerUser, fallback)
+const cloudPerUserRuntime = cloudPerUserRows.find((row) => row.id === 'runtime-signer')
+assert.equal(cloudPerUserRuntime.name, 'Per-user cloud signer')
+assert.equal(cloudPerUserRuntime.kind, 'cloud')
+assert.equal(cloudPerUserRuntime.warning, true)
+assert.match(cloudPerUserRuntime.detail, /PER_USER_CLOUD_SIGNER_NOT_VALIDATED/)
+
 const waapCloud = {
   signer: {
     kind: 'waap',

@@ -4,7 +4,11 @@ import {
   resolveExecutionReadinessThresholds,
 } from '../src/execution-readiness.js'
 import { getRuntimeStatus } from '../src/runtime-status.js'
-import { SIGNER_KIND_WAAP } from '../src/signer-adapters.js'
+import {
+  SIGNER_CODE_PER_USER_CLOUD_SIGNER_NOT_VALIDATED,
+  SIGNER_KIND_CLOUD_PER_USER,
+  SIGNER_KIND_WAAP,
+} from '../src/signer-adapters.js'
 import { DEPLOYMENT } from '../src/sui-tx.js'
 
 function chainData({ dbusdc = '1000', deep = '10', suiMist = '1000000' } = {}) {
@@ -61,9 +65,13 @@ function readyRuntimeStatus() {
   assert.equal(readiness.execution_claimed, false, 'readiness never claims a transaction execution')
   assert.equal(readiness.signer.kind, 'worker-secret')
   assert.equal(readiness.signer_capabilities.some((row) => row.kind === 'worker-secret' && row.selected), true)
+  assert.equal(readiness.signer_capabilities.some((row) => row.kind === SIGNER_KIND_CLOUD_PER_USER && row.seal_walrus_required === true), true)
   assert.equal(readiness.signer_capabilities.some((row) => row.kind === SIGNER_KIND_WAAP && row.local_daemon_supported === true), true)
   assert.equal(readiness.external_signer.kind, SIGNER_KIND_WAAP)
   assert.equal(readiness.external_signer.secrets_returned, false)
+  assert.equal(readiness.cloud_per_user_signer.kind, SIGNER_KIND_CLOUD_PER_USER)
+  assert.equal(readiness.cloud_per_user_signer.selected, false)
+  assert.equal(readiness.cloud_per_user_signer.secrets_returned, false)
   assert.equal(readiness.signer.address, null)
   assert.equal(readiness.signer.expected_address, DEPLOYMENT.agent.address)
   assert.equal(readiness.execution.enabled, false)
@@ -83,6 +91,31 @@ function readyRuntimeStatus() {
   assert.equal(readiness.execution_claimed, false, 'readiness never claims a transaction execution')
   assert.equal(readiness.signer.kind, 'worker-secret')
   assert.equal(readiness.execution.enabled, true)
+}
+
+{
+  const readiness = await buildExecutionReadiness({
+    env: {
+      SIGNER_KIND: SIGNER_KIND_CLOUD_PER_USER,
+      EXECUTION_ENABLED: 'true',
+      SEAL_ACCESS_TOKEN: 'seal-secret',
+      WALRUS_ACCESS_TOKEN: 'walrus-secret',
+    },
+    chainData: chainData(),
+    requested: { dbusdc_threshold: '100', deep_threshold: '1', sui_gas_threshold: '1000' },
+  })
+  assert.equal(readiness.funding_ready, true)
+  assert.equal(readiness.execution_ready, false)
+  assert.equal(readiness.ready, false)
+  assert.deepEqual(readiness.blocker_codes, [SIGNER_CODE_PER_USER_CLOUD_SIGNER_NOT_VALIDATED])
+  assert.equal(readiness.signer.kind, SIGNER_KIND_CLOUD_PER_USER)
+  assert.equal(readiness.signer.available, false)
+  assert.equal(readiness.cloud_per_user_signer.selected, true)
+  assert.equal(readiness.cloud_per_user_signer.status, 'unavailable')
+  assert.equal(readiness.cloud_per_user_signer.unavailable_code, SIGNER_CODE_PER_USER_CLOUD_SIGNER_NOT_VALIDATED)
+  assert.equal(readiness.execution_claimed, false)
+  assert.equal(JSON.stringify(readiness).includes('seal-secret'), false)
+  assert.equal(JSON.stringify(readiness).includes('walrus-secret'), false)
 }
 
 {

@@ -705,7 +705,7 @@ Response:
     "execution_enabled": false,
     "unavailable_code": "EXECUTION_DISABLED",
     "unavailable_detail": "worker AGENT_KEY is unavailable",
-    "known_signer_kinds": ["worker-secret", "local-daemon", "waap", "hardware", "remote-signer"]
+    "known_signer_kinds": ["worker-secret", "cloud-per-user", "local-daemon", "waap", "hardware", "remote-signer"]
   },
   "signer_capabilities": [
     {
@@ -734,6 +734,22 @@ Response:
     "waap_cli_enabled": false,
     "submission_runner_configured": false,
     "permission_token_configured": false,
+    "secrets_returned": false
+  },
+  "cloud_per_user_signer": {
+    "kind": "cloud-per-user",
+    "selected": false,
+    "status": "not_selected",
+    "available": false,
+    "cloud_worker_supported": true,
+    "local_daemon_supported": false,
+    "seal_walrus_required": true,
+    "per_user_agent_required": true,
+    "user_registration_required": true,
+    "movegate_passport_required": true,
+    "decryptor_identity_required": true,
+    "mvp_shared_key_fallback_kind": "worker-secret",
+    "production_mainnet_allowed": false,
     "secrets_returned": false
   },
   "execution": {
@@ -765,7 +781,9 @@ Response:
     "local_daemon": false,
     "local_daemon_supported": true,
     "mainnet_requires_external_signer": true,
-    "external_signer_supported": true
+    "external_signer_supported": true,
+    "per_user_cloud_signer_supported": true,
+    "per_user_cloud_signer_validated": false
   }
 }
 ```
@@ -778,6 +796,8 @@ Rules:
 - `local-daemon` is available only when `RESCUEGRID_DAEMON_MODE=true`, a local `AGENT_KEY` is present, the secret is valid, and the derived public address equals `expected_address`.
 - Invalid secrets return `INVALID_SIGNER_SECRET`; valid secrets for the wrong address return `SIGNER_ADDRESS_MISMATCH`. Both keep `execution.enabled=false`.
 - `signer_capabilities` is a public capability matrix for the selected runtime and known future signer kinds. It may expose support flags, public addresses, custody model names, runner posture and blocker codes, but no secret values.
+- `cloud-per-user` is a Post-MVP cloud signer boundary for per-user agent keys backed by Seal + Walrus and a per-user MoveGate AgentPassport. It is visible in `known_signer_kinds`, `signer_capabilities` and `cloud_per_user_signer`, but it must return `PER_USER_CLOUD_SIGNER_NOT_VALIDATED`, `available=false`, `execution.enabled=false` and `production_mainnet_allowed=false` until user registration, encrypted key write/read, decryptor identity and per-user policy creation are implemented and validated.
+- `cloud_per_user_signer` may expose only public posture: selected/status flags, Seal/Walrus requirement flags, per-user agent/passport requirements, expected agent address, blocker code/detail and `secrets_returned=false`. It must never expose Seal tokens, Walrus tokens, private key material, decrypted payloads, Worker secrets or raw decryptor output.
 - `external_signer` is the public WaaP posture used by Profile / Risk Center and local daemon status. It must distinguish `not_selected`, `unavailable` and `available`; it must expose whether the CLI is enabled, whether the local submission runner is configured, whether a permission token is configured, and whether the WaaP address matches `expected_address`.
 - `waap` is disabled by default and must return `UNSUPPORTED_SIGNER` unless the runtime is a local daemon with `RESCUEGRID_DAEMON_MODE=true`, `RESCUEGRID_WAAP_CLI_ENABLED=true`, and `RESCUEGRID_WAAP_SUI_ADDRESS` matching `expected_address`.
 - `waap` must still return `WAAP_RUNNER_MISSING` unless the local daemon injects the reviewed `waap-cli` submission runner. A configured WaaP address or permission-token posture alone is not execution readiness.
@@ -1008,6 +1028,15 @@ Response:
       "execution_enabled": false
     },
     {
+      "kind": "cloud-per-user",
+      "selected": false,
+      "runtime_scope": "cloud-worker",
+      "seal_walrus_required": true,
+      "per_user_agent_required": true,
+      "implementation_status": "planned",
+      "execution_enabled": false
+    },
+    {
       "kind": "waap",
       "selected": false,
       "runtime_scope": "external-signer",
@@ -1020,6 +1049,14 @@ Response:
     "status": "not_selected",
     "submission_runner_configured": false,
     "permission_token_configured": false,
+    "secrets_returned": false
+  },
+  "cloud_per_user_signer": {
+    "kind": "cloud-per-user",
+    "selected": false,
+    "status": "not_selected",
+    "seal_walrus_required": true,
+    "per_user_agent_required": true,
     "secrets_returned": false
   },
   "execution": { "configured": false, "enabled": false, "blocker_code": "EXECUTION_DISABLED" },
@@ -1038,7 +1075,7 @@ Response:
 Rules:
 
 - `ready` / `execution_ready` are true only when signer execution is enabled and DBUSDC, DEEP and SUI gas thresholds are satisfied.
-- `signer_capabilities` and `external_signer` are copied from runtime status into this readiness contract so funding handoff, funding watch, mission readiness and Profile explain the same signer gate. These fields are public posture only and must not include permission token values, session files or secret material.
+- `signer_capabilities`, `external_signer` and `cloud_per_user_signer` are copied from runtime status into this readiness contract so funding handoff, funding watch, mission readiness and Profile explain the same signer gate. These fields are public posture only and must not include permission token values, session files, Seal/Walrus tokens, private key material or secret material.
 - Query parameters `dbusdc_threshold`, `deep_threshold` and `sui_gas_threshold` may raise the required threshold for a strict demo or future policy, but they cannot weaken configured minimums.
 - `/api/balances` may include the same `funding` and `execution_readiness` object for Profile compatibility, but callers that need execution preflight should prefer this endpoint.
 - `execution_claimed` is always false here; only a real tick result with `AgentTradeExecuted` and spend increase can claim execution.
@@ -1064,6 +1101,7 @@ Output:
   },
   "signer_capabilities": [],
   "external_signer": { "kind": "waap", "status": "not_selected", "secrets_returned": false },
+  "cloud_per_user_signer": { "kind": "cloud-per-user", "status": "not_selected", "secrets_returned": false },
   "agent": {
     "address": "0x...",
     "passport_id": "0x...",

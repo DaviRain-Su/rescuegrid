@@ -231,10 +231,25 @@ function frontendPreflightPassed(frontendState = {}) {
     source.all_passed === true
 }
 
+function summarizeCloudPerUserSigner(posture = null) {
+  if (!posture) return null
+  return {
+    kind: posture.kind || null,
+    selected: posture.selected ?? null,
+    status: posture.status || null,
+    available: posture.available ?? null,
+    seal_walrus_required: posture.seal_walrus_required ?? null,
+    per_user_agent_required: posture.per_user_agent_required ?? null,
+    unavailable_code: posture.unavailable_code || null,
+    secrets_returned: posture.secrets_returned === true,
+  }
+}
+
 function summarizeRuntimeStatus(result) {
   const body = result?.body || {}
   const selectedCapability = (body.signer_capabilities || []).find((row) => row.selected) || null
   const externalSigner = body.external_signer || null
+  const cloudPerUserSigner = body.cloud_per_user_signer || null
   return {
     status: result?.status || 'unavailable',
     http_status: result?.http_status || 0,
@@ -267,6 +282,7 @@ function summarizeRuntimeStatus(result) {
       unavailable_code: externalSigner.unavailable_code || null,
       secrets_returned: externalSigner.secrets_returned === true,
     } : null,
+    cloud_per_user_signer: summarizeCloudPerUserSigner(cloudPerUserSigner),
     chain_data_provider: body.chain_data_provider?.kind || null,
     monitoring_provider: body.monitoring_provider?.kind || null,
   }
@@ -276,6 +292,7 @@ function summarizeReadiness(result) {
   const body = result?.body || {}
   const selectedCapability = (body.signer_capabilities || []).find((row) => row.selected) || null
   const externalSigner = body.external_signer || null
+  const cloudPerUserSigner = body.cloud_per_user_signer || null
   return {
     status: result?.status || 'unavailable',
     http_status: result?.http_status || 0,
@@ -305,6 +322,7 @@ function summarizeReadiness(result) {
       unavailable_code: externalSigner.unavailable_code || null,
       secrets_returned: externalSigner.secrets_returned === true,
     } : null,
+    cloud_per_user_signer: summarizeCloudPerUserSigner(cloudPerUserSigner),
     execution_ready: body.execution_ready ?? null,
     funding_ready: body.funding_ready ?? null,
     execution_claimed: body.execution_claimed ?? false,
@@ -433,12 +451,17 @@ function buildWorkerPublicStateChecks(workerState = {}) {
     }),
     createCheck({
       id: 'worker-public:no-external-signer-secrets',
-      label: 'Worker public signer posture does not report external signer secrets',
-      passed: runtime.external_signer?.secrets_returned !== true && readiness.external_signer?.secrets_returned !== true,
-      expected: 'secrets_returned=false',
+      label: 'Worker public signer posture does not report signer secrets',
+      passed: runtime.external_signer?.secrets_returned !== true &&
+        readiness.external_signer?.secrets_returned !== true &&
+        runtime.cloud_per_user_signer?.secrets_returned !== true &&
+        readiness.cloud_per_user_signer?.secrets_returned !== true,
+      expected: 'secrets_returned=false for external and cloud-per-user signer posture',
       actual: {
-        runtime: runtime.external_signer?.secrets_returned ?? null,
-        readiness: readiness.external_signer?.secrets_returned ?? null,
+        runtime_external: runtime.external_signer?.secrets_returned ?? null,
+        readiness_external: readiness.external_signer?.secrets_returned ?? null,
+        runtime_cloud_per_user: runtime.cloud_per_user_signer?.secrets_returned ?? null,
+        readiness_cloud_per_user: readiness.cloud_per_user_signer?.secrets_returned ?? null,
       },
     }),
   ]

@@ -65,6 +65,7 @@ export async function buildExecutionReadiness({ env = {}, chainData = null, requ
     signer: status.signer,
     signer_capabilities: status.signer_capabilities || [],
     external_signer: status.external_signer || null,
+    cloud_per_user_signer: status.cloud_per_user_signer || null,
     execution: status.execution,
     runtime: status.runtime || null,
     balance_manager: {

@@ -20,6 +20,7 @@ function signerStatus(signer = {}, execution = {}) {
 
 function runtimeSignerName(kind) {
   if (kind === 'worker-secret') return 'Cloud agent executor'
+  if (kind === 'cloud-per-user') return 'Per-user cloud signer'
   if (kind === 'local-daemon') return 'Local daemon signer'
   if (kind === 'waap') return 'WaaP CLI signer'
   if (kind === 'hardware') return 'Hardware signer'
@@ -29,6 +30,7 @@ function runtimeSignerName(kind) {
 
 function runtimeSignerUiKind(kind) {
   if (kind === 'worker-secret') return 'cloud'
+  if (kind === 'cloud-per-user') return 'cloud'
   if (kind === 'local-daemon') return 'local'
   if (EXTERNAL_SIGNER_KINDS.has(kind)) return 'external'
   return 'runtime'

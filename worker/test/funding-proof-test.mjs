@@ -64,6 +64,17 @@ function readiness({ executionReady = false } = {}) {
       session_value: 'super-secret-session',
       raw_runner_output: 'super-secret-runner-output',
     },
+    cloud_per_user_signer: {
+      kind: 'cloud-per-user',
+      selected: false,
+      status: 'not_selected',
+      available: false,
+      seal_walrus_required: true,
+      per_user_agent_required: true,
+      secrets_returned: false,
+      seal_access_token: 'super-secret-seal-token',
+      walrus_access_token: 'super-secret-walrus-token',
+    },
     execution_ready: executionReady,
     funding_ready: executionReady,
     blocker_codes: executionReady ? [] : ['EXECUTION_DISABLED', 'INSUFFICIENT_DBUSDC', 'INSUFFICIENT_DEEP'],
@@ -166,9 +177,13 @@ function assertNoSecrets(value) {
   assert.equal(json.includes('super-secret-token'), false)
   assert.equal(json.includes('super-secret-session'), false)
   assert.equal(json.includes('super-secret-runner-output'), false)
+  assert.equal(json.includes('super-secret-seal-token'), false)
+  assert.equal(json.includes('super-secret-walrus-token'), false)
   assert.equal(json.includes('"permission_token":'), false)
   assert.equal(json.includes('"session_value":'), false)
   assert.equal(json.includes('"raw_runner_output":'), false)
+  assert.equal(json.includes('"seal_access_token":'), false)
+  assert.equal(json.includes('"walrus_access_token":'), false)
 }
 
 {
@@ -274,6 +289,8 @@ function assertNoSecrets(value) {
   assert.equal(report.funding_proven, false)
   assert.equal(report.blocker_codes.includes('INSUFFICIENT_DBUSDC'), true)
   assert.equal(report.policy_creation_allowed, false)
+  assert.equal(report.cloud_per_user_signer.kind, 'cloud-per-user')
+  assert.equal(report.cloud_per_user_signer.secrets_returned, false)
   assertNoSecrets(report)
 }
 
@@ -300,6 +317,8 @@ function assertNoSecrets(value) {
   assert.equal(report.transaction_evidence.target_evidence_passed, true)
   assert.equal(report.transaction_evidence.target_asset_hits.includes('DBUSDC'), true)
   assert.equal(report.transaction_evidence.target_asset_hits.includes('DEEP'), true)
+  assert.equal(report.cloud_per_user_signer.kind, 'cloud-per-user')
+  assert.equal(report.cloud_per_user_signer.seal_walrus_required, true)
   assertNoSecrets(report)
 }
 

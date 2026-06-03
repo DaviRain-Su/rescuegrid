@@ -242,6 +242,16 @@ try {
   })
   assert.equal(validateDaemonConfig(mainnetWorkerSecret).code, 'MAINNET_REQUIRES_EXTERNAL_SIGNER')
 
+  const mainnetCloudPerUser = resolveDaemonConfig({
+    flags: new Map([
+      ['--config', configPath],
+      ['--chain', 'sui:mainnet'],
+      ['--signer-kind', 'cloud-per-user'],
+    ]),
+    env: {},
+  })
+  assert.equal(validateDaemonConfig(mainnetCloudPerUser).code, 'MAINNET_SIGNER_NOT_VALIDATED')
+
   const forceNoDemo = resolveDaemonConfig({
     flags: new Map([
       ['--config', configPath],

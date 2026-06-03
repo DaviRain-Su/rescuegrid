@@ -69,6 +69,26 @@ const readiness = {
     session_value: 'super-secret-session',
     raw_runner_output: 'super-secret-output',
   },
+  cloud_per_user_signer: {
+    kind: 'cloud-per-user',
+    selected: false,
+    status: 'not_selected',
+    available: false,
+    cloud_worker_supported: true,
+    local_daemon_supported: false,
+    seal_walrus_required: true,
+    per_user_agent_required: true,
+    user_registration_required: true,
+    movegate_passport_required: true,
+    decryptor_identity_required: true,
+    mvp_shared_key_fallback_kind: 'worker-secret',
+    production_mainnet_allowed: false,
+    expected_address: DEPLOYMENT.agent.address,
+    unavailable_code: 'PER_USER_CLOUD_SIGNER_NOT_VALIDATED',
+    secrets_returned: false,
+    seal_access_token: 'super-secret-seal-token',
+    walrus_access_token: 'super-secret-walrus-token',
+  },
   execution_ready: false,
   funding_ready: false,
   blocker_codes: ['EXECUTION_DISABLED', 'INSUFFICIENT_DBUSDC', 'INSUFFICIENT_DEEP'],
@@ -143,10 +163,16 @@ assert.deepEqual(handoff.execution_gate, {
 assert.equal(handoff.signer_capabilities.some((row) => row.kind === 'waap' && row.runner_configured === false), true)
 assert.equal(handoff.external_signer.kind, 'waap')
 assert.equal(handoff.external_signer.secrets_returned, false)
+assert.equal(handoff.cloud_per_user_signer.kind, 'cloud-per-user')
+assert.equal(handoff.cloud_per_user_signer.seal_walrus_required, true)
+assert.equal(handoff.cloud_per_user_signer.per_user_agent_required, true)
+assert.equal(handoff.cloud_per_user_signer.secrets_returned, false)
 assert.equal(JSON.stringify(handoff).includes('super-secret'), false)
 assert.equal(JSON.stringify(handoff).includes('"permission_token":'), false)
 assert.equal(JSON.stringify(handoff).includes('"session_value":'), false)
 assert.equal(JSON.stringify(handoff).includes('"raw_runner_output":'), false)
+assert.equal(JSON.stringify(handoff).includes('"seal_access_token":'), false)
+assert.equal(JSON.stringify(handoff).includes('"walrus_access_token":'), false)
 
 const markdown = serializeFundingHandoff(handoff, 'markdown')
 assert.match(markdown, /RescueGrid Funding Request/)

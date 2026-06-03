@@ -112,6 +112,10 @@ function publicSignerCapabilities(rows = []) {
       'local_daemon_supported',
       'external_approval_required',
       'production_mainnet_allowed',
+      'seal_walrus_required',
+      'per_user_agent_required',
+      'user_registration_required',
+      'implementation_status',
     ]))
     .filter((row) => Object.keys(row).length > 0)
 }
@@ -137,6 +141,31 @@ function publicExternalSigner(posture = null) {
     'unavailable_code',
     'unavailable_detail',
     'approval_state',
+    'secrets_returned',
+  ])
+  return Object.keys(publicPosture).length === 0 ? null : publicPosture
+}
+
+function publicCloudPerUserSigner(posture = null) {
+  const publicPosture = pickPublicFields(posture, [
+    'kind',
+    'selected',
+    'status',
+    'available',
+    'cloud_worker_supported',
+    'local_daemon_supported',
+    'seal_walrus_required',
+    'per_user_agent_required',
+    'user_registration_required',
+    'movegate_passport_required',
+    'decryptor_identity_required',
+    'mvp_shared_key_fallback_kind',
+    'production_mainnet_allowed',
+    'address',
+    'expected_address',
+    'signer_matches_expected',
+    'unavailable_code',
+    'unavailable_detail',
     'secrets_returned',
   ])
   return Object.keys(publicPosture).length === 0 ? null : publicPosture
@@ -355,6 +384,7 @@ export function summarizeFundingReadiness(readiness) {
         signer_execution_enabled: Boolean(readiness.signer?.execution_enabled || readiness.execution?.enabled),
         signer_capabilities: publicSignerCapabilities(readiness.signer_capabilities),
         external_signer: publicExternalSigner(readiness.external_signer),
+        cloud_per_user_signer: publicCloudPerUserSigner(readiness.cloud_per_user_signer),
         execution_gate: executionGate(readiness),
       },
     })
@@ -376,6 +406,7 @@ export function summarizeFundingReadiness(readiness) {
       signer_unavailable_code: readiness.signer?.unavailable_code || readiness.execution?.blocker_code || null,
       signer_capabilities: publicSignerCapabilities(readiness.signer_capabilities),
       external_signer: publicExternalSigner(readiness.external_signer),
+      cloud_per_user_signer: publicCloudPerUserSigner(readiness.cloud_per_user_signer),
       execution_gate: executionGate(readiness),
       execution_claimed: readiness.execution_claimed === true,
     },
@@ -453,6 +484,7 @@ function fundingProofSummaryEvidence(report = null) {
       'strict_execution_report_required',
       'strict_execution_report_path',
     ]),
+    cloud_per_user_signer: publicCloudPerUserSigner(report?.cloud_per_user_signer),
     transactions: publicFundingProofTransactions(report?.transactions),
   }
 }

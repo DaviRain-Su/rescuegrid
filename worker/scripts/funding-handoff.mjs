@@ -113,6 +113,10 @@ function publicSignerCapabilities(rows = []) {
     'local_daemon_supported',
     'external_approval_required',
     'production_mainnet_allowed',
+    'seal_walrus_required',
+    'per_user_agent_required',
+    'user_registration_required',
+    'implementation_status',
   ]))
 }
 
@@ -138,6 +142,31 @@ function publicExternalSigner(posture = null) {
     'unavailable_code',
     'unavailable_detail',
     'approval_state',
+    'secrets_returned',
+  ])
+}
+
+function publicCloudPerUserSigner(posture = null) {
+  if (!posture) return null
+  return pickPublicFields(posture, [
+    'kind',
+    'selected',
+    'status',
+    'available',
+    'cloud_worker_supported',
+    'local_daemon_supported',
+    'seal_walrus_required',
+    'per_user_agent_required',
+    'user_registration_required',
+    'movegate_passport_required',
+    'decryptor_identity_required',
+    'mvp_shared_key_fallback_kind',
+    'production_mainnet_allowed',
+    'address',
+    'expected_address',
+    'signer_matches_expected',
+    'unavailable_code',
+    'unavailable_detail',
     'secrets_returned',
   ])
 }
@@ -227,6 +256,7 @@ export function buildFundingHandoff(readiness, { generatedAt = new Date().toISOS
     },
     signer_capabilities: publicSignerCapabilities(readiness.signer_capabilities),
     external_signer: publicExternalSigner(readiness.external_signer),
+    cloud_per_user_signer: publicCloudPerUserSigner(readiness.cloud_per_user_signer),
     deepbook: {
       market_id: readiness.scope?.market_id || 'SUI_DBUSDC',
       pool_id: readiness.scope?.pool_id || DEPLOYMENT.deepbook.pools.SUI_DBUSDC.pool_id,

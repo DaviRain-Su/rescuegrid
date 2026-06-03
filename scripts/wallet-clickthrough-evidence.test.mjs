@@ -84,7 +84,7 @@ const workerState = await collectWorkerPublicState('http://worker.test', {
               available: true,
               expected_address: deployment.agent.address,
               signer_matches_expected: true,
-              known_signer_kinds: ['worker-secret', 'waap'],
+              known_signer_kinds: ['worker-secret', 'cloud-per-user', 'waap'],
             },
             signer_capabilities: [
               {
@@ -94,6 +94,16 @@ const workerState = await collectWorkerPublicState('http://worker.test', {
                 custody_model: 'worker-held-agent-key',
                 execution_enabled: false,
                 runner_configured: null,
+              },
+              {
+                kind: 'cloud-per-user',
+                selected: false,
+                runtime_scope: 'cloud-worker',
+                custody_model: 'seal-walrus-per-user-agent-key',
+                execution_enabled: false,
+                seal_walrus_required: true,
+                per_user_agent_required: true,
+                unavailable_code: 'PER_USER_CLOUD_SIGNER_NOT_VALIDATED',
               },
               {
                 kind: 'waap',
@@ -113,6 +123,16 @@ const workerState = await collectWorkerPublicState('http://worker.test', {
               submission_runner_configured: false,
               permission_token_configured: false,
               unavailable_code: 'UNSUPPORTED_SIGNER',
+              secrets_returned: false,
+            },
+            cloud_per_user_signer: {
+              kind: 'cloud-per-user',
+              selected: false,
+              status: 'not_selected',
+              available: false,
+              seal_walrus_required: true,
+              per_user_agent_required: true,
+              unavailable_code: 'PER_USER_CLOUD_SIGNER_NOT_VALIDATED',
               secrets_returned: false,
             },
             execution: { enabled: false, blocker_code: 'EXECUTION_DISABLED' },
@@ -151,6 +171,16 @@ const workerState = await collectWorkerPublicState('http://worker.test', {
                 runner_configured: null,
               },
               {
+                kind: 'cloud-per-user',
+                selected: false,
+                runtime_scope: 'cloud-worker',
+                custody_model: 'seal-walrus-per-user-agent-key',
+                execution_enabled: false,
+                seal_walrus_required: true,
+                per_user_agent_required: true,
+                unavailable_code: 'PER_USER_CLOUD_SIGNER_NOT_VALIDATED',
+              },
+              {
                 kind: 'waap',
                 selected: false,
                 runtime_scope: 'external-signer',
@@ -168,6 +198,16 @@ const workerState = await collectWorkerPublicState('http://worker.test', {
               submission_runner_configured: false,
               permission_token_configured: false,
               unavailable_code: 'UNSUPPORTED_SIGNER',
+              secrets_returned: false,
+            },
+            cloud_per_user_signer: {
+              kind: 'cloud-per-user',
+              selected: false,
+              status: 'not_selected',
+              available: false,
+              seal_walrus_required: true,
+              per_user_agent_required: true,
+              unavailable_code: 'PER_USER_CLOUD_SIGNER_NOT_VALIDATED',
               secrets_returned: false,
             },
             agent: { balance_manager_id: deployment.agent.balance_manager_id },
@@ -205,11 +245,16 @@ const workerState = await collectWorkerPublicState('http://worker.test', {
 assert.equal(workerState.root.status, 'ok')
 assert.equal(workerState.runtime_status.signer_kind, 'worker-secret')
 assert.equal(workerState.runtime_status.known_signer_kinds.includes('waap'), true)
+assert.equal(workerState.runtime_status.known_signer_kinds.includes('cloud-per-user'), true)
 assert.equal(workerState.runtime_status.selected_signer_capability.kind, 'worker-secret')
 assert.equal(workerState.runtime_status.external_signer.kind, 'waap')
+assert.equal(workerState.runtime_status.cloud_per_user_signer.kind, 'cloud-per-user')
+assert.equal(workerState.runtime_status.cloud_per_user_signer.secrets_returned, false)
 assert.deepEqual(workerState.execution_readiness.funding_blocker_codes, ['INSUFFICIENT_DBUSDC', 'INSUFFICIENT_DEEP'])
 assert.equal(workerState.execution_readiness.selected_signer_capability.kind, 'worker-secret')
 assert.equal(workerState.execution_readiness.external_signer.secrets_returned, false)
+assert.equal(workerState.execution_readiness.cloud_per_user_signer.seal_walrus_required, true)
+assert.equal(workerState.execution_readiness.cloud_per_user_signer.secrets_returned, false)
 assert.equal(workerState.chain_data_status.worker_first, true)
 
 const evidence = buildWalletEvidence({
@@ -267,7 +312,7 @@ assert.match(markdown, /activation_strategy_file: TODO/)
 assert.match(markdown, /strict_execution_report_reference: TODO/)
 assert.match(markdown, /Wallet auto-connect disabled: true/)
 assert.match(markdown, /Activation strategy export present: true/)
-assert.match(markdown, /Known signer kinds: worker-secret, waap/)
+assert.match(markdown, /Known signer kinds: worker-secret, cloud-per-user, waap/)
 assert.match(markdown, /Runtime external signer: waap/)
 assert.match(markdown, /Readiness signer posture: worker-secret/)
 assert.match(markdown, /Readiness external signer: waap/)

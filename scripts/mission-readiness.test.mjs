@@ -104,6 +104,17 @@ function readyFunding() {
       session_value: 'super-secret-session',
       raw_runner_output: 'super-secret-output',
     },
+    cloud_per_user_signer: {
+      kind: 'cloud-per-user',
+      selected: false,
+      status: 'not_selected',
+      available: false,
+      seal_walrus_required: true,
+      per_user_agent_required: true,
+      secrets_returned: false,
+      seal_access_token: 'super-secret-seal-token',
+      walrus_access_token: 'super-secret-walrus-token',
+    },
     balance_manager: { balances: { DBUSDC: '1000000', DEEP: '1' } },
   }
 }
@@ -158,6 +169,16 @@ function readyFundingProof(overrides = {}) {
       strict_execution_report_required: true,
       strict_execution_report_path: '.rescuegrid/demo-execute-report.json',
     },
+    cloud_per_user_signer: {
+      kind: 'cloud-per-user',
+      selected: false,
+      status: 'not_selected',
+      seal_walrus_required: true,
+      per_user_agent_required: true,
+      secrets_returned: false,
+      seal_access_token: 'super-secret-seal-token',
+      walrus_access_token: 'super-secret-walrus-token',
+    },
     ...overrides,
   }
 }
@@ -167,9 +188,13 @@ function assertNoSecretSignerPosture(value) {
   assert.equal(json.includes('super-secret'), false)
   assert.equal(json.includes('super-secret-session'), false)
   assert.equal(json.includes('super-secret-output'), false)
+  assert.equal(json.includes('super-secret-seal-token'), false)
+  assert.equal(json.includes('super-secret-walrus-token'), false)
   assert.equal(json.includes('"permission_token":'), false)
   assert.equal(json.includes('"session_value":'), false)
   assert.equal(json.includes('"raw_runner_output":'), false)
+  assert.equal(json.includes('"seal_access_token":'), false)
+  assert.equal(json.includes('"walrus_access_token":'), false)
 }
 
 function safetyNegativeReport(overrides = {}) {
@@ -234,6 +259,17 @@ function blockedFunding() {
       permission_token: 'super-secret',
       session_value: 'super-secret-session',
       raw_runner_output: 'super-secret-output',
+    },
+    cloud_per_user_signer: {
+      kind: 'cloud-per-user',
+      selected: false,
+      status: 'not_selected',
+      available: false,
+      seal_walrus_required: true,
+      per_user_agent_required: true,
+      secrets_returned: false,
+      seal_access_token: 'super-secret-seal-token',
+      walrus_access_token: 'super-secret-walrus-token',
     },
     balance_manager: { balances: { DBUSDC: '0', DEEP: '0' } },
   }
@@ -316,6 +352,9 @@ function strictExecutionReport(overrides = {}) {
   assert.equal(walletCheck.evidence.manual_evidence_fields.includes('strict_execution_report_reference'), true)
   assert.equal(walletCheck.evidence.strict_execution_report_reference, '.rescuegrid/demo-execute-report.json')
   assert.equal(fundingCheck.evidence.external_signer.permission_token_configured, false)
+  assert.equal(fundingCheck.evidence.cloud_per_user_signer.kind, 'cloud-per-user')
+  assert.equal(fundingCheck.evidence.cloud_per_user_signer.seal_walrus_required, true)
+  assert.equal(fundingCheck.evidence.cloud_per_user_signer.secrets_returned, false)
   assert.equal(fundingCheck.evidence.execution_gate.readiness_only, true)
   assert.equal(fundingCheck.evidence.execution_gate.policy_creation_allowed, true)
   assert.equal(fundingCheck.evidence.execution_gate.execution_claimed, false)
@@ -328,6 +367,9 @@ function strictExecutionReport(overrides = {}) {
   assert.equal(fundingProofCheck.evidence.transaction_evidence.target_asset_hits.includes('DBUSDC'), true)
   assert.equal(fundingProofCheck.evidence.execution_gate.readiness_only, true)
   assert.equal(fundingProofCheck.evidence.execution_gate.execution_claimed, false)
+  assert.equal(fundingProofCheck.evidence.cloud_per_user_signer.kind, 'cloud-per-user')
+  assert.equal(fundingProofCheck.evidence.cloud_per_user_signer.secrets_returned, false)
+  assertNoSecretSignerPosture(report)
   assert.equal(executionCheck.evidence.agent_trade_event.wrapper_id, '0xwrapper')
   assert.equal(executionCheck.evidence.agent_trade_event.mandate_id, '0xmandate')
   assert.equal(executionCheck.evidence.agent_trade_event.tx_digest, 'tickDigest')
@@ -485,6 +527,9 @@ function strictExecutionReport(overrides = {}) {
   assert.equal(fundingCheck.evidence.signer_capabilities.some((row) => row.kind === 'waap'), true)
   assert.equal(fundingCheck.evidence.external_signer.kind, 'waap')
   assert.equal(fundingCheck.evidence.external_signer.permission_token_configured, true)
+  assert.equal(fundingCheck.evidence.cloud_per_user_signer.kind, 'cloud-per-user')
+  assert.equal(fundingCheck.evidence.cloud_per_user_signer.seal_walrus_required, true)
+  assert.equal(fundingCheck.evidence.cloud_per_user_signer.secrets_returned, false)
   assert.equal(fundingCheck.evidence.execution_gate.readiness_only, true)
   assert.equal(fundingCheck.evidence.execution_gate.policy_creation_allowed, false)
   assert.equal(fundingCheck.evidence.execution_gate.policy_creation_blocked, true)

@@ -2,6 +2,7 @@ import assert from 'node:assert/strict'
 import { Ed25519Keypair } from '@mysten/sui/keypairs/ed25519'
 import {
   SIGNER_CODE_ADDRESS_MISMATCH,
+  SIGNER_CODE_PER_USER_CLOUD_SIGNER_NOT_VALIDATED,
   SIGNER_CODE_WAAP_APPROVAL_DENIED,
   SIGNER_CODE_WAAP_APPROVAL_PENDING,
   SIGNER_CODE_WAAP_ADDRESS_MISSING,
@@ -9,9 +10,11 @@ import {
   SIGNER_CODE_WAAP_POLICY_BLOCKED,
   SIGNER_CODE_WAAP_RUNNER_MISSING,
   SIGNER_CODE_WAAP_TIMEOUT,
+  SIGNER_KIND_CLOUD_PER_USER,
   SIGNER_KIND_LOCAL_DAEMON,
   SIGNER_KIND_WAAP,
   SIGNER_KIND_WORKER_SECRET,
+  cloudPerUserSignerPosture,
   externalSignerPosture,
   resolveSignerAdapter,
   signerAdapterStatus,
@@ -34,6 +37,7 @@ const client = {
 }
 
 assert.equal(signerKindFromEnv({}), SIGNER_KIND_WORKER_SECRET)
+assert.equal(signerKindFromEnv({ SIGNER_KIND: SIGNER_KIND_CLOUD_PER_USER }), SIGNER_KIND_CLOUD_PER_USER)
 assert.equal(signerKindFromEnv({ SIGNER_KIND: SIGNER_KIND_WAAP }), SIGNER_KIND_WAAP)
 assert.equal(signerKindFromEnv({ RESCUEGRID_SIGNER_KIND: SIGNER_KIND_WAAP }), SIGNER_KIND_WAAP)
 assert.equal(signerKindFromEnv({ SIGNER_KIND: SIGNER_KIND_LOCAL_DAEMON }), SIGNER_KIND_LOCAL_DAEMON)
@@ -52,11 +56,25 @@ assert.equal(signerExecutionEnabled({ EXECUTION_ENABLED: 'true' }, missingSecret
   assert.equal(status.address, null)
   assert.equal(status.expected_address, DEPLOYMENT.agent.address)
   assert.equal(status.signer_matches_expected, false)
+  assert.equal(status.known_signer_kinds.includes(SIGNER_KIND_CLOUD_PER_USER), true)
   assert.equal(status.known_signer_kinds.includes(SIGNER_KIND_WAAP), true)
   assert.equal(
     signerCapabilityMatrix({ EXECUTION_ENABLED: 'true' }, { client }).some((row) => row.kind === SIGNER_KIND_WAAP && row.runner_configured === false),
     true,
   )
+  const perUserCapability = signerCapabilityMatrix({ EXECUTION_ENABLED: 'true' }, { client })
+    .find((row) => row.kind === SIGNER_KIND_CLOUD_PER_USER)
+  assert.equal(perUserCapability.selected, false)
+  assert.equal(perUserCapability.runtime_scope, 'cloud-worker')
+  assert.equal(perUserCapability.custody_model, 'seal-walrus-per-user-agent-key')
+  assert.equal(perUserCapability.cloud_worker_supported, true)
+  assert.equal(perUserCapability.seal_walrus_required, true)
+  assert.equal(perUserCapability.per_user_agent_required, true)
+  assert.equal(perUserCapability.user_registration_required, true)
+  assert.equal(perUserCapability.implementation_status, 'planned')
+  assert.equal(perUserCapability.available, false)
+  assert.equal(perUserCapability.execution_enabled, false)
+  assert.equal(perUserCapability.unavailable_code, SIGNER_CODE_PER_USER_CLOUD_SIGNER_NOT_VALIDATED)
 }
 
 const invalidSecret = resolveSignerAdapter({ EXECUTION_ENABLED: 'true', AGENT_KEY: 'not-a-sui-private-key' }, { client })
@@ -94,6 +112,53 @@ assert.equal(
   calls[0].signer.getPublicKey().toSuiAddress(),
   keypair.getPublicKey().toSuiAddress(),
 )
+
+const cloudPerUser = resolveSignerAdapter({
+  SIGNER_KIND: SIGNER_KIND_CLOUD_PER_USER,
+  EXECUTION_ENABLED: 'true',
+  AGENT_KEY: 'must-not-be-used',
+  SEAL_ACCESS_TOKEN: 'seal-secret',
+  WALRUS_ACCESS_TOKEN: 'walrus-secret',
+}, { client })
+assert.equal(cloudPerUser.kind, SIGNER_KIND_CLOUD_PER_USER)
+assert.equal(cloudPerUser.available, false)
+assert.equal(cloudPerUser.address, null)
+assert.equal(cloudPerUser.expected_address, DEPLOYMENT.agent.address)
+assert.equal(cloudPerUser.unavailable_code, SIGNER_CODE_PER_USER_CLOUD_SIGNER_NOT_VALIDATED)
+assert.equal(signerExecutionEnabled({ SIGNER_KIND: SIGNER_KIND_CLOUD_PER_USER, EXECUTION_ENABLED: 'true' }, cloudPerUser), false)
+await assert.rejects(
+  () => cloudPerUser.signAndSubmit(transaction),
+  (err) => err.code === SIGNER_CODE_PER_USER_CLOUD_SIGNER_NOT_VALIDATED,
+)
+assert.equal(JSON.stringify(cloudPerUser).includes('seal-secret'), false)
+assert.equal(JSON.stringify(cloudPerUser).includes('walrus-secret'), false)
+{
+  const status = signerAdapterStatus({ SIGNER_KIND: SIGNER_KIND_CLOUD_PER_USER, EXECUTION_ENABLED: 'true' }, { client })
+  assert.equal(status.kind, SIGNER_KIND_CLOUD_PER_USER)
+  assert.equal(status.available, false)
+  assert.equal(status.execution_enabled, false)
+  assert.equal(status.unavailable_code, SIGNER_CODE_PER_USER_CLOUD_SIGNER_NOT_VALIDATED)
+}
+{
+  const posture = cloudPerUserSignerPosture({
+    SIGNER_KIND: SIGNER_KIND_CLOUD_PER_USER,
+    EXECUTION_ENABLED: 'true',
+    SEAL_ACCESS_TOKEN: 'seal-secret',
+    WALRUS_ACCESS_TOKEN: 'walrus-secret',
+  })
+  assert.equal(posture.kind, SIGNER_KIND_CLOUD_PER_USER)
+  assert.equal(posture.selected, true)
+  assert.equal(posture.status, 'unavailable')
+  assert.equal(posture.available, false)
+  assert.equal(posture.seal_walrus_required, true)
+  assert.equal(posture.per_user_agent_required, true)
+  assert.equal(posture.movegate_passport_required, true)
+  assert.equal(posture.mvp_shared_key_fallback_kind, SIGNER_KIND_WORKER_SECRET)
+  assert.equal(posture.unavailable_code, SIGNER_CODE_PER_USER_CLOUD_SIGNER_NOT_VALIDATED)
+  assert.equal(posture.secrets_returned, false)
+  assert.equal(JSON.stringify(posture).includes('seal-secret'), false)
+  assert.equal(JSON.stringify(posture).includes('walrus-secret'), false)
+}
 
 const localDaemonOutsideDaemonMode = resolveSignerAdapter({
   SIGNER_KIND: SIGNER_KIND_LOCAL_DAEMON,

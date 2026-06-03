@@ -69,6 +69,17 @@ function readiness({ executionReady = false } = {}) {
       session_value: 'super-secret-session',
       raw_runner_output: 'super-secret-output',
     },
+    cloud_per_user_signer: {
+      kind: 'cloud-per-user',
+      selected: false,
+      status: 'not_selected',
+      available: false,
+      seal_walrus_required: true,
+      per_user_agent_required: true,
+      secrets_returned: false,
+      seal_access_token: 'super-secret-seal-token',
+      walrus_access_token: 'super-secret-walrus-token',
+    },
     execution_ready: executionReady,
     funding_ready: executionReady,
     blocker_codes: executionReady ? [] : ['EXECUTION_DISABLED', 'INSUFFICIENT_DBUSDC'],
@@ -159,10 +170,15 @@ function readiness({ executionReady = false } = {}) {
   assert.equal(report.signer_capabilities.some((row) => row.kind === 'waap' && row.runner_configured === false), true)
   assert.equal(report.external_signer.kind, 'waap')
   assert.equal(report.external_signer.secrets_returned, false)
+  assert.equal(report.cloud_per_user_signer.kind, 'cloud-per-user')
+  assert.equal(report.cloud_per_user_signer.seal_walrus_required, true)
+  assert.equal(report.cloud_per_user_signer.secrets_returned, false)
   assert.equal(JSON.stringify(report).includes('super-secret'), false)
   assert.equal(JSON.stringify(report).includes('"permission_token":'), false)
   assert.equal(JSON.stringify(report).includes('"session_value":'), false)
   assert.equal(JSON.stringify(report).includes('"raw_runner_output":'), false)
+  assert.equal(JSON.stringify(report).includes('"seal_access_token":'), false)
+  assert.equal(JSON.stringify(report).includes('"walrus_access_token":'), false)
 }
 
 {

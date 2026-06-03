@@ -17,6 +17,7 @@ import { getRuntimeStatus } from '../src/runtime-status.js'
 import {
   externalSignerPosture,
   KNOWN_SIGNER_KINDS,
+  SIGNER_KIND_CLOUD_PER_USER,
   SIGNER_KIND_WAAP,
   SIGNER_KIND_WORKER_SECRET,
 } from '../src/signer-adapters.js'
@@ -158,6 +159,13 @@ export function validateDaemonConfig(config, { requirePolicies = false } = {}) {
       ok: false,
       code: 'MAINNET_REQUIRES_EXTERNAL_SIGNER',
       message: 'Mainnet daemon policies require an external signer mode before any PTB can be accepted.',
+    }
+  }
+  if (config.chain === 'sui:mainnet' && config.signer_kind === SIGNER_KIND_CLOUD_PER_USER) {
+    return {
+      ok: false,
+      code: 'MAINNET_SIGNER_NOT_VALIDATED',
+      message: 'cloud-per-user signer requires Seal/Walrus per-user key validation before it can be accepted on Mainnet.',
     }
   }
   if (config.agent_address !== DEPLOYMENT.agent.address) {
