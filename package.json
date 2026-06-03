@@ -27,7 +27,7 @@
     "wallet:evidence:apply-report": "node scripts/wallet-clickthrough-evidence.mjs --apply-report",
     "wallet:evidence:apply-strategy": "node scripts/wallet-clickthrough-evidence.mjs --apply-strategy",
     "wallet:evidence:preflight": "node scripts/wallet-clickthrough-evidence.mjs --require-frontend --require-worker",
-    "wallet:evidence:verify": "node scripts/wallet-clickthrough-evidence.mjs --verify",
+    "wallet:evidence:verify": "node scripts/wallet-clickthrough-evidence.mjs --verify --execution-report .rescuegrid/demo-execute-report.json",
     "mission:readiness": "node scripts/mission-readiness.mjs",
     "mission:readiness:report": "node scripts/mission-readiness.mjs --out .rescuegrid/mission-readiness-report.json",
     "funding:request": "node worker/scripts/funding-handoff.mjs",

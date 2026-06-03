@@ -19,9 +19,11 @@ import {
   writeWalletEvidenceArtifact,
 } from './wallet-clickthrough-evidence.mjs'
 import deployment from '../core/deployment.js'
+import packageJson from '../package.json' with { type: 'json' }
 
 assert.equal(parseArgs(['--format', 'markdown']).get('--format'), 'markdown')
 assert.equal(parseArgs(['--owner=0xabc']).get('--owner'), '0xabc')
+assert.match(packageJson.scripts['wallet:evidence:verify'], /--execution-report \.rescuegrid\/demo-execute-report\.json/)
 
 const sourceFiles = new Map([
   ['src/providers.jsx', '<WalletProvider autoConnect={false}><RegisterEnoki /></WalletProvider>'],

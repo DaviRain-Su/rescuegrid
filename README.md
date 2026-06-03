@@ -57,7 +57,7 @@ npm run wallet:evidence -- --format markdown --out .rescuegrid/wallet-clickthrou
 npm run wallet:evidence:preflight   # require local frontend + Worker readiness before manual wallet QA
 npm run wallet:evidence:apply-strategy -- --input .rescuegrid/wallet-clickthrough-evidence.md --strategy-file <activation_strategy_file>
 npm run wallet:evidence:apply-report -- --input .rescuegrid/wallet-clickthrough-evidence.md --execution-report .rescuegrid/demo-execute-report.json
-npm run wallet:evidence:verify -- --input .rescuegrid/wallet-clickthrough-evidence.md --require-worker
+npm run wallet:evidence:verify -- --input .rescuegrid/wallet-clickthrough-evidence.md --require-worker # also reads .rescuegrid/demo-execute-report.json
 npm run funding:request             # secret-safe external DBUSDC/DEEP funding handoff
 npm run funding:request -- --format markdown --out .rescuegrid/funding-request.md
 npm run funding:watch -- --json     # secret-safe readiness watch; no policy while blocked
