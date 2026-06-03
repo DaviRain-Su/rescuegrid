@@ -34,11 +34,11 @@ import { getExecutorAdapter, unsupportedExecutor, unsupportedExecutorTarget } fr
 import { activationPolicyPreflight, reconcilePolicyListRuntimeState, reconcilePolicyRuntimeState, revokePolicyPreflight } from './policy-api.js'
 import { getRuntimeStatus } from './runtime-status.js'
 import {
-  OWNER_CONTROL_ACTION_SET_GLOBAL_STOP,
   OWNER_CONTROL_ACTION_SET_STRATEGY_STOP,
-  OWNER_CONTROL_ACTION_SET_VENUE_STOP,
   RISK_CONTROLS_DO_NAME,
-  riskControlStorageKey,
+  applyRiskControlToState,
+  buildRiskControlView,
+  buildVenueStopControlView,
   verifyRiskControl,
   verifyVenueStopControl,
 } from './risk-controls.js'
@@ -677,92 +677,32 @@ export class AgentRuntime {
     return new Response(JSON.stringify(body), { status, headers: { 'content-type': 'application/json' } })
   }
 
-  riskControlView(recordsByKey: Record<string, any>, owner: string | null = null): Record<string, any> {
-    const records = Object.values(recordsByKey)
-      .filter((r: any) => !owner || r.owner === owner)
-      .sort((a: any, b: any) => Number(b.updated_ms || 0) - Number(a.updated_ms || 0))
-    const active = records.filter((r: any) => r.stopped)
-    const globalRecords = active.filter((r: any) => r.action === OWNER_CONTROL_ACTION_SET_GLOBAL_STOP)
-    const strategyRecords = active.filter((r: any) => r.action === OWNER_CONTROL_ACTION_SET_STRATEGY_STOP)
-    const venueRecords = active.filter((r: any) => r.action === OWNER_CONTROL_ACTION_SET_VENUE_STOP)
-    return {
-      status: 'ok',
-      owner,
-      global_stopped: globalRecords.length > 0,
-      global_stop: globalRecords[0] ?? null,
-      global_stops: globalRecords,
-      strategy_stops: strategyRecords.map((r: any) => r.wrapper_id),
-      strategy_stop_records: strategyRecords,
-      venue_stops: venueRecords.map((r: any) => r.venue),
-      venue_stop_records: venueRecords,
-      control_records: records,
-      updated_ms: records[0]?.updated_ms ?? null,
-    }
-  }
-
   async fetch(req: Request): Promise<Response> {
     const url = new URL(req.url)
     if (url.pathname === '/controls' || url.pathname === '/venue-stops') {
       const recordsByKey = (await this.state.storage.get<Record<string, any>>('riskControlRecords')) ?? {}
       if (req.method === 'GET') {
         const owner = url.searchParams.get('owner')
-        const view = this.riskControlView(recordsByKey, owner)
         return this.json(url.pathname === '/venue-stops'
-          ? {
-              status: 'ok',
-              owner: view.owner,
-              venue_stops: view.venue_stops,
-              venue_stop_records: view.venue_stop_records,
-              updated_ms: view.updated_ms,
-            }
-          : view)
+          ? buildVenueStopControlView(recordsByKey, owner)
+          : buildRiskControlView(recordsByKey, owner))
       }
       if (req.method === 'POST') {
         const control = await req.json<any>()
-        if (!control?.owner || !control?.action || !control?.target_key || typeof control.stopped !== 'boolean' || !control?.nonce) {
-          return this.json({ status: 'error', code: 'BAD_CONTROL', message: 'Verified risk control required.' }, 400)
-        }
-        if (url.pathname === '/venue-stops' && control.action !== OWNER_CONTROL_ACTION_SET_VENUE_STOP) {
-          return this.json({ status: 'error', code: 'BAD_CONTROL_ACTION', message: 'Venue stop endpoint only accepts venue stop controls.' }, 400)
-        }
         const nonces = (await this.state.storage.get<Record<string, number>>('riskControlNonces')) ?? {}
-        const nonceKey = `${control.owner}:${control.nonce}`
-        if (nonces[nonceKey]) {
-          return this.json({ status: 'error', code: 'CONTROL_REPLAYED', message: 'Owner control nonce was already used.' }, 409)
-        }
         const nowMs = Date.now()
-        const nextRecords = {
-          ...recordsByKey,
-          [riskControlStorageKey(control)]: {
-            action: control.action,
-            scope: control.scope,
-            target_key: control.target_key,
-            wrapper_id: control.wrapper_id ?? null,
-            venue: control.venue ?? null,
-            venue_key: control.venue_key ?? null,
-            stopped: control.stopped,
-            owner: control.owner,
-            updated_ms: nowMs,
-            issued_at_ms: control.issued_at_ms,
-          },
-        }
-        const nextNonces = Object.fromEntries([...Object.entries(nonces), [nonceKey, nowMs]].slice(-100))
-        await this.state.storage.put('riskControlRecords', nextRecords)
-        await this.state.storage.put('riskControlNonces', nextNonces)
-        await this.state.storage.put('lastRiskControlUpdateMs', nowMs)
-        const view = this.riskControlView(nextRecords, control.owner)
-        return this.json({
-          ...view,
-          status: 'ok',
-          action: control.action,
-          scope: control.scope,
-          target_key: control.target_key,
-          wrapper_id: control.wrapper_id ?? null,
-          venue: control.venue ?? null,
-          venue_key: control.venue_key ?? null,
-          stopped: control.stopped,
-          updated_ms: nowMs,
+        const applied = applyRiskControlToState({
+          recordsByKey,
+          nonces,
+          control,
+          nowMs,
+          venueOnly: url.pathname === '/venue-stops',
         })
+        if (!applied.ok) return this.json(applied.body, applied.status)
+        await this.state.storage.put('riskControlRecords', applied.recordsByKey)
+        await this.state.storage.put('riskControlNonces', applied.nonces)
+        await this.state.storage.put('lastRiskControlUpdateMs', nowMs)
+        return this.json(applied.body)
       }
     }
     if (url.pathname === '/activate' && req.method === 'POST') {

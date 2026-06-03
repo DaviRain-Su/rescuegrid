@@ -185,6 +185,123 @@ export function riskControlStorageKey(control) {
   return `${control.owner}:${control.action}:${control.target_key}`
 }
 
+/**
+ * @param {Record<string, any>} [recordsByKey]
+ * @param {string | null} [owner]
+ */
+export function buildRiskControlView(recordsByKey = {}, owner = null) {
+  const records = Object.values(recordsByKey || {})
+    .filter((r) => !owner || r.owner === owner)
+    .sort((a, b) => Number(b.updated_ms || 0) - Number(a.updated_ms || 0))
+  const active = records.filter((r) => r.stopped)
+  const globalRecords = active.filter((r) => r.action === OWNER_CONTROL_ACTION_SET_GLOBAL_STOP)
+  const strategyRecords = active.filter((r) => r.action === OWNER_CONTROL_ACTION_SET_STRATEGY_STOP)
+  const venueRecords = active.filter((r) => r.action === OWNER_CONTROL_ACTION_SET_VENUE_STOP)
+  return {
+    status: 'ok',
+    owner,
+    global_stopped: globalRecords.length > 0,
+    global_stop: globalRecords[0] ?? null,
+    global_stops: globalRecords,
+    strategy_stops: strategyRecords.map((r) => r.wrapper_id),
+    strategy_stop_records: strategyRecords,
+    venue_stops: venueRecords.map((r) => r.venue),
+    venue_stop_records: venueRecords,
+    control_records: records,
+    updated_ms: records[0]?.updated_ms ?? null,
+  }
+}
+
+/**
+ * @param {Record<string, any>} [recordsByKey]
+ * @param {string | null} [owner]
+ */
+export function buildVenueStopControlView(recordsByKey = {}, owner = null) {
+  const view = buildRiskControlView(recordsByKey, owner)
+  return {
+    status: 'ok',
+    owner: view.owner,
+    venue_stops: view.venue_stops,
+    venue_stop_records: view.venue_stop_records,
+    updated_ms: view.updated_ms,
+  }
+}
+
+/**
+ * @param {{
+ *   recordsByKey?: Record<string, any>,
+ *   nonces?: Record<string, number>,
+ *   control?: Record<string, any> | null,
+ *   nowMs?: number,
+ *   venueOnly?: boolean,
+ * }} [args]
+ */
+export function applyRiskControlToState({
+  recordsByKey = {},
+  nonces = {},
+  control = null,
+  nowMs = Date.now(),
+  venueOnly = false,
+} = {}) {
+  if (!control?.owner || !control?.action || !control?.target_key || typeof control.stopped !== 'boolean' || !control?.nonce) {
+    return {
+      ok: false,
+      status: 400,
+      body: { status: 'error', code: 'BAD_CONTROL', message: 'Verified risk control required.' },
+    }
+  }
+  if (venueOnly && control.action !== OWNER_CONTROL_ACTION_SET_VENUE_STOP) {
+    return {
+      ok: false,
+      status: 400,
+      body: { status: 'error', code: 'BAD_CONTROL_ACTION', message: 'Venue stop endpoint only accepts venue stop controls.' },
+    }
+  }
+  const nonceKey = `${control.owner}:${control.nonce}`
+  if (nonces[nonceKey]) {
+    return {
+      ok: false,
+      status: 409,
+      body: { status: 'error', code: 'CONTROL_REPLAYED', message: 'Owner control nonce was already used.' },
+    }
+  }
+  const nextRecordsByKey = {
+    ...(recordsByKey || {}),
+    [riskControlStorageKey(control)]: {
+      action: control.action,
+      scope: control.scope,
+      target_key: control.target_key,
+      wrapper_id: control.wrapper_id ?? null,
+      venue: control.venue ?? null,
+      venue_key: control.venue_key ?? null,
+      stopped: control.stopped,
+      owner: control.owner,
+      updated_ms: nowMs,
+      issued_at_ms: control.issued_at_ms,
+    },
+  }
+  const nextNonces = Object.fromEntries([...Object.entries(nonces || {}), [nonceKey, nowMs]].slice(-100))
+  const view = buildRiskControlView(nextRecordsByKey, control.owner)
+  return {
+    ok: true,
+    status: 200,
+    recordsByKey: nextRecordsByKey,
+    nonces: nextNonces,
+    body: {
+      ...view,
+      status: 'ok',
+      action: control.action,
+      scope: control.scope,
+      target_key: control.target_key,
+      wrapper_id: control.wrapper_id ?? null,
+      venue: control.venue ?? null,
+      venue_key: control.venue_key ?? null,
+      stopped: control.stopped,
+      updated_ms: nowMs,
+    },
+  }
+}
+
 export async function verifyRiskControl({ owner, message, signature }, options = {}) {
   try {
     const control = parseRiskControlMessage(message, options)

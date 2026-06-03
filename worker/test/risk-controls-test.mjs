@@ -3,9 +3,12 @@ import { Ed25519Keypair } from '@mysten/sui/keypairs/ed25519'
 import {
   OWNER_CONTROL_ACTION_SET_GLOBAL_STOP,
   OWNER_CONTROL_ACTION_SET_STRATEGY_STOP,
+  applyRiskControlToState,
+  buildRiskControlView,
   buildGlobalStopControlMessage,
   buildRiskControlMessage,
   buildStrategyStopControlMessage,
+  buildVenueStopControlView,
   buildVenueStopControlMessage,
   canonicalVenueName,
   isGlobalStopped,
@@ -136,6 +139,91 @@ const signed = await keypair.signPersonalMessage(new TextEncoder().encode(messag
   const verified = await verifyVenueStopControl({ owner, message: other, signature: signed.signature }, { nowMs: NOW + 1_000 })
   assert.equal(verified.ok, false)
   assert.equal(verified.body.code, 'INVALID_OWNER_CONTROL_SIGNATURE')
+}
+
+{
+  const globalControl = parseRiskControlMessage(buildGlobalStopControlMessage({
+    owner,
+    stopped: true,
+    nonce: 'nonce-state-global',
+    issued_at_ms: NOW,
+  }), { nowMs: NOW + 1_000 })
+  const strategyControl = parseRiskControlMessage(buildStrategyStopControlMessage({
+    owner,
+    wrapper_id: wrapperId,
+    stopped: true,
+    nonce: 'nonce-state-strategy',
+    issued_at_ms: NOW,
+  }), { nowMs: NOW + 1_000 })
+  const venueControl = parseVenueStopControlMessage(buildVenueStopControlMessage({
+    owner,
+    venue: 'DeepBook',
+    stopped: true,
+    nonce: 'nonce-state-venue',
+    issued_at_ms: NOW,
+  }), { nowMs: NOW + 1_000 })
+  const otherVenueControl = parseVenueStopControlMessage(buildVenueStopControlMessage({
+    owner: otherOwner,
+    venue: 'Cetus',
+    stopped: true,
+    nonce: 'nonce-state-other',
+    issued_at_ms: NOW,
+  }), { nowMs: NOW + 1_000 })
+
+  let recordsByKey = {}
+  let nonces = {}
+  for (const [control, nowMs] of [
+    [globalControl, NOW + 10],
+    [strategyControl, NOW + 20],
+    [venueControl, NOW + 30],
+    [otherVenueControl, NOW + 40],
+  ]) {
+    const applied = applyRiskControlToState({ recordsByKey, nonces, control, nowMs })
+    assert.equal(applied.ok, true)
+    recordsByKey = applied.recordsByKey
+    nonces = applied.nonces
+  }
+
+  const view = buildRiskControlView(recordsByKey, owner)
+  assert.equal(view.global_stopped, true)
+  assert.equal(view.global_stops.length, 1)
+  assert.deepEqual(view.strategy_stops, [wrapperId])
+  assert.deepEqual(view.venue_stops, ['DeepBook'])
+  assert.equal(view.control_records.length, 3)
+  assert.equal(view.updated_ms, NOW + 30)
+
+  const venueView = buildVenueStopControlView(recordsByKey, owner)
+  assert.deepEqual(venueView.venue_stops, ['DeepBook'])
+  assert.equal(Object.hasOwn(venueView, 'control_records'), false)
+  assert.equal(Object.hasOwn(venueView, 'global_stopped'), false)
+
+  const replayed = applyRiskControlToState({ recordsByKey, nonces, control: venueControl, nowMs: NOW + 50 })
+  assert.equal(replayed.ok, false)
+  assert.equal(replayed.status, 409)
+  assert.equal(replayed.body.code, 'CONTROL_REPLAYED')
+
+  const badVenueEndpointAction = applyRiskControlToState({
+    recordsByKey,
+    nonces,
+    control: globalControl,
+    nowMs: NOW + 60,
+    venueOnly: true,
+  })
+  assert.equal(badVenueEndpointAction.ok, false)
+  assert.equal(badVenueEndpointAction.body.code, 'BAD_CONTROL_ACTION')
+
+  const resumeVenue = parseVenueStopControlMessage(buildVenueStopControlMessage({
+    owner,
+    venue: 'DeepBook',
+    stopped: false,
+    nonce: 'nonce-state-venue-resume',
+    issued_at_ms: NOW,
+  }), { nowMs: NOW + 1_000 })
+  const resumed = applyRiskControlToState({ recordsByKey, nonces, control: resumeVenue, nowMs: NOW + 70, venueOnly: true })
+  assert.equal(resumed.ok, true)
+  const resumedVenueView = buildVenueStopControlView(resumed.recordsByKey, owner)
+  assert.deepEqual(resumedVenueView.venue_stops, [])
+  assert.equal(buildRiskControlView(resumed.recordsByKey, owner).control_records.some((r) => r.venue === 'DeepBook' && r.stopped === false), true)
 }
 
 console.log('\nALL RISK CONTROL TESTS PASS')
