@@ -12,6 +12,7 @@ import {
   collectFrontendPreflight,
   collectFrontendSourceGuardrails,
   collectWorkerPublicState,
+  main,
   parseWalletEvidenceArtifact,
   parseArgs,
   serializeWalletEvidence,
@@ -1006,6 +1007,83 @@ assert.equal(strictExecutionReferenceReport.checks.find((check) => check.id === 
 assert.equal(strictExecutionReferenceReport.checks.find((check) => check.id === 'strict-execution:wrapper').status, 'passed')
 assert.equal(chainReads, 4)
 
+{
+  const verifyCliDir = mkdtempSync(join(tmpdir(), 'rescuegrid-wallet-verify-cli-'))
+  const verifyCliArtifactPath = join(verifyCliDir, 'wallet-clickthrough-evidence.md')
+  writeFileSync(verifyCliArtifactPath, filledArtifact, 'utf8')
+  const originalLog = console.log
+  let output = ''
+  let defaultStrictReportRead = false
+  console.log = (value) => {
+    output += `${value}\n`
+  }
+  try {
+    const code = await main([
+      '--verify',
+      '--input',
+      verifyCliArtifactPath,
+    ], {}, {
+      suiClient: fakeSuiClient,
+      fetchImpl: fakeWorkerFetch,
+      readFileImpl: (filePath, ...args) => {
+        const normalized = String(filePath).replace(/\\/g, '/')
+        if (normalized.endsWith('/.rescuegrid/demo-execute-report.json')) {
+          defaultStrictReportRead = true
+          return `${JSON.stringify(strictExecutionReport, null, 2)}\n`
+        }
+        return readFileSync(filePath, ...args)
+      },
+    })
+    assert.equal(code, 0)
+  } finally {
+    console.log = originalLog
+    rmSync(verifyCliDir, { recursive: true, force: true })
+  }
+  const cliReport = JSON.parse(output)
+  assert.equal(defaultStrictReportRead, true)
+  assert.equal(cliReport.verified, true)
+  assert.equal(cliReport.strict_execution_report_reference_expected, '.rescuegrid/demo-execute-report.json')
+  assert.equal(cliReport.strict_execution_report.report_mode, 'wallet_created_policy')
+  assert.equal(cliReport.strict_execution_report.wrapper_id, STRATEGY_WRAPPER)
+}
+
+{
+  const verifyCliDir = mkdtempSync(join(tmpdir(), 'rescuegrid-wallet-verify-cli-skip-'))
+  const verifyCliArtifactPath = join(verifyCliDir, 'wallet-clickthrough-evidence.md')
+  writeFileSync(verifyCliArtifactPath, filledArtifact, 'utf8')
+  const originalLog = console.log
+  let output = ''
+  console.log = (value) => {
+    output += `${value}\n`
+  }
+  try {
+    const code = await main([
+      '--verify',
+      '--skip-strict-execution-report',
+      '--input',
+      verifyCliArtifactPath,
+    ], {}, {
+      suiClient: fakeSuiClient,
+      fetchImpl: fakeWorkerFetch,
+      readFileImpl: (filePath, ...args) => {
+        const normalized = String(filePath).replace(/\\/g, '/')
+        if (normalized.endsWith('/.rescuegrid/demo-execute-report.json')) {
+          throw new Error('should not read strict report when explicitly skipped')
+        }
+        return readFileSync(filePath, ...args)
+      },
+    })
+    assert.equal(code, 0)
+  } finally {
+    console.log = originalLog
+    rmSync(verifyCliDir, { recursive: true, force: true })
+  }
+  const cliReport = JSON.parse(output)
+  assert.equal(cliReport.verified, true)
+  assert.equal(cliReport.strict_execution_report_reference_expected, null)
+  assert.equal(cliReport.strict_execution_report, null)
+}
+
 const referenceMismatchReport = await verifyWalletEvidenceArtifact({
   artifactText: filledArtifact,
   strictExecutionReportPath: '.rescuegrid/other-demo-execute-report.json',
@@ -1124,6 +1202,11 @@ assert.match(help.stdout, /--verify/)
 assert.match(help.stdout, /--out/)
 assert.match(help.stdout, /--require-frontend/)
 assert.match(help.stdout, /--execution-report/)
+assert.match(help.stdout, /--skip-strict-execution-report/)
+assert.match(
+  help.stdout,
+  /wallet:evidence:verify -- --input \.rescuegrid\/wallet-clickthrough-evidence\.md --require-worker --execution-report \.rescuegrid\/demo-execute-report\.json/,
+)
 assert.match(help.stdout, /--apply-strategy/)
 assert.match(help.stdout, /--apply-report/)
 assert.equal(help.stdout.includes('AGENT_KEY='), false)

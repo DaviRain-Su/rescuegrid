@@ -787,6 +787,34 @@ function strictExecutionReport(overrides = {}) {
     scriptCheck.evidence.script_contract_violations[0].missing_requirements.includes('--execution-report .rescuegrid/demo-execute-report.json'),
     true,
   )
+  assert.deepEqual(scriptCheck.evidence.script_contract_violations[0].forbidden_requirements, [])
+}
+
+{
+  const report = buildMissionReadinessReport({
+    scripts: {
+      ...requiredScripts,
+      'wallet:evidence:verify': 'node scripts/wallet-clickthrough-evidence.mjs --verify --execution-report .rescuegrid/demo-execute-report.json --skip-strict-execution-report',
+    },
+    safetyReport: safetyNegativeReport(),
+    walletReport: verifiedWalletReport(),
+    fundingReadiness: readyFunding(),
+    fundingProofReport: readyFundingProof(),
+    executionReport: strictExecutionReport(),
+  })
+  const scriptCheck = report.checks.find((row) => row.id === 'validation_scripts')
+  assert.equal(report.status, 'failed')
+  assert.equal(report.full_prd_ready, false)
+  assert.equal(scriptCheck.status, 'failed')
+  assert.equal(report.blocker_codes.includes('VALIDATION_SCRIPT_CONTRACT_MISMATCH'), true)
+  assert.deepEqual(scriptCheck.evidence.missing_scripts, [])
+  assert.equal(scriptCheck.evidence.script_contract_violations.length, 1)
+  assert.equal(scriptCheck.evidence.script_contract_violations[0].script, 'wallet:evidence:verify')
+  assert.deepEqual(scriptCheck.evidence.script_contract_violations[0].missing_requirements, [])
+  assert.equal(
+    scriptCheck.evidence.script_contract_violations[0].forbidden_requirements.includes('--skip-strict-execution-report'),
+    true,
+  )
 }
 
 {

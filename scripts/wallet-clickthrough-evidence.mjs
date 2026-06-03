@@ -13,6 +13,7 @@ import { strictDemoExecutionMissingEvidence } from '../worker/scripts/demo-execu
 const DEFAULT_FRONTEND_URL = 'http://localhost:5175'
 const DEFAULT_WORKER_URL = 'http://localhost:8787'
 const DEFAULT_TIMEOUT_MS = 2500
+const DEFAULT_STRICT_EXECUTION_REPORT = '.rescuegrid/demo-execute-report.json'
 const REQUIRED_WALLET_CORE_FIELDS = [
   'owner_address',
   'create_tx_digest',
@@ -1980,17 +1981,18 @@ Usage:
   npm run wallet:evidence -- --frontend-url http://localhost:5175 --worker-url http://localhost:8787 --owner 0x...
   npm run wallet:evidence -- --apply-strategy --input .rescuegrid/wallet-clickthrough-evidence.md --strategy-file .rescuegrid/wallet-strategy-....json
   npm run wallet:evidence -- --apply-report --input .rescuegrid/wallet-clickthrough-evidence.md --execution-report .rescuegrid/demo-execute-report.json
-  npm run wallet:evidence:verify -- --input .rescuegrid/wallet-clickthrough-evidence.md --require-worker
-  npm run wallet:evidence:verify -- --input .rescuegrid/wallet-clickthrough-evidence.md --execution-report .rescuegrid/demo-execute-report.json
+  npm run wallet:evidence:verify -- --input .rescuegrid/wallet-clickthrough-evidence.md --require-worker --execution-report .rescuegrid/demo-execute-report.json
 
 This is read-only. It may fetch public Worker status/readiness endpoints, then
 prints or writes a manual Slush / standard Sui wallet evidence checklist. It
 does not create policies, submit PTBs, run demo:execute or print signing
-secrets, Worker secrets, tick tokens or WaaP approval values. With --verify it
-checks a filled artifact against public Sui transaction events and optional
-Worker detail reads, verifies activation_strategy_file hashes to the recorded
-strategy_hash without leaking secrets, and --execution-report requires the artifact's
-strict_execution_report_reference to point at that report path and verifies the
+secrets, Worker secrets, tick tokens or WaaP approval values. With --verify the
+CLI defaults to --execution-report ${DEFAULT_STRICT_EXECUTION_REPORT}; use
+--skip-strict-execution-report only for lower-strength local debugging. The
+strict verifier checks a filled artifact against public Sui transaction events
+and optional Worker detail reads, verifies activation_strategy_file hashes to the
+recorded strategy_hash without leaking secrets, requires the artifact's
+strict_execution_report_reference to point at that report path, and verifies the
 wallet-created strict report describes the same owner/wrapper lifecycle. With --apply-strategy
 it reads the UI-downloaded activation strategy JSON, recomputes the canonical
 hash, and fills only the matching owner/create/wrapper/mandate/hash fields in an
@@ -2044,6 +2046,9 @@ export async function main(argv = process.argv.slice(2), env = process.env, opti
   if (flags.has('--verify')) {
     const inputPath = flags.get('--input') || flags.get('--artifact') || '.rescuegrid/wallet-clickthrough-evidence.md'
     const artifactText = readFileSync(resolve(String(inputPath)), 'utf8')
+    const strictExecutionReportPath = flags.has('--skip-strict-execution-report')
+      ? null
+      : flags.get('--execution-report') || flags.get('--strict-execution-report') || DEFAULT_STRICT_EXECUTION_REPORT
     const report = await verifyWalletEvidenceArtifact({
       artifactText,
       workerUrl: configuredWorkerUrl ? normalizeUrl(configuredWorkerUrl) : null,
@@ -2052,7 +2057,7 @@ export async function main(argv = process.argv.slice(2), env = process.env, opti
       fetchImpl: options.fetchImpl,
       timeoutMs: Number.isFinite(timeoutMs) && timeoutMs > 0 ? timeoutMs : DEFAULT_TIMEOUT_MS,
       requireWorker: flags.has('--require-worker'),
-      strictExecutionReportPath: flags.get('--execution-report') || flags.get('--strict-execution-report') || null,
+      strictExecutionReportPath,
     })
     console.log(JSON.stringify(report, null, 2))
     return report.verified ? 0 : 1

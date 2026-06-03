@@ -85,6 +85,9 @@ const REQUIRED_SCRIPT_COMMAND_CONTRACTS = [
       requiredFlag('--verify'),
       requiredFlagValue('--execution-report', DEFAULT_EXECUTION_REPORT),
     ],
+    forbidden: [
+      requiredFlag('--skip-strict-execution-report'),
+    ],
   },
   {
     name: 'mission:readiness:report',
@@ -168,10 +171,14 @@ function scriptContractViolations(scripts = {}) {
     const missingRequirements = contract.requirements
       .filter((row) => !row.pattern.test(command))
       .map((row) => row.requirement)
-    if (missingRequirements.length > 0) {
+    const forbiddenRequirements = (contract.forbidden || [])
+      .filter((row) => row.pattern.test(command))
+      .map((row) => row.requirement)
+    if (missingRequirements.length > 0 || forbiddenRequirements.length > 0) {
       violations.push({
         script: contract.name,
         missing_requirements: missingRequirements,
+        forbidden_requirements: forbiddenRequirements,
       })
     }
   }
