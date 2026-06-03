@@ -8,6 +8,7 @@ import { Icon } from './primitives.jsx'
 import { Button } from '@heroui/react'
 import { useTxDetail } from '../queries/feeds.js'
 import { filterPolicyActivity } from '../activity-match.js'
+import { isLiveInspectSource, policyInspectCopy } from '../queries/policy-inspect-copy.js'
 
 function CapRow({ granted, label, fn }) {
   return (
@@ -46,17 +47,9 @@ export function PolicyInspect({ p, activity, onClose, onRevoke, onTx, readOnly =
   const pct = Math.round((p.budgetUsed / p.budgetCap) * 100)
   const log = filterPolicyActivity(activity, p)
   const sourceMeta = resolveInspectSource(source)
-  const liveSource = sourceMeta.kind !== 'demo'
-  const objectLabel = liveSource ? 'MoveGate Mandate + Wrapper' : 'Demo policy-shaped object'
-  const budgetLabel = liveSource ? 'On-chain budget ceiling' : 'Demo budget ceiling'
-  const structLabel = liveSource ? 'RescuePolicyWrapper · move' : 'Demo wrapper shape · move-like'
-  const auditLabel = liveSource ? `Audit trail · ${log.length} on-chain events` : `Demo audit trail · ${log.length} simulated events`
-  const budgetCopy = liveSource
-    ? 'The wrapper checks cumulative spent_amount against budget_ceiling before recording an agent trade. Exceeding the cap aborts the transaction on-chain.'
-    : 'This budget is local demo state. It previews the cap a real RescuePolicyWrapper would enforce after minting.'
-  const capabilityCopy = liveSource
-    ? 'MoveGate authorizes only the RescueGrid protocol/action, and the wrapper then enforces pool, budget, slippage and linked mandate constraints.'
-    : 'The demo shape previews MoveGate + Wrapper constraints. Real enforcement comes from the shared objects once minted.'
+  const liveSource = isLiveInspectSource(sourceMeta)
+  const inspectCopy = policyInspectCopy(sourceMeta)
+  const auditLabel = `${inspectCopy.auditLabelPrefix} · ${log.length} ${inspectCopy.auditEventNoun}`
   const wrapperId = p._wrapperId || p.id
   const mandateId = p._mandateId || null
   const budgetCoin = p.budgetCoinType || 'DBUSDC'
@@ -105,7 +98,7 @@ export function PolicyInspect({ p, activity, onClose, onRevoke, onTx, readOnly =
         <div style={{ position: 'sticky', top: 0, zIndex: 2, background: 'var(--bg-2)', borderBottom: '1px solid var(--border)', padding: '20px 24px' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
             <div>
-              <div className="eyebrow" style={{ marginBottom: 6 }}>{objectLabel}</div>
+              <div className="eyebrow" style={{ marginBottom: 6 }}>{inspectCopy.objectLabel}</div>
               <h2 className="display" style={{ fontSize: 19, fontWeight: 600 }}>{p.name}</h2>
               <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 8 }}>
                 <span className="mono" style={{ fontSize: 11.5, color: 'var(--sui)' }}>{p.id}</span>
@@ -123,7 +116,7 @@ export function PolicyInspect({ p, activity, onClose, onRevoke, onTx, readOnly =
           {/* budget */}
           <div>
             <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12.5, marginBottom: 7 }}>
-              <span style={{ color: 'var(--t1)', fontWeight: 600 }}>{budgetLabel}</span>
+              <span style={{ color: 'var(--t1)', fontWeight: 600 }}>{inspectCopy.budgetLabel}</span>
               <span className="mono"><span style={{ color: 'var(--accent)', fontWeight: 700 }}>{p.budgetUsed}</span><span style={{ color: 'var(--t2)' }}> / {p.budgetCap} USDC · {pct}%</span></span>
             </div>
             <div style={{ height: 8, background: 'var(--bg-0)', borderRadius: 100, overflow: 'hidden' }}>
@@ -132,13 +125,13 @@ export function PolicyInspect({ p, activity, onClose, onRevoke, onTx, readOnly =
             <div style={{ fontSize: 11.5, color: 'var(--t2)', marginTop: 7 }}>
               {liveSource
                 ? <>The agent calls <span className="mono" style={{ color: 'var(--t1)' }}>assert_within_budget()</span> before every order. Exceeding the cap aborts the transaction on-chain — it is impossible to overspend.</>
-                : budgetCopy}
+                : inspectCopy.budgetCopy}
             </div>
           </div>
 
           {/* move struct */}
           <div>
-            <div className="eyebrow" style={{ marginBottom: 9 }}>{structLabel}</div>
+            <div className="eyebrow" style={{ marginBottom: 9 }}>{inspectCopy.structLabel}</div>
             <div style={{ background: 'var(--bg-0)', border: '1px solid var(--border)', borderRadius: 'var(--r-md)', padding: '14px 16px', fontFamily: 'var(--f-mono)', fontSize: 11.5, lineHeight: 1.7, overflowX: 'auto' }}>
               {structLines.map((l, i) => (
                 <div key={i} style={{ paddingLeft: (l.indent || 0) * 18, whiteSpace: 'pre' }}>
@@ -167,7 +160,7 @@ export function PolicyInspect({ p, activity, onClose, onRevoke, onTx, readOnly =
               <div className="divider" />
               <CapRow granted={false} label="Execute after revoke or expiry" fn="MoveGate mandate check" />
             </div>
-            <div style={{ fontSize: 11.5, color: 'var(--t2)', marginTop: 8 }}>{capabilityCopy}</div>
+            <div style={{ fontSize: 11.5, color: 'var(--t2)', marginTop: 8 }}>{inspectCopy.capabilityCopy}</div>
           </div>
 
           {/* protocol allow-list */}
@@ -198,29 +191,27 @@ export function PolicyInspect({ p, activity, onClose, onRevoke, onTx, readOnly =
               <div style={{ display: 'flex', gap: 11, padding: '11px 13px', borderRadius: 'var(--r-sm)', background: 'var(--glass)', border: '1px solid var(--border)' }}>
                 <span style={{ color: 'var(--sui)', flexShrink: 0 }}><Icon name="wallet" size={16} /></span>
                 <div>
-                  <div style={{ fontSize: 12.5, fontWeight: 600 }}>{liveSource ? 'Owner signs create/revoke only' : 'Owner-signing model'}</div>
+                  <div style={{ fontSize: 12.5, fontWeight: 600 }}>{inspectCopy.ownerSigningTitle}</div>
                   <div style={{ fontSize: 11.5, color: 'var(--t2)', marginTop: 2 }}>
                     {liveSource
                       ? <>The Worker builds unsigned <span className="mono" style={{ color: 'var(--t1)' }}>tx_json</span>; your wallet signs create/revoke. The agent never receives your owner key.</>
-                      : <>Demo mode previews the owner-signed create/revoke path. No authority exists until a real wallet signs the policy transaction.</>}
+                      : <>{inspectCopy.ownerSigningCopy}</>}
                   </div>
                 </div>
               </div>
               <div style={{ display: 'flex', gap: 11, padding: '11px 13px', borderRadius: 'var(--r-sm)', background: 'var(--glass)', border: '1px solid var(--border)' }}>
                 <span style={{ color: 'var(--warn)', flexShrink: 0 }}><Icon name="bolt" size={16} /></span>
                 <div>
-                  <div style={{ fontSize: 12.5, fontWeight: 600 }}>{liveSource ? 'Agent gas is explicit' : 'Execution gas model'}</div>
-                  <div style={{ fontSize: 11.5, color: 'var(--t2)', marginTop: 2 }}>{liveSource ? 'Autonomous execution needs the deployment agent to hold SUI gas plus funded DeepBook BalanceManager inventory; readiness checks block when either is missing.' : 'Demo mode spends no gas. Live execution requires agent gas and funded BalanceManager inventory.'}</div>
+                  <div style={{ fontSize: 12.5, fontWeight: 600 }}>{inspectCopy.agentGasTitle}</div>
+                  <div style={{ fontSize: 11.5, color: 'var(--t2)', marginTop: 2 }}>{inspectCopy.agentGasCopy}</div>
                 </div>
               </div>
               <div style={{ display: 'flex', gap: 11, padding: '11px 13px', borderRadius: 'var(--r-sm)', background: 'var(--glass)', border: '1px solid var(--border)' }}>
                 <span style={{ color: 'var(--accent)', flexShrink: 0 }}><Icon name="target" size={16} /></span>
                 <div>
-                  <div style={{ fontSize: 12.5, fontWeight: 600 }}>{liveSource ? 'Runtime watches DeepBook market data' : 'Trigger model'}</div>
+                  <div style={{ fontSize: 12.5, fontWeight: 600 }}>{inspectCopy.triggerTitle}</div>
                   <div style={{ fontSize: 11.5, color: 'var(--t2)', marginTop: 2 }}>
-                    {liveSource
-                      ? <>The Durable Object monitors the SUI/DBUSDC feed, then Guardian and the wrapper enforce budget, pool, slippage, revocation and expiry before submission.</>
-                      : <>Demo mode previews the same trigger shape. Live checks rely on Worker market reads plus on-chain Mandate/Wrapper enforcement.</>}
+                    {inspectCopy.triggerCopy}
                   </div>
                 </div>
               </div>
@@ -231,7 +222,7 @@ export function PolicyInspect({ p, activity, onClose, onRevoke, onTx, readOnly =
           <div>
             <div className="eyebrow" style={{ marginBottom: 9 }}>{auditLabel}</div>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 0, borderLeft: '2px solid var(--border)', paddingLeft: 16, marginLeft: 4 }}>
-              {log.length === 0 && <div style={{ fontSize: 12.5, color: 'var(--t2)' }}>{liveSource ? 'No on-chain events yet — the agent is monitoring.' : 'No simulated events yet in this demo policy.'}</div>}
+              {log.length === 0 && <div style={{ fontSize: 12.5, color: 'var(--t2)' }}>{inspectCopy.emptyActivityCopy}</div>}
               {log.map((a, i) => (
                 <div key={i} style={{ position: 'relative', paddingBottom: i < log.length - 1 ? 16 : 0 }}>
                   <div style={{ position: 'absolute', left: -23, top: 3, width: 10, height: 10, borderRadius: '50%',

@@ -568,6 +568,7 @@ MVP desktop viewport:
 - Dashboard sidebar global stop/resume in live wallet mode must use the same owner-signed `/api/risk/controls` path as Risk Center; read-only live mode must refuse signing actions and must not mutate local demo policy state.
 - Revoke button changes state to revoked within one 5 second polling interval.
 - Policy Inspect names the real MoveGate Mandate + RescuePolicyWrapper model and does not show stale AgentPolicy, AgentCap, or sponsored-gas claims.
+- `npm run test:policy-inspect` covers the Policy Inspect copy contract: live inspect copy must name `MoveGate Mandate + RescuePolicyWrapper`, describe owner-signed create/revoke and explicit agent gas, and reject stale `AgentPolicy`, `AgentCap` or sponsored-gas phrasing.
 - Profile / Accounts shows the live runtime signer kind, deployment agent, execution blocker, Worker data-provider status, known signer kinds and WaaP/local-daemon external signer boundary when `VITE_WORKER_URL` is configured.
 - Risk Center signer/executor health prefers live `/api/runtime/status` rows and raises signer warnings from those rows when available; static `RG.signers` is only the no-runtime fallback.
 - Data Sources shows Worker ChainDataProvider status from `/api/chain-data/status`, including provider kind, transport, probe status and read model.
