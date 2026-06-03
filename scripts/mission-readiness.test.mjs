@@ -370,6 +370,19 @@ function strictExecutionReport(overrides = {}) {
     safetyReport: safetyNegativeReport(),
     walletReport: verifiedWalletReport(),
     fundingReadiness: readyFunding(),
+    executionReport: null,
+  })
+  assert.equal(report.status, 'blocked')
+  assert.equal(report.next_actions.some((row) => /structured AgentTradeExecuted evidence/.test(row)), true)
+  assert.equal(report.next_actions.some((row) => /same wrapper\/mandate\/tick digest/.test(row)), true)
+}
+
+{
+  const report = buildMissionReadinessReport({
+    scripts: requiredScripts,
+    safetyReport: safetyNegativeReport(),
+    walletReport: verifiedWalletReport(),
+    fundingReadiness: readyFunding(),
     executionReport: strictExecutionReport({ agent_trade_event_found: false }),
   })
   const executionCheck = report.checks.find((row) => row.id === 'strict_execution_evidence')

@@ -671,7 +671,7 @@ function nextActions({ safetyCheck, walletCheck, fundingCheck, strictExecutionCh
     actions.push('Send the DBUSDC/DEEP funding handoff to an external funding provider, then rerun npm run funding:watch -- --json and npm run funding:watch:report.')
   }
   if (fundingCheck?.status === 'passed' && strictExecutionCheck?.status !== 'passed') {
-    actions.push('Run npm run demo:execute:report to write .rescuegrid/demo-execute-report.json proving create -> execute -> revoke -> post-revoke no-execution with AgentTradeExecuted, execution_claimed=true and spend increase.')
+    actions.push('Run npm run demo:execute:report to write .rescuegrid/demo-execute-report.json proving create -> execute -> revoke -> post-revoke no-execution with structured AgentTradeExecuted evidence for the same wrapper/mandate/tick digest, execution_claimed=true and spend increase.')
   }
   if (continuityCheck?.status === 'failed') {
     actions.push('Rerun the browser wallet flow and strict demo execution evidence for the same owner-created wrapper so owner, wrapper, mandate, strategy hash and create/revoke tx digests match.')
@@ -720,7 +720,7 @@ Usage:
 
 This is read-only. It checks validation command registration, wallet click-through
 evidence, live safety-negative evidence, execution funding readiness and strict
-AgentTradeExecuted evidence. It does not create policies, submit PTBs, run
+structured AgentTradeExecuted evidence. It does not create policies, submit PTBs, run
 demo:execute or print secrets. --out writes the same report as a gitignored
 artifact even when status is blocked.`)
 }
