@@ -92,6 +92,7 @@ export function buildFundingWatchReport(readiness, {
     external_signer: handoff.external_signer,
     funding_targets: handoff.funding_targets,
     next_verification: handoff.next_verification,
+    execution_gate: handoff.execution_gate,
     source_of_truth: handoff.source_of_truth,
   }
 }

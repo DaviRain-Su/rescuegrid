@@ -138,6 +138,15 @@ function readiness({ executionReady = false } = {}) {
   assert.equal(report.policy_creation_allowed, false)
   assert.equal(report.policy_creation_blocked, true)
   assert.equal(report.execution_claimed, false)
+  assert.deepEqual(report.execution_gate, {
+    readiness_only: true,
+    policy_creation_allowed: false,
+    policy_creation_blocked: true,
+    execution_claimed: false,
+    strict_execution_report_required: true,
+    strict_execution_report_path: '.rescuegrid/demo-execute-report.json',
+    success_condition: report.next_verification.success_condition,
+  })
   assert.equal(report.funding_targets.balance_manager.required_assets[0].missing, '100')
   assert.match(report.next_verification.success_condition, /structured AgentTradeExecuted evidence/)
   assert.match(report.next_verification.success_condition, /same wrapper\/mandate\/tick digest/)
@@ -167,6 +176,8 @@ function readiness({ executionReady = false } = {}) {
     assert.equal(written.purpose, 'deepbook_execution_funding_watch')
     assert.equal(written.execution_ready, false)
     assert.equal(written.policy_creation_allowed, false)
+    assert.equal(written.execution_gate.readiness_only, true)
+    assert.equal(written.execution_gate.strict_execution_report_required, true)
     assert.equal(JSON.stringify(written).includes('super-secret'), false)
     assert.equal(JSON.stringify(written).includes('"permission_token":'), false)
   } finally {
@@ -193,6 +204,8 @@ function readiness({ executionReady = false } = {}) {
   const written = JSON.parse(readFileSync(reportPath, 'utf8'))
   assert.equal(written.execution_ready, false)
   assert.equal(written.policy_creation_blocked, true)
+  assert.equal(written.execution_gate.policy_creation_blocked, true)
+  assert.equal(written.execution_gate.execution_claimed, false)
   rmSync(tempDir, { recursive: true, force: true })
 }
 
@@ -211,6 +224,23 @@ function readiness({ executionReady = false } = {}) {
   })
   assert.equal(code, 0)
   assert.equal(demoCalls, 1)
+}
+
+{
+  const report = buildFundingWatchReport(readiness({ executionReady: true }), {
+    attempt: 1,
+    maxAttempts: 1,
+    generatedAt: '2026-06-03T00:00:00.000Z',
+    runDemo: true,
+  })
+  assert.equal(report.execution_ready, true)
+  assert.equal(report.would_run_demo, true)
+  assert.equal(report.policy_creation_allowed, true)
+  assert.equal(report.execution_claimed, false)
+  assert.equal(report.execution_gate.readiness_only, true)
+  assert.equal(report.execution_gate.policy_creation_allowed, true)
+  assert.equal(report.execution_gate.execution_claimed, false)
+  assert.equal(report.execution_gate.strict_execution_report_required, true)
 }
 
 {

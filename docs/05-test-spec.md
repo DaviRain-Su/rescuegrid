@@ -365,6 +365,7 @@ Happy path:
 - 输出 agent gas address 的 SUI_MIST observed、required、missing、usable 和 blocker code。
 - 输出 signer readiness、`signer_capabilities` 和 `external_signer` posture；若 WaaP 地址匹配但 local submission runner 未注入，必须保留 `WAAP_RUNNER_MISSING`，不能把 permission-token configured 当作 execution ready。
 - 输出 `next_verification.readiness_command="npm run daemon -- status --json"`、`next_verification.funding_watch_command="npm run funding:watch -- --json"`、`next_verification.funding_watch_report_command="npm run funding:watch:report"`、`next_verification.strict_execution_command="npm run demo:execute"`、`next_verification.strict_execution_report_command="npm run demo:execute:report"` 和 `next_verification.success_condition`，其中 success condition 必须要求同一 wrapper/mandate/tick digest 的结构化 `AgentTradeExecuted` evidence、`execution_claimed=true` 和 on-chain spend increase。
+- 输出 `execution_gate` 机器字段：`readiness_only=true`、`execution_claimed=false`、`strict_execution_report_required=true`、`strict_execution_report_path=".rescuegrid/demo-execute-report.json"`，并按当前 readiness 设置 `policy_creation_allowed` / `policy_creation_blocked`。即使 `ready_for_strict_execution=true`，该 artifact 也只能表示 preflight ready，不能表示执行成功。
 - 支持 `--dbusdc-threshold` / `--deep-threshold` / `--sui-gas-threshold`，且这些 request threshold 只能通过 `buildExecutionReadiness` 提高门槛，不能弱化 Worker 配置 minimum。
 - 支持 `--format markdown --out .rescuegrid/funding-request.md` 生成可转发 funding provider 的 artifact；artifact 必须包含 public agent / BalanceManager / coin type / observed / required / missing / next verification commands / structured execution success condition，且不得包含任何 secret。
 
@@ -381,7 +382,7 @@ Security / boundary:
 Happy path:
 
 - 默认 `npm run funding:watch -- --json` 运行一次，复用 `buildExecutionReadiness` + `buildFundingHandoff` 输出 `purpose=deepbook_execution_funding_watch`、`funding_ready`、`execution_ready`、blocker codes、signer capability posture、external signer posture、public funding targets 和 next verification commands。
-- `npm run funding:watch:report` 或 `--out .rescuegrid/funding-watch-report.json` 必须写出最新 watch JSON；blocked 状态也要写，且不得被当作 strict execution pass。
+- `npm run funding:watch:report` 或 `--out .rescuegrid/funding-watch-report.json` 必须写出最新 watch JSON；blocked 状态也要写，且不得被当作 strict execution pass。watch JSON 必须透传同一 `execution_gate` 语义字段，明确 watcher ready 只表示可以进入 strict execution validator。
 - `--wait --interval-ms <ms> --max-attempts <n>` 轮询同一 readiness contract，直到 `execution_ready=true` 或达到 attempts 上限。
 - `--run-demo` / `--execute` 只有在 `execution_ready=true` 后才启动 strict `demo:execute`；blocked 状态必须返回非零退出码且不创建 policy。
 - `--fail-until-ready` 在资金/签名仍 blocked 时返回非零退出码，用于外部 funding watcher 或 CI gate。

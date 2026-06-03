@@ -125,6 +125,15 @@ assert.equal(handoff.next_verification.strict_execution_command, 'npm run demo:e
 assert.equal(handoff.next_verification.strict_execution_report_command, 'npm run demo:execute:report')
 assert.match(handoff.next_verification.success_condition, /structured AgentTradeExecuted evidence/)
 assert.match(handoff.next_verification.success_condition, /same wrapper\/mandate\/tick digest/)
+assert.deepEqual(handoff.execution_gate, {
+  readiness_only: true,
+  policy_creation_allowed: false,
+  policy_creation_blocked: true,
+  execution_claimed: false,
+  strict_execution_report_required: true,
+  strict_execution_report_path: '.rescuegrid/demo-execute-report.json',
+  success_condition: handoff.next_verification.success_condition,
+})
 assert.equal(handoff.signer_capabilities.some((row) => row.kind === 'waap' && row.runner_configured === false), true)
 assert.equal(handoff.external_signer.kind, 'waap')
 assert.equal(handoff.external_signer.secrets_returned, false)
@@ -138,6 +147,8 @@ assert.match(markdown, /RescueGrid Funding Request/)
 assert.match(markdown, /DBUSDC coin type:/)
 assert.match(markdown, /Signer: worker-secret/)
 assert.match(markdown, /External signer: waap/)
+assert.match(markdown, /Execution gate: readiness-only/)
+assert.match(markdown, /Strict execution report required: \.rescuegrid\/demo-execute-report\.json/)
 assert.match(markdown, /After funding, run:/)
 assert.match(markdown, /npm run funding:watch:report/)
 assert.match(markdown, /Success condition: Strict execution must preflight ready/)
@@ -154,11 +165,27 @@ try {
   const artifactBody = readFileSync(artifactPath, 'utf8')
   assert.match(artifactBody, /RescueGrid Funding Request/)
   assert.match(artifactBody, /missing 750/)
+  assert.match(artifactBody, /readiness-only/)
   assert.match(artifactBody, /structured AgentTradeExecuted evidence/)
   assert.equal(artifactBody.includes('super-secret'), false)
 } finally {
   rmSync(artifactDir, { recursive: true, force: true })
 }
+
+const readyHandoff = buildFundingHandoff({
+  ...readiness,
+  execution_ready: true,
+  funding_ready: true,
+  blocker_codes: [],
+  blocker_labels: [],
+}, { generatedAt: '2026-06-03T00:00:00.000Z' })
+assert.equal(readyHandoff.ready_for_strict_execution, true)
+assert.equal(readyHandoff.execution_claimed, false)
+assert.equal(readyHandoff.execution_gate.readiness_only, true)
+assert.equal(readyHandoff.execution_gate.policy_creation_allowed, true)
+assert.equal(readyHandoff.execution_gate.policy_creation_blocked, false)
+assert.equal(readyHandoff.execution_gate.execution_claimed, false)
+assert.equal(readyHandoff.execution_gate.strict_execution_report_required, true)
 
 const env = fundingHandoffEnv({
   AGENT_KEY: 'super-secret',

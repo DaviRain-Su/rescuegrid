@@ -162,6 +162,22 @@ function assetFundingRow({ readiness, asset, coinType, holderKind }) {
   }
 }
 
+const STRICT_EXECUTION_REPORT_PATH = '.rescuegrid/demo-execute-report.json'
+const STRICT_EXECUTION_SUCCESS_CONDITION = 'Strict execution must preflight ready, create a policy, force a tick, then prove structured AgentTradeExecuted evidence for the same wrapper/mandate/tick digest, execution_claimed=true and on-chain spend increase.'
+
+function executionGate(readiness) {
+  const policyCreationAllowed = Boolean(readiness.execution_ready)
+  return {
+    readiness_only: true,
+    policy_creation_allowed: policyCreationAllowed,
+    policy_creation_blocked: !policyCreationAllowed,
+    execution_claimed: false,
+    strict_execution_report_required: true,
+    strict_execution_report_path: STRICT_EXECUTION_REPORT_PATH,
+    success_condition: STRICT_EXECUTION_SUCCESS_CONDITION,
+  }
+}
+
 export function buildFundingHandoff(readiness, { generatedAt = new Date().toISOString() } = {}) {
   const dbusdc = assetFundingRow({
     readiness,
@@ -234,8 +250,9 @@ export function buildFundingHandoff(readiness, { generatedAt = new Date().toISOS
       funding_watch_report_command: 'npm run funding:watch:report',
       strict_execution_command: 'npm run demo:execute',
       strict_execution_report_command: 'npm run demo:execute:report',
-      success_condition: 'Strict execution must preflight ready, create a policy, force a tick, then prove structured AgentTradeExecuted evidence for the same wrapper/mandate/tick digest, execution_claimed=true and on-chain spend increase.',
+      success_condition: STRICT_EXECUTION_SUCCESS_CONDITION,
     },
+    execution_gate: executionGate(readiness),
     source_of_truth: readiness.source_of_truth || [
       'runtime status signer adapter',
       'DeepBook BalanceManager read from Sui Testnet',
@@ -259,6 +276,8 @@ function markdown(handoff) {
     `Blockers: ${handoff.blocker_codes.join(', ') || 'none'}`,
     `Signer: ${handoff.signer.kind} (${handoff.signer.unavailable_code || (handoff.signer.execution_enabled ? 'execution enabled' : 'execution gated')})`,
     handoff.external_signer ? `External signer: ${handoff.external_signer.kind} · ${handoff.external_signer.status} · runner_configured=${handoff.external_signer.submission_runner_configured}` : null,
+    `Execution gate: readiness-only; policy_creation_allowed=${handoff.execution_gate.policy_creation_allowed}; execution_claimed=false`,
+    `Strict execution report required: ${handoff.execution_gate.strict_execution_report_path}`,
     '',
     `Agent: ${handoff.agent.address}`,
     `BalanceManager: ${handoff.agent.balance_manager_id}`,
