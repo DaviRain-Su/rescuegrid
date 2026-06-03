@@ -226,6 +226,8 @@ assert.equal(evidence.frontend.url, 'http://localhost:5175')
 assert.equal(evidence.frontend.preflight_passed, true)
 assert.equal(evidence.worker.url, 'http://localhost:8787')
 assert.equal(evidence.worker.public_state_available, true)
+assert.equal(evidence.worker.public_state_preflight_passed, true)
+assert.equal(evidence.worker.public_state_checks.every((check) => check.status === 'passed'), true)
 assert.equal(evidence.deployment.agent_address, deployment.agent.address)
 const activationIndex = evidence.manual_flow.findIndex((step) => step.id === 'activation')
 const strictWindowIndex = evidence.manual_flow.findIndex((step) => step.id === 'strict_execution_window')
@@ -257,6 +259,7 @@ assert.match(markdown, /create_tx_digest: TODO/)
 assert.match(markdown, /wrapper_id: TODO/)
 assert.match(markdown, /Execution claimed: false/)
 assert.match(markdown, /Frontend preflight: true/)
+assert.match(markdown, /Public state preflight: true/)
 assert.match(markdown, /activation_strategy_file: TODO/)
 assert.match(markdown, /strict_execution_report_reference: TODO/)
 assert.match(markdown, /Wallet auto-connect disabled: true/)
@@ -296,6 +299,19 @@ const unavailable = await collectWorkerPublicState('http://worker.test', {
 })
 assert.equal(unavailable.root.status, 'unavailable')
 assert.equal(buildWalletEvidence({ workerState: unavailable }).worker.public_state_available, false)
+assert.equal(buildWalletEvidence({ workerState: unavailable }).worker.public_state_preflight_passed, false)
+const wrongChainWorkerEvidence = buildWalletEvidence({
+  workerState: {
+    ...workerState,
+    runtime_status: {
+      ...workerState.runtime_status,
+      chain: 'sui:mainnet',
+    },
+  },
+})
+assert.equal(wrongChainWorkerEvidence.worker.public_state_available, true)
+assert.equal(wrongChainWorkerEvidence.worker.public_state_preflight_passed, false)
+assert.equal(wrongChainWorkerEvidence.worker.public_state_checks.find((check) => check.id === 'worker-public:chain').status, 'failed')
 assert.equal(buildWalletEvidence({
   frontendState: {
     root: { status: 'ok', contains_rescuegrid: true, has_vite_dev_entry: true },

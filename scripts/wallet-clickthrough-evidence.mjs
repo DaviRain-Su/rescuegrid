@@ -362,6 +362,88 @@ function workerStateAvailable(workerState = {}) {
   ].every((row) => row?.status === 'ok')
 }
 
+function buildWorkerPublicStateChecks(workerState = {}) {
+  const root = workerState.root || {}
+  const runtime = workerState.runtime_status || {}
+  const readiness = workerState.execution_readiness || {}
+  const chainData = workerState.chain_data_status || {}
+  return [
+    createCheck({
+      id: 'worker-public:endpoints',
+      label: 'Worker public status endpoints are reachable',
+      passed: workerStateAvailable(workerState),
+      expected: 'root, runtime, execution readiness and chain-data status ok',
+      actual: {
+        root: root.status || null,
+        runtime_status: runtime.status || null,
+        execution_readiness: readiness.status || null,
+        chain_data_status: chainData.status || null,
+      },
+    }),
+    createCheck({
+      id: 'worker-public:service',
+      label: 'Worker root identifies RescueGrid service',
+      passed: root.service === 'rescuegrid-worker',
+      expected: 'rescuegrid-worker',
+      actual: root.service || null,
+    }),
+    createCheck({
+      id: 'worker-public:chain',
+      label: 'Worker public status is for the deployed chain',
+      passed: root.chain === deployment.chain && runtime.chain === deployment.chain && readiness.chain === deployment.chain,
+      expected: deployment.chain,
+      actual: { root: root.chain || null, runtime: runtime.chain || null, readiness: readiness.chain || null },
+    }),
+    createCheck({
+      id: 'worker-public:agent',
+      label: 'Worker runtime agent matches deployment',
+      passed: runtime.agent_address === deployment.agent.address,
+      expected: deployment.agent.address,
+      actual: runtime.agent_address || null,
+    }),
+    createCheck({
+      id: 'worker-public:signer-address',
+      label: 'Worker signer posture matches expected deployment agent when available',
+      passed: runtime.signer_matches_expected !== false && readiness.signer_available !== false,
+      expected: 'signer matches expected deployment agent or remains unavailable with explicit posture',
+      actual: {
+        runtime_matches_expected: runtime.signer_matches_expected,
+        readiness_signer_available: readiness.signer_available,
+        runtime_signer_kind: runtime.signer_kind || null,
+        readiness_signer_kind: readiness.signer_kind || null,
+      },
+    }),
+    createCheck({
+      id: 'worker-public:readiness-preflight-only',
+      label: 'Execution readiness does not claim execution success',
+      passed: readiness.execution_claimed === false,
+      expected: false,
+      actual: readiness.execution_claimed,
+    }),
+    createCheck({
+      id: 'worker-public:chain-data-worker-first',
+      label: 'Chain data status reports Worker-first reads',
+      passed: chainData.worker_first === true && evidenceValuePresent(chainData.provider_kind),
+      expected: 'worker_first=true with provider kind',
+      actual: { worker_first: chainData.worker_first, provider_kind: chainData.provider_kind || null },
+    }),
+    createCheck({
+      id: 'worker-public:no-external-signer-secrets',
+      label: 'Worker public signer posture does not report external signer secrets',
+      passed: runtime.external_signer?.secrets_returned !== true && readiness.external_signer?.secrets_returned !== true,
+      expected: 'secrets_returned=false',
+      actual: {
+        runtime: runtime.external_signer?.secrets_returned ?? null,
+        readiness: readiness.external_signer?.secrets_returned ?? null,
+      },
+    }),
+  ]
+}
+
+function workerPublicStatePreflightPassed(workerState = {}) {
+  return buildWorkerPublicStateChecks(workerState).every((check) => check.status === 'passed')
+}
+
 export function buildWalletEvidence({
   generatedAt = new Date().toISOString(),
   frontendUrl = DEFAULT_FRONTEND_URL,
@@ -390,6 +472,8 @@ export function buildWalletEvidence({
     worker: {
       url: normalizeUrl(workerUrl),
       public_state_available: workerStateAvailable(workerState),
+      public_state_preflight_passed: workerPublicStatePreflightPassed(workerState),
+      public_state_checks: buildWorkerPublicStateChecks(workerState),
       public_state: workerState,
     },
     deployment: {
@@ -564,6 +648,7 @@ function markdown(evidence) {
     '## Worker Public State',
     '',
     `Public state available: ${evidence.worker.public_state_available}`,
+    `Public state preflight: ${evidence.worker.public_state_preflight_passed}`,
     `Runtime status: ${state.runtime_status?.status || 'unavailable'}`,
     `Signer kind: ${state.runtime_status?.signer_kind || 'n/a'}`,
     `Signer available: ${valueOrTodo(state.runtime_status?.signer_available)}`,
@@ -1986,10 +2071,22 @@ export async function main(argv = process.argv.slice(2), env = process.env, opti
     return 1
   }
   if (flags.has('--require-worker') && !workerStateAvailable(workerState)) {
+    const workerChecks = buildWorkerPublicStateChecks(workerState)
     console.error(JSON.stringify({
       status: 'error',
-      code: 'WORKER_UNAVAILABLE',
+      code: 'WORKER_PREFLIGHT_FAILED',
       worker_url: workerUrl,
+      worker_checks: workerChecks,
+      worker_state: workerState,
+    }, null, 2))
+    return 1
+  }
+  if (flags.has('--require-worker') && !workerPublicStatePreflightPassed(workerState)) {
+    console.error(JSON.stringify({
+      status: 'error',
+      code: 'WORKER_PREFLIGHT_FAILED',
+      worker_url: workerUrl,
+      worker_checks: buildWorkerPublicStateChecks(workerState),
       worker_state: workerState,
     }, null, 2))
     return 1
@@ -2014,6 +2111,7 @@ export async function main(argv = process.argv.slice(2), env = process.env, opti
       chain: evidence.chain,
       frontend_preflight_passed: evidence.frontend.preflight_passed,
       worker_public_state_available: evidence.worker.public_state_available,
+      worker_public_state_preflight_passed: evidence.worker.public_state_preflight_passed,
       actual_clickthrough_completed: evidence.actual_clickthrough_completed,
       execution_claimed: evidence.execution_claimed,
     }, null, 2))
