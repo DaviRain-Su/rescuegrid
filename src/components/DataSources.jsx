@@ -13,6 +13,11 @@ import {
 import { useChainDataStatus } from '../queries/chain-data-status.js'
 import { okArchivalReplayContract, useArchivalReplayContract } from '../queries/archival-replay.js'
 import { okPrivatePolicyRecordContract, usePrivatePolicyRecordContract } from '../queries/private-policy-records.js'
+import {
+  archivalReplayDiagnostic,
+  chainDataProviderDiagnostic,
+  privatePolicyRecordDiagnostic,
+} from '../queries/data-source-diagnostics.js'
 
 const ACCESS_META = {
   live:  { c: 'var(--safe)',   label: 'Live · direct', note: 'Public, CORS-open — the browser fetches it directly.' },
@@ -70,28 +75,19 @@ function WorkerSurfaceCard({ title, icon, data, query, metricRows, adapterRows }
 }
 
 function ChainDataProviderCard({ data, query, onProbe }) {
-  const unavailable = !WORKER_CONFIGURED ? 'worker not configured' : query.isError ? 'worker read failed' : data?.provider_status || 'loading';
-  const ready = data?.provider_status === 'ready' || (data?.provider_status === 'configured' && data?.available);
-  const warn = data?.provider_status === 'probe_failed' || data?.provider_status === 'unavailable' || data?.status === 'error';
-  const tone = ready ? 'safe' : warn ? 'warn' : 'neutral';
-  const readModel = data?.read_model || {};
-  const probeStatus = data?.probe?.status || (query.isPending ? 'loading' : 'not run');
+  const diagnostic = chainDataProviderDiagnostic(data, query, { workerConfigured: WORKER_CONFIGURED });
   return (
     <div className="card" style={{ padding: '15px 17px', display: 'flex', flexDirection: 'column', gap: 12, minWidth: 0 }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 9 }}>
-        <span style={{ color: ready ? 'var(--accent)' : warn ? 'var(--warn)' : 'var(--t2)' }}><Icon name="layers" size={16} /></span>
+        <span style={{ color: diagnostic.ready ? 'var(--accent)' : diagnostic.warn ? 'var(--warn)' : 'var(--t2)' }}><Icon name="layers" size={16} /></span>
         <div className="card-title" style={{ fontSize: 13 }}>Worker chain provider</div>
         <div style={{ flex: 1 }} />
-        <SurfacePill tone={tone}>{data?.provider_status || unavailable}</SurfacePill>
+        <SurfacePill tone={diagnostic.tone}>{diagnostic.statusLabel}</SurfacePill>
       </div>
-      {data?.status === 'ok' ? (
+      {diagnostic.available ? (
         <>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: 8 }}>
-            {[
-              ['Provider', data.provider_kind || '—'],
-              ['Transport', data.transport || '—'],
-              ['Probe', probeStatus],
-            ].map(([k, v]) => (
+            {diagnostic.metrics.map(([k, v]) => (
               <div key={k} style={{ padding: '9px 10px', borderRadius: 8, background: 'var(--glass)', border: '1px solid var(--border)' }}>
                 <div className="eyebrow" style={{ fontSize: 8.5 }}>{k}</div>
                 <div className="mono display" style={{ fontSize: 13, fontWeight: 600, marginTop: 4, overflow: 'hidden', textOverflow: 'ellipsis' }}>{v}</div>
@@ -99,16 +95,16 @@ function ChainDataProviderCard({ data, query, onProbe }) {
             ))}
           </div>
           <div style={{ display: 'flex', gap: 7, flexWrap: 'wrap' }}>
-            {Object.entries(readModel).map(([k, v]) => (
-              <span key={k} className="badge badge-neutral" style={{ fontSize: 9.5 }}>
-                {k.replace(/_/g, ' ')}
-                <span style={{ color: String(v).includes('fallback') ? 'var(--warn)' : 'var(--safe)', marginLeft: 5 }}>{v}</span>
+            {diagnostic.readModelRows.map((row) => (
+              <span key={row.id} className="badge badge-neutral" style={{ fontSize: 9.5 }}>
+                {row.label}
+                <span style={{ color: row.warn ? 'var(--warn)' : 'var(--safe)', marginLeft: 5 }}>{row.value}</span>
               </span>
             ))}
           </div>
-          {data.probe?.status === 'error' && (
+          {diagnostic.probeError && (
             <div className="mono" style={{ fontSize: 10, color: 'var(--warn)', lineHeight: 1.45 }}>
-              {data.probe.code || 'PROBE_FAILED'} · {data.probe.message || 'schema/read probe failed'}
+              {diagnostic.probeError}
             </div>
           )}
           <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
@@ -128,28 +124,19 @@ function ChainDataProviderCard({ data, query, onProbe }) {
 }
 
 function ArchivalReplayCard({ data, query }) {
-  const unavailable = !WORKER_CONFIGURED ? 'worker not configured' : query.isError ? 'worker read failed' : data?.provider?.provider_status || 'loading';
-  const provider = data?.provider || {};
-  const ready = provider.provider_status === 'ready';
-  const warn = provider.provider_status && provider.provider_status !== 'ready';
-  const tone = ready ? 'safe' : warn ? 'warn' : 'neutral';
-  const contracts = data?.query_contracts || [];
+  const diagnostic = archivalReplayDiagnostic(data, query, { workerConfigured: WORKER_CONFIGURED });
   return (
     <div className="card" style={{ padding: '15px 17px', display: 'flex', flexDirection: 'column', gap: 12, minWidth: 0 }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 9 }}>
-        <span style={{ color: ready ? 'var(--accent)' : warn ? 'var(--warn)' : 'var(--t2)' }}><Icon name="clock" size={16} /></span>
+        <span style={{ color: diagnostic.ready ? 'var(--accent)' : diagnostic.warn ? 'var(--warn)' : 'var(--t2)' }}><Icon name="clock" size={16} /></span>
         <div className="card-title" style={{ fontSize: 13 }}>Archival replay contract</div>
         <div style={{ flex: 1 }} />
-        <SurfacePill tone={tone}>{provider.provider_status || unavailable}</SurfacePill>
+        <SurfacePill tone={diagnostic.tone}>{diagnostic.statusLabel}</SurfacePill>
       </div>
-      {data?.status === 'ok' ? (
+      {diagnostic.available ? (
         <>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: 8 }}>
-            {[
-              ['Provider', provider.kind || 'none'],
-              ['Contracts', contracts.length],
-              ['Replay only', provider.replay_only ? 'yes' : '—'],
-            ].map(([k, v]) => (
+            {diagnostic.metrics.map(([k, v]) => (
               <div key={k} style={{ padding: '9px 10px', borderRadius: 8, background: 'var(--glass)', border: '1px solid var(--border)' }}>
                 <div className="eyebrow" style={{ fontSize: 8.5 }}>{k}</div>
                 <div className="mono display" style={{ fontSize: 13, fontWeight: 600, marginTop: 4, overflow: 'hidden', textOverflow: 'ellipsis' }}>{v}</div>
@@ -157,7 +144,7 @@ function ArchivalReplayCard({ data, query }) {
             ))}
           </div>
           <div style={{ display: 'flex', gap: 7, flexWrap: 'wrap' }}>
-            {contracts.map((row) => (
+            {diagnostic.contractRows.map((row) => (
               <span key={row.id} className="badge badge-neutral" style={{ fontSize: 9.5 }}>
                 {row.label}
                 <span style={{ color: 'var(--warn)', marginLeft: 5 }}>contract</span>
@@ -165,7 +152,7 @@ function ArchivalReplayCard({ data, query }) {
             ))}
           </div>
           <div className="mono" style={{ fontSize: 10, color: 'var(--t2)', lineHeight: 1.45 }}>
-            {provider.blocker_code || 'REPLAY_CONTRACT_ONLY'} · existing activity hot path unchanged
+            {diagnostic.blocker} · {diagnostic.hotPath}
           </div>
         </>
       ) : (
@@ -178,31 +165,19 @@ function ArchivalReplayCard({ data, query }) {
 }
 
 function PrivatePolicyRecordCard({ data, query }) {
-  const unavailable = !WORKER_CONFIGURED ? 'worker not configured' : query.isError ? 'worker read failed' : data?.provider?.provider_status || 'loading';
-  const provider = data?.provider || {};
-  const ready = provider.provider_status === 'ready';
-  const warn = provider.provider_status && provider.provider_status !== 'ready';
-  const tone = ready ? 'safe' : warn ? 'warn' : 'neutral';
-  const contracts = data?.record_contracts || [];
-  const objectContract = data?.object_contract || {};
-  const operations = data?.operation_contracts || [];
-  const events = data?.event_contracts || [];
+  const diagnostic = privatePolicyRecordDiagnostic(data, query, { workerConfigured: WORKER_CONFIGURED });
   return (
     <div className="card" style={{ padding: '15px 17px', display: 'flex', flexDirection: 'column', gap: 12, minWidth: 0 }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 9 }}>
-        <span style={{ color: ready ? 'var(--accent)' : warn ? 'var(--warn)' : 'var(--t2)' }}><Icon name="key" size={16} /></span>
+        <span style={{ color: diagnostic.ready ? 'var(--accent)' : diagnostic.warn ? 'var(--warn)' : 'var(--t2)' }}><Icon name="key" size={16} /></span>
         <div className="card-title" style={{ fontSize: 13 }}>Private policy records</div>
         <div style={{ flex: 1 }} />
-        <SurfacePill tone={tone}>{provider.provider_status || unavailable}</SurfacePill>
+        <SurfacePill tone={diagnostic.tone}>{diagnostic.statusLabel}</SurfacePill>
       </div>
-      {data?.status === 'ok' ? (
+      {diagnostic.available ? (
         <>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', gap: 8 }}>
-            {[
-              ['Provider', provider.kind || 'none'],
-              ['Records', contracts.length],
-              ['Object', objectContract.implementation_status || 'contract'],
-            ].map(([k, v]) => (
+            {diagnostic.metrics.map(([k, v]) => (
               <div key={k} style={{ padding: '9px 10px', borderRadius: 8, background: 'var(--glass)', border: '1px solid var(--border)' }}>
                 <div className="eyebrow" style={{ fontSize: 8.5 }}>{k}</div>
                 <div className="mono display" style={{ fontSize: 13, fontWeight: 600, marginTop: 4, overflow: 'hidden', textOverflow: 'ellipsis' }}>{v}</div>
@@ -210,25 +185,25 @@ function PrivatePolicyRecordCard({ data, query }) {
             ))}
           </div>
           <div style={{ display: 'flex', gap: 7, flexWrap: 'wrap' }}>
-            {contracts.map((row) => (
+            {diagnostic.recordRows.map((row) => (
               <span key={row.id} className="badge badge-neutral" style={{ fontSize: 9.5 }}>
                 {row.label}
-                <span style={{ color: row.client_side_encryption_required ? 'var(--warn)' : 'var(--t2)', marginLeft: 5 }}>contract</span>
+                <span style={{ color: row.encryptionRequired ? 'var(--warn)' : 'var(--t2)', marginLeft: 5 }}>{row.value}</span>
               </span>
             ))}
-            {operations.length > 0 && (
+            {diagnostic.operationsCount > 0 && (
               <span className="badge badge-neutral" style={{ fontSize: 9.5 }}>
-                operations<span style={{ color: 'var(--warn)', marginLeft: 5 }}>{operations.length}</span>
+                operations<span style={{ color: 'var(--warn)', marginLeft: 5 }}>{diagnostic.operationsCount}</span>
               </span>
             )}
-            {events.length > 0 && (
+            {diagnostic.eventsCount > 0 && (
               <span className="badge badge-neutral" style={{ fontSize: 9.5 }}>
-                events<span style={{ color: 'var(--warn)', marginLeft: 5 }}>{events.length}</span>
+                events<span style={{ color: 'var(--warn)', marginLeft: 5 }}>{diagnostic.eventsCount}</span>
               </span>
             )}
           </div>
           <div className="mono" style={{ fontSize: 10, color: 'var(--t2)', lineHeight: 1.45 }}>
-            {objectContract.blocker_code || provider.blocker_code || 'PRIVATE_RECORD_CONTRACT_ONLY'} · encrypted storage hot path unchanged
+            {diagnostic.blocker} · {diagnostic.hotPath}
           </div>
         </>
       ) : (

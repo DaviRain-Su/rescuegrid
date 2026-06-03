@@ -45,6 +45,7 @@ npm run test:activity-ledger        # Agent Activity normalization / signer evid
 npm run test:session-mode           # live/read-only/demo session boundaries
 npm run test:dashboard-live         # live dashboard avoids demo crash/spark fallbacks
 npm run test:policy-inspect         # Policy Inspect MoveGate/Wrapper copy contract
+npm run test:data-sources           # Data Sources provider/replay/private diagnostics
 npm run test:wallet-flow            # mock wallet create/revoke orchestration
 npm run test:wallet-evidence        # wallet click-through evidence artifact contract
 npm run test:mission-readiness      # PRD readiness gate contract

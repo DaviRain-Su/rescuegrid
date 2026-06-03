@@ -573,6 +573,7 @@ MVP desktop viewport:
 - Risk Center signer/executor health prefers live `/api/runtime/status` rows and raises signer warnings from those rows when available; static `RG.signers` is only the no-runtime fallback.
 - Data Sources shows Worker ChainDataProvider status from `/api/chain-data/status`, including provider kind, transport, probe status and read model.
 - Data Sources shows Archival replay contract status from `/api/archival/replay-contract`, including provider status, contract count and replay-only blocker.
+- `npm run test:data-sources` covers the Data Sources diagnostic contract: ChainDataProvider provider/transport/probe/read-model rows, explicit JSON-RPC fallback warnings, archival replay contract count/replay-only blocker, and private-record provider/object/operation/event contract blockers.
 - Primary buttons have text labels and disabled/loading states.
 
 Post-MVP mobile viewport:
