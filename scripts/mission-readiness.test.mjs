@@ -341,7 +341,31 @@ function strictExecutionReport(overrides = {}) {
   assert.equal(report.next_actions.some((row) => /keep the same wrapper active for strict execution evidence before revoking/.test(row)), true)
   assert.equal(report.next_actions.some((row) => /strict_execution_report_reference/.test(row)), true)
   assert.equal(report.next_actions.some((row) => /wallet:evidence:verify -- --input \.rescuegrid\/wallet-clickthrough-evidence\.md --require-worker/.test(row)), true)
+  assert.equal(report.next_actions.some((row) => /--execution-report \.rescuegrid\/demo-execute-report\.json/.test(row)), true)
   assertNoSecretSignerPosture(report)
+}
+
+{
+  const report = buildMissionReadinessReport({
+    scripts: requiredScripts,
+    safetyReport: safetyNegativeReport(),
+    walletReport: {
+      verified: false,
+      code: 'STRICT_EXECUTION_REFERENCE_MISMATCH',
+      checks: [{ id: 'manual:strict-execution-report-reference', status: 'failed' }],
+      strict_execution_report_reference_mismatch: {
+        expected: '.rescuegrid/demo-execute-report.json',
+        actual: '.rescuegrid/other-demo-execute-report.json',
+      },
+    },
+    fundingReadiness: readyFunding(),
+    executionReport: strictExecutionReport(),
+  })
+  const walletCheck = report.checks.find((row) => row.id === 'wallet_clickthrough')
+  assert.equal(report.status, 'failed')
+  assert.equal(walletCheck.status, 'failed')
+  assert.equal(walletCheck.evidence.failed_checks.includes('manual:strict-execution-report-reference'), true)
+  assert.equal(walletCheck.evidence.strict_execution_report_reference_mismatch.actual, '.rescuegrid/other-demo-execute-report.json')
 }
 
 {
@@ -576,6 +600,7 @@ function strictExecutionReport(overrides = {}) {
   const originalLog = console.log
   let output = ''
   let walletVerifierRequiredWorker = false
+  let walletVerifierStrictExecutionPath = null
   console.log = (value) => {
     output += `${value}\n`
   }
@@ -588,8 +613,9 @@ function strictExecutionReport(overrides = {}) {
       '.rescuegrid/mission-readiness-test-missing-execution.json',
     ], {}, {
       fundingReadiness: null,
-      verifyWallet: async ({ requireWorker }) => {
+      verifyWallet: async ({ requireWorker, strictExecutionReportPath }) => {
         walletVerifierRequiredWorker = requireWorker === true
+        walletVerifierStrictExecutionPath = strictExecutionReportPath
         throw new Error('synthetic wallet verifier failure')
       },
     })
@@ -600,6 +626,7 @@ function strictExecutionReport(overrides = {}) {
   }
   const report = JSON.parse(output)
   assert.equal(walletVerifierRequiredWorker, true)
+  assert.equal(walletVerifierStrictExecutionPath, '.rescuegrid/mission-readiness-test-missing-execution.json')
   assert.equal(report.status, 'failed')
   assert.equal(report.blocker_codes.includes('WALLET_EVIDENCE_MISMATCH'), true)
 }

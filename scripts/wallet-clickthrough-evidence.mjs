@@ -813,6 +813,30 @@ function buildClickthroughCompletedCheck(metadata = {}) {
   })
 }
 
+function normalizeReferencePath(value) {
+  return stripCodeFence(value).replace(/\\/g, '/')
+}
+
+function sameReportReference(actual, expected) {
+  const normalizedActual = normalizeReferencePath(actual)
+  const normalizedExpected = normalizeReferencePath(expected)
+  if (!normalizedExpected) return true
+  if (normalizedActual === normalizedExpected) return true
+  if (!normalizedActual) return false
+  return resolve(normalizedActual) === resolve(normalizedExpected)
+}
+
+function buildStrictExecutionReportReferenceCheck(fields, expectedPath) {
+  return createCheck({
+    id: 'manual:strict-execution-report-reference',
+    label: 'Strict execution report reference matches the expected report path',
+    passed: sameReportReference(fields.strict_execution_report_reference, expectedPath),
+    expected: expectedPath || 'not required',
+    actual: fields.strict_execution_report_reference || '',
+    skipped: !expectedPath,
+  })
+}
+
 function activityTxDigest(row = {}) {
   return row.tx || row.tx_digest || row.digest || null
 }
@@ -903,6 +927,7 @@ export async function verifyWalletEvidenceArtifact({
   fetchImpl = globalThis.fetch,
   timeoutMs = DEFAULT_TIMEOUT_MS,
   requireWorker = false,
+  strictExecutionReportPath = null,
 } = {}) {
   const parsed = parseWalletEvidenceArtifact(artifactText)
   const fields = parsed.fields || {}
@@ -912,11 +937,11 @@ export async function verifyWalletEvidenceArtifact({
   checks.push(secretCheck)
   checks.push(...buildMissingChecks(fields, requiredFields))
   checks.push(buildClickthroughCompletedCheck(parsed.metadata))
-  const missing = checks.filter((check) => check.status === 'failed').map((check) => {
+  const missing = [...new Set(checks.filter((check) => check.status === 'failed').map((check) => {
     if (check.id.startsWith('field:')) return check.id.replace('field:', '')
     if (check.id === 'manual:actual-clickthrough-completed') return 'actual_clickthrough_completed'
     return check.id
-  })
+  }))]
 
   const report = {
     status: 'ok',
@@ -926,6 +951,7 @@ export async function verifyWalletEvidenceArtifact({
     worker_url: workerUrl || parsed.metadata?.worker_url || null,
     fields: Object.fromEntries(requiredFields.map((field) => [field, fields[field] || ''])),
     actual_clickthrough_completed: parsed.metadata?.actual_clickthrough_completed === true,
+    strict_execution_report_reference_expected: strictExecutionReportPath || null,
     required_core_fields: REQUIRED_WALLET_CORE_FIELDS,
     required_manual_fields: REQUIRED_WALLET_MANUAL_FIELDS,
     checks,
@@ -945,6 +971,20 @@ export async function verifyWalletEvidenceArtifact({
     report.code = 'EVIDENCE_FIELDS_INCOMPLETE'
     report.missing_fields = missing
     return report
+  }
+
+  if (strictExecutionReportPath) {
+    const referenceCheck = buildStrictExecutionReportReferenceCheck(fields, strictExecutionReportPath)
+    report.checks.push(referenceCheck)
+    if (referenceCheck.status === 'failed') {
+      report.status = 'error'
+      report.code = 'STRICT_EXECUTION_REFERENCE_MISMATCH'
+      report.strict_execution_report_reference_mismatch = {
+        expected: referenceCheck.expected,
+        actual: referenceCheck.actual,
+      }
+      return report
+    }
   }
 
   const client = suiClient || getClient()
@@ -1027,13 +1067,16 @@ Usage:
   npm run wallet:evidence -- --format markdown --out .rescuegrid/wallet-clickthrough-evidence.md
   npm run wallet:evidence -- --frontend-url http://localhost:5175 --worker-url http://localhost:8787 --owner 0x...
   npm run wallet:evidence:verify -- --input .rescuegrid/wallet-clickthrough-evidence.md --require-worker
+  npm run wallet:evidence:verify -- --input .rescuegrid/wallet-clickthrough-evidence.md --execution-report .rescuegrid/demo-execute-report.json
 
 This is read-only. It may fetch public Worker status/readiness endpoints, then
 prints or writes a manual Slush / standard Sui wallet evidence checklist. It
 does not create policies, submit PTBs, run demo:execute or print signing
 secrets, Worker secrets, tick tokens or WaaP approval values. With --verify it
 checks a filled artifact against public Sui transaction events and optional
-Worker detail reads. With --require-frontend / --require-worker it fails before
+Worker detail reads, and --execution-report requires the artifact's
+strict_execution_report_reference to point at that report path. With
+--require-frontend / --require-worker it fails before
 the manual click-through when the local services or login guardrails are not
 ready.`)
 }
@@ -1076,6 +1119,7 @@ export async function main(argv = process.argv.slice(2), env = process.env, opti
       fetchImpl: options.fetchImpl,
       timeoutMs: Number.isFinite(timeoutMs) && timeoutMs > 0 ? timeoutMs : DEFAULT_TIMEOUT_MS,
       requireWorker: flags.has('--require-worker'),
+      strictExecutionReportPath: flags.get('--execution-report') || flags.get('--strict-execution-report') || null,
     })
     console.log(JSON.stringify(report, null, 2))
     return report.verified ? 0 : 1

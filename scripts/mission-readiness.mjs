@@ -255,6 +255,7 @@ export function summarizeWalletReport(report) {
       evidence: {
         actual_clickthrough_completed: report.actual_clickthrough_completed === true,
         worker_url: report.worker_url || null,
+        strict_execution_report_reference_expected: report.strict_execution_report_reference_expected || null,
         missing_fields: report.missing_fields || [],
         missing_field_count: Array.isArray(report.missing_fields) ? report.missing_fields.length : 0,
         required_core_fields: report.required_core_fields || [],
@@ -270,6 +271,7 @@ export function summarizeWalletReport(report) {
     blocker_codes: ['WALLET_EVIDENCE_MISMATCH'],
     evidence: {
       failed_checks: (report.checks || []).filter((row) => row.status === 'failed').map((row) => row.id),
+      strict_execution_report_reference_mismatch: report.strict_execution_report_reference_mismatch || null,
     },
   })
 }
@@ -689,7 +691,7 @@ function nextActions({ safetyCheck, walletCheck, fundingCheck, strictExecutionCh
     actions.push('Run npm run safety:negative:report with a live local Worker to write .rescuegrid/safety-negative-report.json proving all required validate-plan blockers.')
   }
   if (walletCheck?.status !== 'passed') {
-    actions.push('Run npm run wallet:evidence -- --format markdown --out .rescuegrid/wallet-clickthrough-evidence.md, then npm run wallet:evidence:preflight before the real Slush / standard Sui wallet flow. Create and activate the policy first, keep the same wrapper active for strict execution evidence before revoking it, then set Actual click-through completed: true, fill tx/object, strict_execution_report_reference and screenshot evidence fields, and run npm run wallet:evidence:verify -- --input .rescuegrid/wallet-clickthrough-evidence.md --require-worker.')
+    actions.push('Run npm run wallet:evidence -- --format markdown --out .rescuegrid/wallet-clickthrough-evidence.md, then npm run wallet:evidence:preflight before the real Slush / standard Sui wallet flow. Create and activate the policy first, keep the same wrapper active for strict execution evidence before revoking it, then set Actual click-through completed: true, fill tx/object, strict_execution_report_reference and screenshot evidence fields, and run npm run wallet:evidence:verify -- --input .rescuegrid/wallet-clickthrough-evidence.md --require-worker --execution-report .rescuegrid/demo-execute-report.json.')
   }
   if (fundingCheck?.status !== 'passed') {
     actions.push('Send the DBUSDC/DEEP funding handoff to an external funding provider, then rerun npm run funding:watch -- --json and npm run funding:watch:report.')
@@ -703,10 +705,14 @@ function nextActions({ safetyCheck, walletCheck, fundingCheck, strictExecutionCh
   return actions
 }
 
-async function loadWalletReport({ artifactPath, verifyWallet = verifyWalletEvidenceArtifact }) {
+async function loadWalletReport({
+  artifactPath,
+  strictExecutionReportPath = null,
+  verifyWallet = verifyWalletEvidenceArtifact,
+}) {
   if (!existsSync(artifactPath)) return null
   const artifactText = readFileSync(artifactPath, 'utf8')
-  return verifyWallet({ artifactText, requireWorker: true })
+  return verifyWallet({ artifactText, requireWorker: true, strictExecutionReportPath })
 }
 
 async function loadFundingReadiness({ env = process.env, skipLiveFunding = false } = {}) {
@@ -757,12 +763,14 @@ export async function main(argv = process.argv.slice(2), env = process.env, opti
   }
   const walletArtifact = resolve(String(flags.get('--wallet-artifact') || DEFAULT_WALLET_ARTIFACT))
   const safetyReportPath = resolve(String(flags.get('--safety-report') || DEFAULT_SAFETY_REPORT))
-  const executionReportPath = resolve(String(flags.get('--execution-report') || DEFAULT_EXECUTION_REPORT))
+  const executionReportArg = String(flags.get('--execution-report') || DEFAULT_EXECUTION_REPORT)
+  const executionReportPath = resolve(executionReportArg)
   const reportOutPath = flags.get('--out') || flags.get('--report-out') || flags.get('--output') || null
   let walletReport = null
   try {
     walletReport = await loadWalletReport({
       artifactPath: walletArtifact,
+      strictExecutionReportPath: executionReportArg,
       verifyWallet: options.verifyWallet,
     })
   } catch (e) {

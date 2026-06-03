@@ -496,6 +496,31 @@ assert.equal(verifiedReport.checks.every((check) => check.status === 'passed'), 
 assert.equal(verifiedReport.checks.some((check) => check.id === 'worker:create-activity'), true)
 assert.equal(chainReads, 2)
 
+const absoluteReferenceReport = await verifyWalletEvidenceArtifact({
+  artifactText: filledArtifact,
+  suiClient: fakeSuiClient,
+  fetchImpl: fakeWorkerFetch,
+  strictExecutionReportPath: join(process.cwd(), '.rescuegrid/demo-execute-report.json'),
+})
+assert.equal(absoluteReferenceReport.verified, true)
+assert.equal(absoluteReferenceReport.strict_execution_report_reference_expected, join(process.cwd(), '.rescuegrid/demo-execute-report.json'))
+assert.equal(absoluteReferenceReport.checks.find((check) => check.id === 'manual:strict-execution-report-reference').status, 'passed')
+assert.equal(chainReads, 4)
+
+const referenceMismatchReport = await verifyWalletEvidenceArtifact({
+  artifactText: filledArtifact,
+  strictExecutionReportPath: '.rescuegrid/other-demo-execute-report.json',
+  suiClient: {
+    async getTransactionBlock() {
+      throw new Error('should not read chain when strict execution report reference mismatches')
+    },
+  },
+})
+assert.equal(referenceMismatchReport.status, 'error')
+assert.equal(referenceMismatchReport.code, 'STRICT_EXECUTION_REFERENCE_MISMATCH')
+assert.equal(referenceMismatchReport.strict_execution_report_reference_mismatch.expected, '.rescuegrid/other-demo-execute-report.json')
+assert.equal(referenceMismatchReport.strict_execution_report_reference_mismatch.actual, '.rescuegrid/demo-execute-report.json')
+
 const missingCreateActivityReport = await verifyWalletEvidenceArtifact({
   artifactText: filledArtifact,
   suiClient: fakeSuiClient,
@@ -560,6 +585,7 @@ assert.match(help.stdout, /wallet click-through evidence/i)
 assert.match(help.stdout, /--verify/)
 assert.match(help.stdout, /--out/)
 assert.match(help.stdout, /--require-frontend/)
+assert.match(help.stdout, /--execution-report/)
 assert.equal(help.stdout.includes('AGENT_KEY='), false)
 assert.equal(help.stdout.includes('INTERNAL_AGENT_TICK_TOKEN='), false)
 
