@@ -135,7 +135,7 @@ The Worker also exposes `/api/runtime/status` for non-secret cloud agent, signer
 Observed final mission evidence is Testnet-only:
 
 - Validators passed: `npm run build`, `npm --prefix worker test`, `npm --prefix worker run typecheck`, `cd move/rescuegrid && sui move test`, and `npm run config`.
-- `RESCUEGRID_FRONTEND_URL=http://localhost:5173 RESCUEGRID_WORKER_URL=http://localhost:8787 npm run baseline:smoke` passed against local Worker/frontend services and Sui Testnet reads, including `/api/runtime/status`, `/api/chain-data/status`, signer/agent/data-provider checks and secret-leak assertions.
+- `RESCUEGRID_FRONTEND_URL=http://localhost:5175 RESCUEGRID_WORKER_URL=http://localhost:8787 npm run baseline:smoke` passed against local Worker/frontend services and Sui Testnet reads, including `/api/runtime/status`, `/api/chain-data/status`, signer/agent/data-provider checks and secret-leak assertions.
 - Browser/API surfaces were verified on `http://localhost:5175` with live Worker reads to `http://localhost:8787`.
 - Scripted agent-key Testnet validation created, listed, surfaced in UI/API, and revoked a current-run policy; chain and Worker reads stayed consistent post-revoke.
 - `npm run safety:negative` is the live safety-negative validator: with a local Worker and scripted Testnet agent key config, it creates active/expiring test policies, checks over-budget, over-slippage, wrong pool, wrong agent, mandate-wrapper mismatch, expired and revoked plans through the non-mutating `/api/execution/validate-plan` path, then verifies wrapper spend and execution-success activity stay unchanged. `npm run safety:negative:report` writes the same proof to `.rescuegrid/safety-negative-report.json` only after all required blockers pass.

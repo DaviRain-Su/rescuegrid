@@ -57,9 +57,9 @@ With Worker `http://localhost:8787` running, `npm run demo:loop -- --worker-url 
 
 ## Baseline smoke — verified locally (2026-06-03)
 
-With Worker `http://localhost:8787` and frontend `http://localhost:5173` running:
+With Worker `http://localhost:8787` and frontend `http://localhost:5175` running:
 
-- `RESCUEGRID_FRONTEND_URL=http://localhost:5173 RESCUEGRID_WORKER_URL=http://localhost:8787 npm run baseline:smoke` passed.
+- `RESCUEGRID_FRONTEND_URL=http://localhost:5175 RESCUEGRID_WORKER_URL=http://localhost:8787 npm run baseline:smoke` passed.
 - `npm run chain-data:status -- --json` passed with the default JSON-RPC provider and `probe.status=skipped`; `npm run chain-data:status -- --probe --json` passed against Sui Testnet clock reads with `provider_status=ready`.
 - Evidence covered deployment id consistency, `.env.local` Worker URL, Worker service root, `/api/runtime/status`, `/api/chain-data/status`, `/api/archival/replay-contract`, `/api/private-records/contract`, frontend Vite env, Sui Testnet fullnode, RescueGrid package, agent passport, BalanceManager, DeepBook `SUI_DBUSDC` pool and Testnet indexer.
 - Runtime status evidence covered `sui:testnet`, deployment agent match, known signer kind, execution config mirroring `.dev.vars`, Worker-first data provider and no `AGENT_KEY` / `INTERNAL_AGENT_TICK_TOKEN` value leakage.
