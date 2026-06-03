@@ -63,7 +63,7 @@ npm run chain-data:status -- --json # secret-safe ChainDataProvider status; add 
 npm run safety:negative             # live Testnet validate-plan safety proof; creates/revokes test policies
 npm run safety:negative:report      # live safety proof + .rescuegrid/safety-negative-report.json on pass
 npm run demo:loop                   # create -> activate/tick -> revoke live demo evidence
-npm run demo:execute                # strict mode: preflight funding/signer, then require AgentTradeExecuted
+npm run demo:execute                # strict mode: preflight funding/signer, then require structured AgentTradeExecuted evidence
 npm run demo:execute:report         # strict mode + .rescuegrid/demo-execute-report.json on pass
 RESCUEGRID_FRONTEND_URL=http://localhost:5175 RESCUEGRID_WORKER_URL=http://localhost:8787 npm run baseline:smoke
 ```

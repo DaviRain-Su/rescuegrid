@@ -234,7 +234,7 @@ export function buildFundingHandoff(readiness, { generatedAt = new Date().toISOS
       funding_watch_report_command: 'npm run funding:watch:report',
       strict_execution_command: 'npm run demo:execute',
       strict_execution_report_command: 'npm run demo:execute:report',
-      success_condition: 'Strict execution must preflight ready, create a policy, force a tick, then prove AgentTradeExecuted, execution_claimed=true and on-chain spend increase.',
+      success_condition: 'Strict execution must preflight ready, create a policy, force a tick, then prove structured AgentTradeExecuted evidence for the same wrapper/mandate/tick digest, execution_claimed=true and on-chain spend increase.',
     },
     source_of_truth: readiness.source_of_truth || [
       'runtime status signer adapter',
@@ -279,6 +279,8 @@ function markdown(handoff) {
     `- ${handoff.next_verification.funding_watch_report_command}`,
     `- ${handoff.next_verification.strict_execution_command}`,
     `- ${handoff.next_verification.strict_execution_report_command}`,
+    '',
+    `Success condition: ${handoff.next_verification.success_condition}`,
     '',
   ].filter((line) => line != null).join('\n')
 }
