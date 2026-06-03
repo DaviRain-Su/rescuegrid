@@ -19,7 +19,7 @@ const requiredScripts = {
   'wallet:evidence:apply-report': 'node scripts/wallet-clickthrough-evidence.mjs --apply-report',
   'wallet:evidence:apply-strategy': 'node scripts/wallet-clickthrough-evidence.mjs --apply-strategy',
   'wallet:evidence:preflight': 'node scripts/wallet-clickthrough-evidence.mjs --require-frontend --require-worker',
-  'wallet:evidence:verify': 'node scripts/wallet-clickthrough-evidence.mjs --verify',
+  'wallet:evidence:verify': 'node scripts/wallet-clickthrough-evidence.mjs --verify --execution-report .rescuegrid/demo-execute-report.json',
   'mission:readiness': 'node scripts/mission-readiness.mjs',
   'mission:readiness:report': 'node scripts/mission-readiness.mjs --out .rescuegrid/mission-readiness-report.json',
   'funding:request': 'node worker/scripts/funding-handoff.mjs',
@@ -363,6 +363,9 @@ function strictExecutionReport(overrides = {}) {
   const executionCheck = report.checks.find((row) => row.id === 'strict_execution_evidence')
   const continuityCheck = report.checks.find((row) => row.id === 'mission_same_policy_continuity')
   const walletCheck = report.checks.find((row) => row.id === 'wallet_clickthrough')
+  const scriptCheck = report.checks.find((row) => row.id === 'validation_scripts')
+  assert.deepEqual(scriptCheck.evidence.missing_scripts, [])
+  assert.deepEqual(scriptCheck.evidence.script_contract_violations, [])
   assert.equal(walletCheck.evidence.manual_evidence_fields.includes('strict_execution_report_reference'), true)
   assert.equal(walletCheck.evidence.strict_execution_report_reference, '.rescuegrid/demo-execute-report.json')
   assert.equal(fundingCheck.evidence.external_signer.permission_token_configured, false)
@@ -757,6 +760,33 @@ function strictExecutionReport(overrides = {}) {
   assert.equal(report.full_prd_ready, false)
   assert.equal(scriptCheck.status, 'failed')
   assert.deepEqual(scriptCheck.evidence.missing_scripts, ['wallet:evidence:verify'])
+  assert.deepEqual(scriptCheck.evidence.script_contract_violations, [])
+}
+
+{
+  const report = buildMissionReadinessReport({
+    scripts: {
+      ...requiredScripts,
+      'wallet:evidence:verify': 'node scripts/wallet-clickthrough-evidence.mjs --verify',
+    },
+    safetyReport: safetyNegativeReport(),
+    walletReport: verifiedWalletReport(),
+    fundingReadiness: readyFunding(),
+    fundingProofReport: readyFundingProof(),
+    executionReport: strictExecutionReport(),
+  })
+  const scriptCheck = report.checks.find((row) => row.id === 'validation_scripts')
+  assert.equal(report.status, 'failed')
+  assert.equal(report.full_prd_ready, false)
+  assert.equal(scriptCheck.status, 'failed')
+  assert.equal(report.blocker_codes.includes('VALIDATION_SCRIPT_CONTRACT_MISMATCH'), true)
+  assert.deepEqual(scriptCheck.evidence.missing_scripts, [])
+  assert.equal(scriptCheck.evidence.script_contract_violations.length, 1)
+  assert.equal(scriptCheck.evidence.script_contract_violations[0].script, 'wallet:evidence:verify')
+  assert.equal(
+    scriptCheck.evidence.script_contract_violations[0].missing_requirements.includes('--execution-report .rescuegrid/demo-execute-report.json'),
+    true,
+  )
 }
 
 {

@@ -81,7 +81,7 @@ npm run wallet:evidence -- --format markdown --out .rescuegrid/wallet-clickthrou
 npm run wallet:evidence:preflight
 npm run wallet:evidence:apply-strategy -- --input .rescuegrid/wallet-clickthrough-evidence.md --strategy-file <activation_strategy_file>
 npm run wallet:evidence:apply-report -- --input .rescuegrid/wallet-clickthrough-evidence.md --execution-report .rescuegrid/demo-execute-report.json
-npm run wallet:evidence:verify -- --input .rescuegrid/wallet-clickthrough-evidence.md
+npm run wallet:evidence:verify -- --input .rescuegrid/wallet-clickthrough-evidence.md --require-worker --execution-report .rescuegrid/demo-execute-report.json
 npm run test:safety-negative-report
 npm run test:demo-execution-report
 npm run mission:readiness

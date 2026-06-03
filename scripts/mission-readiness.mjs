@@ -21,6 +21,7 @@ const DEFAULT_WALLET_ARTIFACT = '.rescuegrid/wallet-clickthrough-evidence.md'
 const DEFAULT_EXECUTION_REPORT = '.rescuegrid/demo-execute-report.json'
 const DEFAULT_SAFETY_REPORT = '.rescuegrid/safety-negative-report.json'
 const DEFAULT_FUNDING_PROOF_REPORT = '.rescuegrid/funding-proof-report.json'
+const DEFAULT_FUNDING_WATCH_REPORT = '.rescuegrid/funding-watch-report.json'
 const DEFAULT_MISSION_REPORT = '.rescuegrid/mission-readiness-report.json'
 const REQUIRED_SCRIPTS = [
   'build',
@@ -48,6 +49,81 @@ const REQUIRED_SCRIPTS = [
   'safety:negative',
   'safety:negative:report',
   'baseline:smoke',
+]
+
+function escapeRegExp(value) {
+  return String(value).replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+}
+
+function flagPattern(flag) {
+  return new RegExp(`(^|\\s)${escapeRegExp(flag)}(\\s|$)`)
+}
+
+function flagValuePattern(flag, value) {
+  return new RegExp(`(^|\\s)${escapeRegExp(flag)}(?:=|\\s+)${escapeRegExp(value)}(\\s|$)`)
+}
+
+function requiredFlag(flag) {
+  return { requirement: flag, pattern: flagPattern(flag) }
+}
+
+function requiredFlagValue(flag, value) {
+  return { requirement: `${flag} ${value}`, pattern: flagValuePattern(flag, value) }
+}
+
+const REQUIRED_SCRIPT_COMMAND_CONTRACTS = [
+  {
+    name: 'wallet:evidence:preflight',
+    requirements: [
+      requiredFlag('--require-frontend'),
+      requiredFlag('--require-worker'),
+    ],
+  },
+  {
+    name: 'wallet:evidence:verify',
+    requirements: [
+      requiredFlag('--verify'),
+      requiredFlagValue('--execution-report', DEFAULT_EXECUTION_REPORT),
+    ],
+  },
+  {
+    name: 'mission:readiness:report',
+    requirements: [
+      requiredFlagValue('--out', DEFAULT_MISSION_REPORT),
+    ],
+  },
+  {
+    name: 'funding:watch:report',
+    requirements: [
+      requiredFlag('--json'),
+      requiredFlagValue('--out', DEFAULT_FUNDING_WATCH_REPORT),
+    ],
+  },
+  {
+    name: 'funding:proof:report',
+    requirements: [
+      requiredFlagValue('--out', DEFAULT_FUNDING_PROOF_REPORT),
+    ],
+  },
+  {
+    name: 'demo:execute:report',
+    requirements: [
+      requiredFlag('--require-execution'),
+      requiredFlagValue('--out', DEFAULT_EXECUTION_REPORT),
+    ],
+  },
+  {
+    name: 'demo:execute:wallet-report',
+    requirements: [
+      requiredFlagValue('--out', DEFAULT_EXECUTION_REPORT),
+    ],
+  },
+  {
+    name: 'safety:negative:report',
+    requirements: [
+      requiredFlagValue('--out', DEFAULT_SAFETY_REPORT),
+    ],
+  },
 ]
 
 export function parseArgs(argv = process.argv.slice(2)) {
@@ -82,6 +158,24 @@ function check({ id, label, status, detail = null, evidence = null, blocker_code
 
 function missingScripts(scripts = {}) {
   return REQUIRED_SCRIPTS.filter((name) => !scripts[name])
+}
+
+function scriptContractViolations(scripts = {}) {
+  const violations = []
+  for (const contract of REQUIRED_SCRIPT_COMMAND_CONTRACTS) {
+    const command = typeof scripts[contract.name] === 'string' ? scripts[contract.name] : ''
+    if (!command) continue
+    const missingRequirements = contract.requirements
+      .filter((row) => !row.pattern.test(command))
+      .map((row) => row.requirement)
+    if (missingRequirements.length > 0) {
+      violations.push({
+        script: contract.name,
+        missing_requirements: missingRequirements,
+      })
+    }
+  }
+  return violations
 }
 
 function pickPublicFields(row, fields = []) {
@@ -910,13 +1004,28 @@ export function buildMissionReadinessReport({
   safetyReport = null,
 } = {}) {
   const missing = missingScripts(scripts)
+  const contractViolations = scriptContractViolations(scripts)
+  const scriptsPassed = missing.length === 0 && contractViolations.length === 0
+  const scriptBlockers = [
+    ...(missing.length === 0 ? [] : ['VALIDATION_SCRIPT_MISSING']),
+    ...(contractViolations.length === 0 ? [] : ['VALIDATION_SCRIPT_CONTRACT_MISMATCH']),
+  ]
   const scriptCheck = check({
     id: 'validation_scripts',
     label: 'Required validation commands are present',
-    status: missing.length === 0 ? 'passed' : 'failed',
-    detail: missing.length === 0 ? 'all required package scripts are registered' : 'required package scripts are missing',
-    blocker_codes: missing.length === 0 ? [] : ['VALIDATION_SCRIPT_MISSING'],
-    evidence: { missing_scripts: missing },
+    status: scriptsPassed ? 'passed' : 'failed',
+    detail: scriptsPassed
+      ? 'all required package scripts are registered with final evidence command contracts'
+      : missing.length > 0 && contractViolations.length > 0
+        ? 'required package scripts are missing and some command contracts do not match final evidence paths'
+        : missing.length > 0
+          ? 'required package scripts are missing'
+          : 'required package script command contracts do not match final evidence paths',
+    blocker_codes: scriptBlockers,
+    evidence: {
+      missing_scripts: missing,
+      script_contract_violations: contractViolations,
+    },
   })
   const safetyCheck = summarizeSafetyNegativeEvidence(safetyReport)
   const walletCheck = summarizeWalletReport(walletReport)
