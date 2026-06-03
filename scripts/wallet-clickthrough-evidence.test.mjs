@@ -286,6 +286,7 @@ Generated: 2026-06-03T00:00:00.000Z
 Chain: sui:testnet
 Frontend: http://localhost:5175
 Worker: http://worker.test
+Actual click-through completed: true
 
 ## Wallet
 
@@ -300,14 +301,52 @@ Owner address: 0x111111111111111111111111111111111111111111111111111111111111111
 - wrapper_id: 0x2222222222222222222222222222222222222222222222222222222222222222
 - mandate_id: 0x3333333333333333333333333333333333333333333333333333333333333333
 - strategy_hash: 0xabc123
+- sign_in_screenshot: screenshots/sign-in.png
+- wallet_create_prompt_screenshot: screenshots/create-approval.png
+- runtime_state_after_activate: Monitoring
+- policy_active_screenshot: screenshots/policy-active.png
+- activity_row_screenshot: screenshots/activity-created.png
+- wallet_revoke_prompt_screenshot: screenshots/revoke-approval.png
 - revoke_tx_digest: revoke-digest
+- policy_status_after_revoke: revoked
+- policy_revoked_screenshot: screenshots/policy-revoked.png
+- post_revoke_activity_screenshot: screenshots/activity-revoked.png
 `
 
 const parsedArtifact = parseWalletEvidenceArtifact(filledArtifact)
 assert.equal(parsedArtifact.status, 'ok')
 assert.equal(parsedArtifact.format, 'markdown')
 assert.equal(parsedArtifact.metadata.worker_url, 'http://worker.test')
+assert.equal(parsedArtifact.metadata.actual_clickthrough_completed, true)
 assert.equal(parsedArtifact.fields.wrapper_id, '0x2222222222222222222222222222222222222222222222222222222222222222')
+
+const coreOnlyArtifact = `# RescueGrid Wallet Click-Through Evidence
+
+Generated: 2026-06-03T00:00:00.000Z
+Chain: sui:testnet
+Worker: http://worker.test
+Actual click-through completed: true
+
+## Evidence Fields
+
+- owner_address: 0x1111111111111111111111111111111111111111111111111111111111111111
+- create_tx_digest: create-digest
+- wrapper_id: 0x2222222222222222222222222222222222222222222222222222222222222222
+- mandate_id: 0x3333333333333333333333333333333333333333333333333333333333333333
+- strategy_hash: 0xabc123
+- revoke_tx_digest: revoke-digest
+`
+const coreOnlyReport = await verifyWalletEvidenceArtifact({
+  artifactText: coreOnlyArtifact,
+  suiClient: {
+    async getTransactionBlock() {
+      throw new Error('should not read chain when manual click-through fields are missing')
+    },
+  },
+})
+assert.equal(coreOnlyReport.status, 'error')
+assert.equal(coreOnlyReport.code, 'EVIDENCE_FIELDS_INCOMPLETE')
+assert.equal(coreOnlyReport.missing_fields.includes('sign_in_screenshot'), true)
 
 let chainReads = 0
 const fakeSuiClient = {
@@ -378,6 +417,7 @@ const verifiedReport = await verifyWalletEvidenceArtifact({
 })
 assert.equal(verifiedReport.status, 'ok')
 assert.equal(verifiedReport.verified, true)
+assert.equal(verifiedReport.actual_clickthrough_completed, true)
 assert.equal(verifiedReport.execution_claimed, false)
 assert.equal(verifiedReport.checks.every((check) => check.status === 'passed'), true)
 assert.equal(verifiedReport.checks.some((check) => check.id === 'worker:create-activity'), true)
@@ -435,6 +475,7 @@ const incompleteReport = await verifyWalletEvidenceArtifact({
 assert.equal(incompleteReport.status, 'error')
 assert.equal(incompleteReport.code, 'EVIDENCE_FIELDS_INCOMPLETE')
 assert(incompleteReport.missing_fields.includes('create_tx_digest'))
+assert(incompleteReport.missing_fields.includes('actual_clickthrough_completed'))
 
 const help = spawnSync(process.execPath, ['scripts/wallet-clickthrough-evidence.mjs', '--help'], {
   cwd: new URL('..', import.meta.url),

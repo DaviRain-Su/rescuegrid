@@ -94,10 +94,12 @@ export function summarizeWalletReport(report) {
       status: 'passed',
       detail: 'filled artifact verified against Sui PolicyCreated / PolicyRevoked events',
       evidence: {
+        actual_clickthrough_completed: report.actual_clickthrough_completed === true,
         create_tx_digest: report.fields?.create_tx_digest || report.create_transaction?.digest || null,
         revoke_tx_digest: report.fields?.revoke_tx_digest || report.revoke_transaction?.digest || null,
         wrapper_id: report.fields?.wrapper_id || null,
         mandate_id: report.fields?.mandate_id || null,
+        manual_evidence_fields: report.required_manual_fields || [],
       },
     })
   }
@@ -428,13 +430,13 @@ function nextActions({ safetyCheck, walletCheck, fundingCheck, strictExecutionCh
     actions.push('Run npm run safety:negative:report with a live local Worker to write .rescuegrid/safety-negative-report.json proving all required validate-plan blockers.')
   }
   if (walletCheck?.status !== 'passed') {
-    actions.push('Run the real Slush / standard Sui wallet create+revoke flow, fill .rescuegrid/wallet-clickthrough-evidence.md, then run npm run wallet:evidence:verify -- --input .rescuegrid/wallet-clickthrough-evidence.md.')
+    actions.push('Run the real Slush / standard Sui wallet create+revoke flow, set Actual click-through completed: true, fill tx/object plus screenshot evidence fields in .rescuegrid/wallet-clickthrough-evidence.md, then run npm run wallet:evidence:verify -- --input .rescuegrid/wallet-clickthrough-evidence.md.')
   }
   if (fundingCheck?.status !== 'passed') {
     actions.push('Send the DBUSDC/DEEP funding handoff to an external funding provider, then rerun npm run funding:watch -- --json and npm run funding:watch:report.')
   }
   if (fundingCheck?.status === 'passed' && strictExecutionCheck?.status !== 'passed') {
-    actions.push('Run npm run demo:execute:report to write .rescuegrid/demo-execute-report.json proving G2-EXECUTE, AgentTradeExecuted, execution_claimed=true and spend increase.')
+    actions.push('Run npm run demo:execute:report to write .rescuegrid/demo-execute-report.json proving create -> execute -> revoke -> post-revoke no-execution with AgentTradeExecuted, execution_claimed=true and spend increase.')
   }
   return actions
 }

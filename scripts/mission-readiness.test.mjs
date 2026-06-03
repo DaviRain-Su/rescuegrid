@@ -34,6 +34,18 @@ const requiredScripts = {
 function verifiedWalletReport() {
   return {
     verified: true,
+    actual_clickthrough_completed: true,
+    required_manual_fields: [
+      'sign_in_screenshot',
+      'wallet_create_prompt_screenshot',
+      'runtime_state_after_activate',
+      'policy_active_screenshot',
+      'activity_row_screenshot',
+      'wallet_revoke_prompt_screenshot',
+      'policy_status_after_revoke',
+      'policy_revoked_screenshot',
+      'post_revoke_activity_screenshot',
+    ],
     fields: {
       owner_address: '0xowner',
       create_tx_digest: 'createDigest',
@@ -41,6 +53,15 @@ function verifiedWalletReport() {
       mandate_id: '0xmandate',
       strategy_hash: '0xstrategy',
       revoke_tx_digest: 'revokeDigest',
+      sign_in_screenshot: 'screenshots/sign-in.png',
+      wallet_create_prompt_screenshot: 'screenshots/create-approval.png',
+      runtime_state_after_activate: 'Monitoring',
+      policy_active_screenshot: 'screenshots/policy-active.png',
+      activity_row_screenshot: 'screenshots/activity-created.png',
+      wallet_revoke_prompt_screenshot: 'screenshots/revoke-approval.png',
+      policy_status_after_revoke: 'revoked',
+      policy_revoked_screenshot: 'screenshots/policy-revoked.png',
+      post_revoke_activity_screenshot: 'screenshots/activity-revoked.png',
     },
   }
 }

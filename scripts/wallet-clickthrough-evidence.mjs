@@ -11,6 +11,25 @@ import { getClient } from '../worker/src/sui-tx.js'
 const DEFAULT_FRONTEND_URL = 'http://localhost:5175'
 const DEFAULT_WORKER_URL = 'http://localhost:8787'
 const DEFAULT_TIMEOUT_MS = 2500
+const REQUIRED_WALLET_CORE_FIELDS = [
+  'owner_address',
+  'create_tx_digest',
+  'wrapper_id',
+  'mandate_id',
+  'strategy_hash',
+  'revoke_tx_digest',
+]
+const REQUIRED_WALLET_MANUAL_FIELDS = [
+  'sign_in_screenshot',
+  'wallet_create_prompt_screenshot',
+  'runtime_state_after_activate',
+  'policy_active_screenshot',
+  'activity_row_screenshot',
+  'wallet_revoke_prompt_screenshot',
+  'policy_status_after_revoke',
+  'policy_revoked_screenshot',
+  'post_revoke_activity_screenshot',
+]
 
 export function parseArgs(argv = process.argv.slice(2)) {
   const flags = new Map()
@@ -603,6 +622,13 @@ function mergeEvidenceField(fields, key, value) {
   if (!fields[key] || !evidenceValuePresent(fields[key])) fields[key] = normalized
 }
 
+function parseBooleanValue(value) {
+  const normalized = stripCodeFence(value).toLowerCase()
+  if (['true', 'yes', 'y', '1', 'completed', 'complete'].includes(normalized)) return true
+  if (['false', 'no', 'n', '0', 'todo', 'pending', 'incomplete'].includes(normalized)) return false
+  return null
+}
+
 export function parseWalletEvidenceArtifact(text) {
   const raw = String(text || '')
   const trimmed = raw.trim()
@@ -622,6 +648,7 @@ export function parseWalletEvidenceArtifact(text) {
         frontend_url: json.frontend?.url || null,
         worker_url: json.worker?.url || null,
         generated_at: json.generated_at || null,
+        actual_clickthrough_completed: json.actual_clickthrough_completed === true,
       },
       status: 'ok',
     }
@@ -659,6 +686,11 @@ export function parseWalletEvidenceArtifact(text) {
     match = line.match(/^Generated:\s*(.*)$/i)
     if (match) {
       metadata.generated_at = stripCodeFence(match[1])
+      continue
+    }
+    match = line.match(/^Actual click-through completed:\s*(.*)$/i)
+    if (match) {
+      metadata.actual_clickthrough_completed = parseBooleanValue(match[1])
     }
   }
   return { format: 'markdown', fields, metadata, status: 'ok' }
@@ -730,6 +762,16 @@ function buildMissingChecks(fields, requiredFields) {
     expected: 'present non-TODO value',
     actual: fields[field] || '',
   }))
+}
+
+function buildClickthroughCompletedCheck(metadata = {}) {
+  return createCheck({
+    id: 'manual:actual-clickthrough-completed',
+    label: 'Artifact explicitly confirms the browser wallet click-through was completed',
+    passed: metadata.actual_clickthrough_completed === true,
+    expected: true,
+    actual: metadata.actual_clickthrough_completed ?? null,
+  })
 }
 
 function activityTxDigest(row = {}) {
@@ -826,9 +868,14 @@ export async function verifyWalletEvidenceArtifact({
   const parsed = parseWalletEvidenceArtifact(artifactText)
   const fields = parsed.fields || {}
   const checks = []
-  const requiredFields = ['owner_address', 'create_tx_digest', 'wrapper_id', 'mandate_id', 'strategy_hash', 'revoke_tx_digest']
+  const requiredFields = [...REQUIRED_WALLET_CORE_FIELDS, ...REQUIRED_WALLET_MANUAL_FIELDS]
   checks.push(...buildMissingChecks(fields, requiredFields))
-  const missing = checks.filter((check) => check.status === 'failed').map((check) => check.id.replace('field:', ''))
+  checks.push(buildClickthroughCompletedCheck(parsed.metadata))
+  const missing = checks.filter((check) => check.status === 'failed').map((check) => {
+    if (check.id.startsWith('field:')) return check.id.replace('field:', '')
+    if (check.id === 'manual:actual-clickthrough-completed') return 'actual_clickthrough_completed'
+    return check.id
+  })
 
   const report = {
     status: 'ok',
@@ -837,6 +884,9 @@ export async function verifyWalletEvidenceArtifact({
     chain: parsed.metadata?.chain || deployment.chain,
     worker_url: workerUrl || parsed.metadata?.worker_url || null,
     fields: Object.fromEntries(requiredFields.map((field) => [field, fields[field] || ''])),
+    actual_clickthrough_completed: parsed.metadata?.actual_clickthrough_completed === true,
+    required_core_fields: REQUIRED_WALLET_CORE_FIELDS,
+    required_manual_fields: REQUIRED_WALLET_MANUAL_FIELDS,
     checks,
     create_transaction: null,
     revoke_transaction: null,
