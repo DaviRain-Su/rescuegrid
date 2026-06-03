@@ -251,7 +251,14 @@ export function summarizeWalletReport(report) {
       status: 'blocked',
       detail: 'wallet evidence artifact exists but still has TODO or missing fields',
       blocker_codes: ['WALLET_EVIDENCE_INCOMPLETE'],
-      evidence: { missing_fields: report.missing_fields || [] },
+      evidence: {
+        actual_clickthrough_completed: report.actual_clickthrough_completed === true,
+        worker_url: report.worker_url || null,
+        missing_fields: report.missing_fields || [],
+        missing_field_count: Array.isArray(report.missing_fields) ? report.missing_fields.length : 0,
+        required_core_fields: report.required_core_fields || [],
+        required_manual_fields: report.required_manual_fields || [],
+      },
     })
   }
   return check({
@@ -665,7 +672,7 @@ function nextActions({ safetyCheck, walletCheck, fundingCheck, strictExecutionCh
     actions.push('Run npm run safety:negative:report with a live local Worker to write .rescuegrid/safety-negative-report.json proving all required validate-plan blockers.')
   }
   if (walletCheck?.status !== 'passed') {
-    actions.push('Run the real Slush / standard Sui wallet create+revoke flow, set Actual click-through completed: true, fill tx/object plus screenshot evidence fields in .rescuegrid/wallet-clickthrough-evidence.md, then run npm run wallet:evidence:verify -- --input .rescuegrid/wallet-clickthrough-evidence.md.')
+    actions.push('Run npm run wallet:evidence -- --format markdown --out .rescuegrid/wallet-clickthrough-evidence.md, then npm run wallet:evidence:preflight before the real Slush / standard Sui wallet create+revoke flow; after the browser run, set Actual click-through completed: true, fill tx/object plus screenshot evidence fields, then run npm run wallet:evidence:verify -- --input .rescuegrid/wallet-clickthrough-evidence.md.')
   }
   if (fundingCheck?.status !== 'passed') {
     actions.push('Send the DBUSDC/DEEP funding handoff to an external funding provider, then rerun npm run funding:watch -- --json and npm run funding:watch:report.')

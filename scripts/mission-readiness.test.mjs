@@ -288,7 +288,11 @@ function strictExecutionReport(overrides = {}) {
     safetyReport: safetyNegativeReport(),
     walletReport: {
       code: 'EVIDENCE_FIELDS_INCOMPLETE',
+      actual_clickthrough_completed: false,
+      worker_url: 'http://localhost:8787',
       missing_fields: ['owner_address', 'create_tx_digest'],
+      required_core_fields: ['owner_address', 'create_tx_digest'],
+      required_manual_fields: ['sign_in_screenshot'],
     },
     fundingReadiness: blockedFunding(),
     executionReport: null,
@@ -299,14 +303,22 @@ function strictExecutionReport(overrides = {}) {
   assert.equal(report.blocker_codes.includes('WALLET_EVIDENCE_INCOMPLETE'), true)
   assert.equal(report.blocker_codes.includes('INSUFFICIENT_DBUSDC'), true)
   assert.equal(report.blocker_codes.includes('STRICT_EXECUTION_BLOCKED_BY_FUNDING'), true)
+  const walletCheck = report.checks.find((row) => row.id === 'wallet_clickthrough')
   const fundingCheck = report.checks.find((row) => row.id === 'execution_funding_readiness')
   const continuityCheck = report.checks.find((row) => row.id === 'mission_same_policy_continuity')
+  assert.equal(walletCheck.evidence.actual_clickthrough_completed, false)
+  assert.equal(walletCheck.evidence.worker_url, 'http://localhost:8787')
+  assert.equal(walletCheck.evidence.missing_field_count, 2)
+  assert.deepEqual(walletCheck.evidence.required_core_fields, ['owner_address', 'create_tx_digest'])
+  assert.deepEqual(walletCheck.evidence.required_manual_fields, ['sign_in_screenshot'])
   assert.equal(fundingCheck.evidence.signer_unavailable_code, 'EXECUTION_DISABLED')
   assert.equal(fundingCheck.evidence.signer_capabilities.some((row) => row.kind === 'waap'), true)
   assert.equal(fundingCheck.evidence.external_signer.kind, 'waap')
   assert.equal(fundingCheck.evidence.external_signer.permission_token_configured, true)
   assert.equal(continuityCheck.status, 'blocked')
   assert.equal(report.blocker_codes.includes('MISSION_CONTINUITY_MISMATCH'), false)
+  assert.equal(report.next_actions.some((row) => /wallet:evidence -- --format markdown/.test(row)), true)
+  assert.equal(report.next_actions.some((row) => /wallet:evidence:preflight/.test(row)), true)
   assertNoSecretSignerPosture(report)
 }
 
