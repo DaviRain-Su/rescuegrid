@@ -43,6 +43,7 @@ npm --prefix worker run typecheck   # Worker TypeScript
 npm run test:auth-wallets           # sign-in wallet / Enoki option contract
 npm run test:activity-ledger        # Agent Activity normalization / signer evidence
 npm run test:session-mode           # live/read-only/demo session boundaries
+npm run test:dashboard-live         # live dashboard avoids demo crash/spark fallbacks
 npm run test:wallet-flow            # mock wallet create/revoke orchestration
 npm run test:wallet-evidence        # wallet click-through evidence artifact contract
 npm run test:mission-readiness      # PRD readiness gate contract

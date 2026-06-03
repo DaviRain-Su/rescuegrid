@@ -564,6 +564,7 @@ MVP desktop viewport:
 - `npm run test:activity-ledger` covers the Activity ledger normalization contract: signer blocker code extraction, WaaP approval evidence rows, signer-block filter state, non-signer funding blockers, and policy lookup by wrapper id.
 - Activity view preserves signer approval evidence (`signer_kind`, `approval_state`, `WAAP_APPROVAL_*`), exposes signer blocker rows in expanded audit details, and the signer / approval filters treat WaaP approval rows as signer-blocked and approval-required blockers.
 - Dashboard live/read-only mode must not show the flash-crash demo control or read the local demo crash state for the live chart, banner, reasoning, ticker or activity feed.
+- `npm run test:dashboard-live` covers the live Dashboard isolation contract: live/read-only mode coerces demo crash state to idle, uses live sparkline/history/flat live price fallback instead of demo spark data, and selects live activity rows instead of demo activity rows.
 - Dashboard sidebar global stop/resume in live wallet mode must use the same owner-signed `/api/risk/controls` path as Risk Center; read-only live mode must refuse signing actions and must not mutate local demo policy state.
 - Revoke button changes state to revoked within one 5 second polling interval.
 - Policy Inspect names the real MoveGate Mandate + RescuePolicyWrapper model and does not show stale AgentPolicy, AgentCap, or sponsored-gas claims.

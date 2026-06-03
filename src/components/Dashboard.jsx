@@ -4,6 +4,7 @@
 import { useState, useEffect } from 'react'
 import { RG } from '../data.js'
 import { getSuiPriceHistory } from '../api.js'
+import { dashboardActivityFeed, dashboardChartSeries, dashboardCrashState } from '../queries/dashboard-live.js'
 import { Icon, Sparkline, RiskGauge, Token, PairGlyph, useAnimatedNumber, fmtUsd } from './primitives.jsx'
 import { Card } from '@heroui/react'
 import { Liveline } from 'liveline'
@@ -77,9 +78,10 @@ export function Dashboard({ state, live }) {
   // ── live mode: real on-chain data (summary/market/activity) ───────────
   const liveOn = !!live
   const sum = live?.summary
+  const displayCrashState = dashboardCrashState({ live: liveOn, crashState })
   const usd6 = (u) => fmtUsd(Number(u || 0) / 1e6, 0)
   const livePrice = liveOn ? Number(live?.market?.SUI_DBUSDC?.last_price ?? suiPrice) : animPrice
-  const feed = liveOn ? (live?.activity || []) : activity
+  const feed = dashboardActivityFeed({ live: liveOn, liveActivity: live?.activity, demoActivity: activity })
   const advisory = liveOn ? <span className="badge badge-neutral" style={{ fontSize: 9, marginLeft: 6 }}>advisory</span> : null
   // live advisory risk score, derived from real budget utilisation + concentration
   const activePos = (sum?.positions || []).filter(po => po.status === 'active')
@@ -107,7 +109,13 @@ export function Dashboard({ state, live }) {
     : null
   const shownRisk = liveOn ? Math.min(95, Math.round(15 + util * 50 + conc * 30 + volContribution)) : risk
   const liveSpark = live?.market?.sui_spark
-  const chartData = liveOn && Array.isArray(liveSpark) && liveSpark.length >= 2 ? liveSpark : suiSpark
+  const chartData = dashboardChartSeries({
+    live: liveOn,
+    liveSpark,
+    priceHistory: priceHist,
+    livePrice,
+    demoSpark: suiSpark,
+  })
   const liveChg = live?.market?.sui_change
   // live risk-gauge factors + reasoning, derived from real on-chain + market data
   const liveVol = vol != null ? (vol > 4 ? ['high', 'danger'] : vol > 2 ? ['moderate', 'warn'] : ['low', 'safe']) : ['n/a', 'safe']
@@ -118,9 +126,9 @@ export function Dashboard({ state, live }) {
     { k: 'Slippage headroom', v: 'within cap', lv: 'safe' },
     { k: 'Pool liquidity', v: liquidity[0], lv: liquidity[1] },
   ] : [
-    { k: 'Volatility (1h)', v: crashState === 'crashing' ? 'extreme' : 'moderate', lv: crashState === 'crashing' ? 'danger' : 'warn' },
+    { k: 'Volatility (1h)', v: displayCrashState === 'crashing' ? 'extreme' : 'moderate', lv: displayCrashState === 'crashing' ? 'danger' : 'warn' },
     { k: 'Slippage headroom', v: 'within cap', lv: 'safe' },
-    { k: 'Pool liquidity', v: crashState === 'crashing' ? 'thinning' : 'healthy', lv: crashState === 'crashing' ? 'warn' : 'safe' },
+    { k: 'Pool liquidity', v: displayCrashState === 'crashing' ? 'thinning' : 'healthy', lv: displayCrashState === 'crashing' ? 'warn' : 'safe' },
   ]
   const liveReasoning = liveOn ? {
     rationale: `${activePos.length} active polic${activePos.length === 1 ? 'y' : 'ies'} · ${Math.round(util * 100)}% of authorized budget deployed · recent SUI ${vol != null ? vol.toFixed(1) + '% daily volatility' : 'volatility unavailable'}. Advisory risk ${Math.round(shownRisk)}/100 from on-chain utilisation, concentration and market volatility — not investment advice.`,
@@ -132,11 +140,11 @@ export function Dashboard({ state, live }) {
     ],
   } : null
 
-  const banner = crashState === 'crashing'
+  const banner = displayCrashState === 'crashing'
     ? { c: 'var(--danger)', bg: 'var(--danger-dim)', icon: 'alert', t: 'Flash crash detected · SUI −8.4% in 6 min', s: 'Risk score spiking — agent evaluating rescue conditions…' }
-    : crashState === 'rescuing'
+    : displayCrashState === 'rescuing'
     ? { c: 'var(--accent)', bg: 'var(--accent-dim)', icon: 'bolt', t: 'Agent autonomously executing rescue grid', s: 'Placing limit orders on Deepbook within policy budget — no signature required.' }
-    : crashState === 'rescued'
+    : displayCrashState === 'rescued'
     ? { c: 'var(--safe)', bg: 'var(--safe-dim)', icon: 'check', t: 'Rescue complete · 2 rungs filled, budget intact', s: 'Agent bought the dip inside policy limits and logged every action on-chain.' }
     : null
 
@@ -153,7 +161,7 @@ export function Dashboard({ state, live }) {
             <div className="display" style={{ fontWeight: 600, fontSize: 14.5, color: banner.c }}>{banner.t}</div>
             <div style={{ fontSize: 12.5, color: 'var(--t1)', marginTop: 1 }}>{banner.s}</div>
           </div>
-          {crashState === 'rescuing' && <div className="badge badge-accent"><span className="dot pulse"></span>LIVE</div>}
+          {displayCrashState === 'rescuing' && <div className="badge badge-accent"><span className="dot pulse"></span>LIVE</div>}
         </div>
       )}
 
@@ -196,18 +204,18 @@ export function Dashboard({ state, live }) {
                 </div>
               </div>
               <div style={{ textAlign: 'right' }}>
-                <div className="mono" style={{ fontSize: 22, fontWeight: 600, color: crashState === 'crashing' ? 'var(--danger)' : 'var(--t0)' }}>
+                <div className="mono" style={{ fontSize: 22, fontWeight: 600, color: displayCrashState === 'crashing' ? 'var(--danger)' : 'var(--t0)' }}>
                   ${(liveOn ? livePrice : animPrice).toFixed(3)}
                 </div>
                 <div className="mono" style={{ fontSize: 12, fontWeight: 600, color: (liveOn ? (liveChg ?? 0) : RG.prices.SUI.chg) < 0 ? 'var(--danger)' : 'var(--safe)' }}>
                   {liveOn
                     ? (liveChg != null ? `${liveChg > 0 ? '+' : ''}${liveChg}% · recent` : '— · recent')
-                    : (crashState === 'crashing' || crashState === 'rescuing' || crashState === 'rescued' ? '−8.42%' : `${RG.prices.SUI.chg}%`)}
+                    : (displayCrashState === 'crashing' || displayCrashState === 'rescuing' || displayCrashState === 'rescued' ? '−8.42%' : `${RG.prices.SUI.chg}%`)}
                 </div>
               </div>
             </div>
             <div style={{ padding: '12px 6px 0' }}>
-              <PriceChart data={chartData} crashState={crashState} />
+              <PriceChart data={chartData} crashState={displayCrashState} />
             </div>
           </div>
 
@@ -287,7 +295,7 @@ export function Dashboard({ state, live }) {
         {/* right */}
         <div style={{ display: 'flex', flexDirection: 'column', gap: 18 }}>
           <div className="card" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', padding: '20px 18px',
-            ...(crashState === 'crashing' ? { animation: 'flash-pulse 1.1s ease infinite' } : {}) }}>
+            ...(displayCrashState === 'crashing' ? { animation: 'flash-pulse 1.1s ease infinite' } : {}) }}>
             <div style={{ alignSelf: 'flex-start', display: 'flex', justifyContent: 'space-between', width: '100%', marginBottom: 6 }}>
               <div className="card-title">Risk monitor{advisory}</div>
               <div className="badge badge-accent"><span className="dot pulse"></span>LIVE</div>
@@ -303,7 +311,7 @@ export function Dashboard({ state, live }) {
             </div>
           </div>
 
-          <ReasoningPanel crashState={crashState} mode={mode} live={liveOn} liveData={liveReasoning} />
+          <ReasoningPanel crashState={displayCrashState} mode={mode} live={liveOn} liveData={liveReasoning} />
 
           <div className="card">
             <div className="card-hd" style={{ paddingBottom: 10 }}>
@@ -315,7 +323,7 @@ export function Dashboard({ state, live }) {
                 <div style={{ padding: '18px', fontSize: 12, color: 'var(--t2)' }}>No on-chain activity yet.</div>
               )}
               {feed.slice(0, 6).map((a, i) => (
-                <div key={a.id || a.dedupe_key || a.tx || `${a.t}-${i}`} className={i === 0 && crashState === 'rescuing' ? 'fade-up' : ''}
+                <div key={a.id || a.dedupe_key || a.tx || `${a.t}-${i}`} className={i === 0 && displayCrashState === 'rescuing' ? 'fade-up' : ''}
                   style={{ display: 'flex', gap: 11, padding: '10px 18px', borderTop: i ? '1px solid var(--border)' : 'none' }}>
                   <div style={{ flexShrink: 0, width: 26, height: 26, borderRadius: 7, display: 'flex', alignItems: 'center', justifyContent: 'center',
                     background: a.kind === 'exec' ? 'var(--accent-dim)' : a.kind === 'guardian' ? 'var(--danger-dim)' : a.kind === 'rebalance' ? 'var(--sui-dim)' : a.kind === 'policy' ? 'var(--sui-dim)' : 'var(--glass-hi)',
