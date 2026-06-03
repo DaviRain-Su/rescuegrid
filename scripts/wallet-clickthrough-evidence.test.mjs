@@ -251,6 +251,7 @@ assert.match(markdown, /create_tx_digest: TODO/)
 assert.match(markdown, /wrapper_id: TODO/)
 assert.match(markdown, /Execution claimed: false/)
 assert.match(markdown, /Frontend preflight: true/)
+assert.match(markdown, /strict_execution_report_reference: TODO/)
 assert.match(markdown, /Wallet auto-connect disabled: true/)
 assert.match(markdown, /Known signer kinds: worker-secret, waap/)
 assert.match(markdown, /Runtime external signer: waap/)
@@ -321,6 +322,7 @@ Owner address: 0x111111111111111111111111111111111111111111111111111111111111111
 - runtime_state_after_activate: Monitoring
 - policy_active_screenshot: screenshots/policy-active.png
 - activity_row_screenshot: screenshots/activity-created.png
+- strict_execution_report_reference: .rescuegrid/demo-execute-report.json
 - wallet_revoke_prompt_screenshot: screenshots/revoke-approval.png
 - revoke_tx_digest: revoke-digest
 - policy_status_after_revoke: revoked
@@ -334,6 +336,7 @@ assert.equal(parsedArtifact.format, 'markdown')
 assert.equal(parsedArtifact.metadata.worker_url, 'http://worker.test')
 assert.equal(parsedArtifact.metadata.actual_clickthrough_completed, true)
 assert.equal(parsedArtifact.fields.wrapper_id, '0x2222222222222222222222222222222222222222222222222222222222222222')
+assert.equal(parsedArtifact.fields.strict_execution_report_reference, '.rescuegrid/demo-execute-report.json')
 
 const coreOnlyArtifact = `# RescueGrid Wallet Click-Through Evidence
 
@@ -362,6 +365,7 @@ const coreOnlyReport = await verifyWalletEvidenceArtifact({
 assert.equal(coreOnlyReport.status, 'error')
 assert.equal(coreOnlyReport.code, 'EVIDENCE_FIELDS_INCOMPLETE')
 assert.equal(coreOnlyReport.missing_fields.includes('sign_in_screenshot'), true)
+assert.equal(coreOnlyReport.missing_fields.includes('strict_execution_report_reference'), true)
 
 const secretLeakReport = await verifyWalletEvidenceArtifact({
   artifactText: filledArtifact.replace(
@@ -486,6 +490,8 @@ assert.equal(verifiedReport.status, 'ok')
 assert.equal(verifiedReport.verified, true)
 assert.equal(verifiedReport.actual_clickthrough_completed, true)
 assert.equal(verifiedReport.execution_claimed, false)
+assert.equal(verifiedReport.required_manual_fields.includes('strict_execution_report_reference'), true)
+assert.equal(verifiedReport.fields.strict_execution_report_reference, '.rescuegrid/demo-execute-report.json')
 assert.equal(verifiedReport.checks.every((check) => check.status === 'passed'), true)
 assert.equal(verifiedReport.checks.some((check) => check.id === 'worker:create-activity'), true)
 assert.equal(chainReads, 2)
@@ -543,6 +549,7 @@ assert.equal(incompleteReport.status, 'error')
 assert.equal(incompleteReport.code, 'EVIDENCE_FIELDS_INCOMPLETE')
 assert(incompleteReport.missing_fields.includes('create_tx_digest'))
 assert(incompleteReport.missing_fields.includes('actual_clickthrough_completed'))
+assert(incompleteReport.missing_fields.includes('strict_execution_report_reference'))
 
 const help = spawnSync(process.execPath, ['scripts/wallet-clickthrough-evidence.mjs', '--help'], {
   cwd: new URL('..', import.meta.url),

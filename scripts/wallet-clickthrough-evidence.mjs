@@ -25,6 +25,7 @@ const REQUIRED_WALLET_MANUAL_FIELDS = [
   'runtime_state_after_activate',
   'policy_active_screenshot',
   'activity_row_screenshot',
+  'strict_execution_report_reference',
   'wallet_revoke_prompt_screenshot',
   'policy_status_after_revoke',
   'policy_revoked_screenshot',
@@ -424,7 +425,7 @@ export function buildWalletEvidence({
       {
         id: 'strict_execution_window',
         action: 'Keep this same policy active for the strict execution validator before revoking it; final mission readiness requires the strict AgentTradeExecuted report and this wallet artifact to describe the same wrapper lifecycle.',
-        record: ['wrapper_id', 'mandate_id', 'strategy_hash', 'create_tx_digest'],
+        record: ['wrapper_id', 'mandate_id', 'strategy_hash', 'create_tx_digest', 'strict_execution_report_reference'],
       },
       {
         id: 'revoke_policy',
@@ -448,6 +449,7 @@ export function buildWalletEvidence({
       runtime_state_after_activate: '',
       policy_active_screenshot: '',
       activity_row_screenshot: '',
+      strict_execution_report_reference: '',
       wallet_revoke_prompt_screenshot: '',
       revoke_tx_digest: '',
       policy_status_after_revoke: '',
@@ -460,6 +462,7 @@ export function buildWalletEvidence({
       'PolicyCreated event yields a wrapper_id and mandate_id that match the UI/API row.',
       'Activation reaches Monitoring after the create transaction finalizes.',
       'Before revocation, the same active wrapper is available for the strict execution validator; the wallet artifact itself still does not claim DeepBook execution.',
+      'The artifact records the strict execution report reference for this wrapper before the revoke step.',
       'Revoke flow uses Worker-built tx_json and the browser wallet returns a revoke tx digest.',
       'Post-revoke reads show chain-authoritative revoked status for the same wrapper and mandate.',
       'No seed phrase, signing secret, Worker secret, tick token, WaaP session value or approval token is captured in screenshots or artifacts.',

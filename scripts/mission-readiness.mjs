@@ -240,6 +240,7 @@ export function summarizeWalletReport(report) {
         wrapper_id: report.fields?.wrapper_id || null,
         mandate_id: report.fields?.mandate_id || null,
         strategy_hash: report.fields?.strategy_hash || null,
+        strict_execution_report_reference: report.fields?.strict_execution_report_reference || null,
         manual_evidence_fields: report.required_manual_fields || [],
       },
     })
@@ -688,7 +689,7 @@ function nextActions({ safetyCheck, walletCheck, fundingCheck, strictExecutionCh
     actions.push('Run npm run safety:negative:report with a live local Worker to write .rescuegrid/safety-negative-report.json proving all required validate-plan blockers.')
   }
   if (walletCheck?.status !== 'passed') {
-    actions.push('Run npm run wallet:evidence -- --format markdown --out .rescuegrid/wallet-clickthrough-evidence.md, then npm run wallet:evidence:preflight before the real Slush / standard Sui wallet flow. Create and activate the policy first, keep the same wrapper active for strict execution evidence before revoking it, then set Actual click-through completed: true, fill tx/object plus screenshot evidence fields, and run npm run wallet:evidence:verify -- --input .rescuegrid/wallet-clickthrough-evidence.md --require-worker.')
+    actions.push('Run npm run wallet:evidence -- --format markdown --out .rescuegrid/wallet-clickthrough-evidence.md, then npm run wallet:evidence:preflight before the real Slush / standard Sui wallet flow. Create and activate the policy first, keep the same wrapper active for strict execution evidence before revoking it, then set Actual click-through completed: true, fill tx/object, strict_execution_report_reference and screenshot evidence fields, and run npm run wallet:evidence:verify -- --input .rescuegrid/wallet-clickthrough-evidence.md --require-worker.')
   }
   if (fundingCheck?.status !== 'passed') {
     actions.push('Send the DBUSDC/DEEP funding handoff to an external funding provider, then rerun npm run funding:watch -- --json and npm run funding:watch:report.')

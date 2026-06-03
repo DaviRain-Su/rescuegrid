@@ -41,6 +41,7 @@ function verifiedWalletReport() {
       'runtime_state_after_activate',
       'policy_active_screenshot',
       'activity_row_screenshot',
+      'strict_execution_report_reference',
       'wallet_revoke_prompt_screenshot',
       'policy_status_after_revoke',
       'policy_revoked_screenshot',
@@ -58,6 +59,7 @@ function verifiedWalletReport() {
       runtime_state_after_activate: 'Monitoring',
       policy_active_screenshot: 'screenshots/policy-active.png',
       activity_row_screenshot: 'screenshots/activity-created.png',
+      strict_execution_report_reference: '.rescuegrid/demo-execute-report.json',
       wallet_revoke_prompt_screenshot: 'screenshots/revoke-approval.png',
       policy_status_after_revoke: 'revoked',
       policy_revoked_screenshot: 'screenshots/policy-revoked.png',
@@ -247,6 +249,9 @@ function strictExecutionReport(overrides = {}) {
   const fundingCheck = report.checks.find((row) => row.id === 'execution_funding_readiness')
   const executionCheck = report.checks.find((row) => row.id === 'strict_execution_evidence')
   const continuityCheck = report.checks.find((row) => row.id === 'mission_same_policy_continuity')
+  const walletCheck = report.checks.find((row) => row.id === 'wallet_clickthrough')
+  assert.equal(walletCheck.evidence.manual_evidence_fields.includes('strict_execution_report_reference'), true)
+  assert.equal(walletCheck.evidence.strict_execution_report_reference, '.rescuegrid/demo-execute-report.json')
   assert.equal(fundingCheck.evidence.external_signer.permission_token_configured, false)
   assert.equal(fundingCheck.evidence.execution_gate.readiness_only, true)
   assert.equal(fundingCheck.evidence.execution_gate.policy_creation_allowed, true)
@@ -334,6 +339,7 @@ function strictExecutionReport(overrides = {}) {
   assert.equal(report.next_actions.some((row) => /wallet:evidence -- --format markdown/.test(row)), true)
   assert.equal(report.next_actions.some((row) => /wallet:evidence:preflight/.test(row)), true)
   assert.equal(report.next_actions.some((row) => /keep the same wrapper active for strict execution evidence before revoking/.test(row)), true)
+  assert.equal(report.next_actions.some((row) => /strict_execution_report_reference/.test(row)), true)
   assert.equal(report.next_actions.some((row) => /wallet:evidence:verify -- --input \.rescuegrid\/wallet-clickthrough-evidence\.md --require-worker/.test(row)), true)
   assertNoSecretSignerPosture(report)
 }
