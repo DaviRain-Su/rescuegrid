@@ -15,6 +15,7 @@ import { requireChainDataProvider } from '../src/chain-data-provider.js'
 import { buildExecutionReadiness } from '../src/execution-readiness.js'
 import { getRuntimeStatus } from '../src/runtime-status.js'
 import {
+  cloudPerUserSignerPosture,
   externalSignerPosture,
   KNOWN_SIGNER_KINDS,
   SIGNER_KIND_CLOUD_PER_USER,
@@ -218,7 +219,9 @@ function daemonConfigFileShape(config, watchedPolicies = config.watched_policies
 
 export function daemonStatus(config, { executionReadiness = null } = {}) {
   const runtimeCore = runtimeCoreStatus()
-  const externalSigner = externalSignerPosture(runtimeEnv(config), { waapCliRunner: runWaapCliSendTx })
+  const env = runtimeEnv(config)
+  const externalSigner = externalSignerPosture(env, { waapCliRunner: runWaapCliSendTx })
+  const cloudPerUserSigner = cloudPerUserSignerPosture(env)
   const status = {
     status: 'ok',
     chain: config.chain,
@@ -242,6 +245,7 @@ export function daemonStatus(config, { executionReadiness = null } = {}) {
       waap_rpc_configured: Boolean(config.waap_rpc),
       permission_token_configured: Boolean(config.waap_permission_token_configured || process.env.RESCUEGRID_WAAP_PERMISSION_TOKEN || process.env.WAAP_PERMISSION_TOKEN),
     },
+    cloud_per_user_signer: cloudPerUserSigner,
   }
   if (executionReadiness) status.execution_readiness = executionReadiness
   return status

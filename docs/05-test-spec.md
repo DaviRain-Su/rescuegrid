@@ -221,14 +221,17 @@ Happy path:
 - `CHAIN_DATA_PROVIDER=graphql` 且配置 `SUI_GRAPHQL_URL` / `SUI_GRAPHQL_ENDPOINT` 时，返回 `chain_data_provider.kind=graphql` 和 `graphql_configured=true`。
 - 默认返回 `monitoring_provider.kind=timer-polling`、`provider_status=active`、`tick_driver=durable-object-alarm` 和 `execution_hot_path_unchanged=true`。
 - `MONITORING_PROVIDER=grpc` 即使配置 `SUI_GRPC_URL` / `SUI_GRPC_ENDPOINT`，也必须返回 `monitoring_provider.provider_status=unavailable`、`blocker_code=GRPC_MONITORING_NOT_IMPLEMENTED`、`grpc_configured=true` 和 `execution_hot_path_unchanged=true`。
-- `known_signer_kinds` 包含 `worker-secret`、`local-daemon`、`waap`、`hardware` 和 `remote-signer`。
+- `known_signer_kinds` 包含 `worker-secret`、`cloud-per-user`、`local-daemon`、`waap`、`hardware` 和 `remote-signer`。
 - `signer_capabilities` 必须覆盖所有 known signer kinds，返回 selected、runtime_scope、custody_model、support flags、available / execution_enabled、runner posture 和 blocker code；不得因为某个 signer kind 出现在 capability matrix 里就暗示它可执行。
 - `external_signer.kind=waap` 必须返回 selected、status、local_daemon_only、waap_cli_enabled、submission_runner_configured、permission_token_configured、address / expected_address 和 public blocker code。
+- `cloud_per_user_signer.kind=cloud-per-user` 必须返回 selected、status、Seal/Walrus requirement flags、per-user agent / MoveGate AgentPassport requirement flags、public blocker code 和 `secrets_returned=false`。
 
 Security / boundary:
 
 - 响应不得包含 `AGENT_KEY`、owner key、WaaP session file、permission token 或任何 secret value。
+- 响应不得包含 Seal token、Walrus token、per-user agent private key、decrypted key material 或 decryptor output。
 - 响应不得包含 gRPC endpoint URL 或 endpoint token。
+- `SIGNER_KIND=cloud-per-user` 必须返回 `PER_USER_CLOUD_SIGNER_NOT_VALIDATED`、`available=false`、`execution.enabled=false`；不得因为 Seal/Walrus env 看似配置就启用签名或提交。
 - `SIGNER_KIND=waap` 默认必须返回 `UNSUPPORTED_SIGNER`，不能因为文档支持 Sui 就自动打开执行。
 - `SIGNER_KIND=waap` 只有在 `RESCUEGRID_DAEMON_MODE=true`、`RESCUEGRID_WAAP_CLI_ENABLED=true`、`RESCUEGRID_WAAP_SUI_ADDRESS=<deployment agent>` 且 runtime 注入了本地 `waap-cli` submission runner 时才可报告 `available=true`。
 - `SIGNER_KIND=waap` 在 Cloud Worker runtime 中必须保持 unavailable；`waap-cli` 只能通过 local daemon 注入 runner 调用。
@@ -240,7 +243,7 @@ Security / boundary:
 - WaaP permission token 可以从 env 传入 runner，但 status、logs、errors 和 config file 不得包含 token 值。
 - `execution.enabled` 只有在 signer available 且 `EXECUTION_ENABLED=true` 时才为 true。
 - Profile / Accounts UI 必须把 status 作为可见状态展示，不能把 `execution_configured=true` 当成可执行；Risk Center signer health 也必须从同一 runtime signer status 派生，而不是只展示静态 signer 行。
-- 当 `known_signer_kinds` 包含 `waap` 时，前端必须显示 WaaP 是 local-daemon-only external signer boundary；在 Cloud Worker 模式选中 `SIGNER_KIND=waap` 时必须显示不可用 blocker，而不是暗示云端可直接运行 `waap-cli`。
+- 当 `known_signer_kinds` 包含 `cloud-per-user` 或 `waap` 时，前端必须显示 `cloud-per-user` 是未验证的 Seal/Walrus per-user signer boundary、WaaP 是 local-daemon-only external signer boundary；在 Cloud Worker 模式选中 `SIGNER_KIND=waap` 或任意模式选中 `SIGNER_KIND=cloud-per-user` 时必须显示不可用 blocker，而不是暗示云端可直接执行。
 
 ### `GET /api/chain-data/status`
 
@@ -317,7 +320,7 @@ Happy path:
 
 - 返回 `chain=sui:testnet`、`scope.executor_kind=deepbook`、`scope.market_id=SUI_DBUSDC`、部署 agent address、BalanceManager id 和 AgentPassport id。
 - 返回 runtime signer/status evidence、BalanceManager DBUSDC/DEEP、agent SUI gas、thresholds、funding blockers 和 execution blockers。
-- 返回 `signer_capabilities` 和 `external_signer`，且字段语义与 `/api/runtime/status` 一致；WaaP 地址、permission token 和 runner 只能以 public posture / blocker code 出现。
+- 返回 `signer_capabilities`、`external_signer` 和 `cloud_per_user_signer`，且字段语义与 `/api/runtime/status` 一致；WaaP 地址、permission token、runner、Seal/Walrus posture 和 per-user signer blocker 只能以 public posture / blocker code 出现。
 - 当 `EXECUTION_ENABLED=false` 或 signer unavailable 时，`execution_ready=false` 且 `blocker_codes` 包含执行 blocker。
 - 当 BalanceManager 缺少 DBUSDC/DEEP 或 agent 缺少 SUI gas 时，`funding_ready=false` 且 `funding_blocker_codes` 包含对应资产 blocker。
 - `dbusdc_threshold`、`deep_threshold`、`sui_gas_threshold` 请求参数只能提高本次检查门槛，不能低于 Worker 配置的 minimum。
@@ -377,7 +380,7 @@ Happy path:
 - 输出 `purpose=external_deepbook_testnet_funding_request`、`chain=sui:testnet`、部署 agent address、AgentPassport id、BalanceManager id、DeepBook `SUI_DBUSDC` pool id、DBUSDC coin type 和 DEEP coin type。
 - 输出 BalanceManager DBUSDC / DEEP 的 observed、required、missing、usable 和 blocker code。
 - 输出 agent gas address 的 SUI_MIST observed、required、missing、usable 和 blocker code。
-- 输出 signer readiness、`signer_capabilities` 和 `external_signer` posture；若 WaaP 地址匹配但 local submission runner 未注入，必须保留 `WAAP_RUNNER_MISSING`，不能把 permission-token configured 当作 execution ready。
+- 输出 signer readiness、`signer_capabilities`、`external_signer` 和 `cloud_per_user_signer` posture；若 WaaP 地址匹配但 local submission runner 未注入，必须保留 `WAAP_RUNNER_MISSING`，不能把 permission-token configured 当作 execution ready；`cloud-per-user` 必须保留 `PER_USER_CLOUD_SIGNER_NOT_VALIDATED`，不能把 Seal/Walrus configured posture 当作 execution ready。
 - 输出 `next_verification.readiness_command="npm run daemon -- status --json"`、`next_verification.funding_watch_command="npm run funding:watch -- --json"`、`next_verification.funding_watch_report_command="npm run funding:watch:report"`、`next_verification.funding_proof_command="npm run funding:proof -- --tx <provider_funding_tx_digest> --json"`、`next_verification.funding_proof_report_command="npm run funding:proof:report -- --tx <provider_funding_tx_digest>"`、`next_verification.strict_execution_command="npm run demo:execute"`、`next_verification.strict_execution_report_command="npm run demo:execute:report"`、`next_verification.wallet_strict_execution_report_command` 和 `next_verification.success_condition`，其中 success condition 必须要求同一 wrapper/mandate/tick digest 的结构化 `AgentTradeExecuted` evidence、`execution_claimed=true`、on-chain spend increase、互不相同的 create/tick/revoke digest 和 create <= execute <= revoke timestamp order。最终 browser-wallet same-wrapper gate 应使用 `wallet_strict_execution_report_command`。
 - 输出 `execution_gate` 机器字段：`readiness_only=true`、`execution_claimed=false`、`strict_execution_report_required=true`、`strict_execution_report_path=".rescuegrid/demo-execute-report.json"`，并按当前 readiness 设置 `policy_creation_allowed` / `policy_creation_blocked`。即使 `ready_for_strict_execution=true`，该 artifact 也只能表示 preflight ready，不能表示执行成功。
 - 支持 `--dbusdc-threshold` / `--deep-threshold` / `--sui-gas-threshold`，且这些 request threshold 只能通过 `buildExecutionReadiness` 提高门槛，不能弱化 Worker 配置 minimum。
@@ -602,7 +605,7 @@ MVP desktop viewport:
 - Revoke button changes state to revoked within one 5 second polling interval.
 - Policy Inspect names the real MoveGate Mandate + RescuePolicyWrapper model and does not show stale AgentPolicy, AgentCap, or sponsored-gas claims.
 - `npm run test:policy-inspect` covers the Policy Inspect copy contract: live inspect copy must name `MoveGate Mandate + RescuePolicyWrapper`, describe owner-signed create/revoke and explicit agent gas, and reject stale `AgentPolicy`, `AgentCap` or sponsored-gas phrasing.
-- Profile / Accounts shows the live runtime signer kind, deployment agent, execution blocker, Worker data-provider status, known signer kinds and WaaP/local-daemon external signer boundary when `VITE_WORKER_URL` is configured.
+- Profile / Accounts shows the live runtime signer kind, deployment agent, execution blocker, Worker data-provider status, known signer kinds, `cloud-per-user` posture and WaaP/local-daemon external signer boundary when `VITE_WORKER_URL` is configured.
 - Risk Center signer/executor health prefers live `/api/runtime/status` rows and raises signer warnings from those rows when available; static `RG.signers` is only the no-runtime fallback.
 - Data Sources shows Worker ChainDataProvider status from `/api/chain-data/status`, including provider kind, transport, probe status and read model.
 - Data Sources shows Archival replay contract status from `/api/archival/replay-contract`, including provider status, contract count and replay-only blocker.
@@ -662,7 +665,8 @@ Passing criteria:
 These tests are not MVP gates, but they define the composability target.
 
 - `rescuegrid daemon run` loads local agent config and starts periodic ticks.
-- `rescuegrid daemon status --json` shows agent address, chain, registered adapters, watched policies, public external signer posture and best-effort execution readiness using the same funding/signer blocker model as `/api/execution/readiness`.
+- `rescuegrid daemon status --json` shows agent address, chain, registered adapters, watched policies, public external signer posture, public `cloud-per-user` posture and best-effort execution readiness using the same funding/signer blocker model as `/api/execution/readiness`.
+- `--signer-kind cloud-per-user` must stay unavailable with `PER_USER_CLOUD_SIGNER_NOT_VALIDATED`, must not leak Seal/Walrus env values, and must not pass Mainnet daemon validation until per-user key provisioning is validated.
 - WaaP daemon readiness must pass only when `--waap-cli-enabled`, matching `--waap-sui-address`, the local submission runner and funding thresholds are all ready; a matching address without runner stays blocked as `WAAP_RUNNER_MISSING`.
 - `rescuegrid daemon policies list --owner <0x...> --json` reads the owner's chain-authoritative policies through the same ChainDataProvider boundary, returns wrapper / mandate / status / budget fields, and marks whether each wrapper is in the daemon watched set.
 - `rescuegrid daemon watch list|add|remove|sync` persists the local watched set in daemon config; `watch sync --owner <0x...>` adds only active policies whose Mandate agent matches the deployed RescueGrid agent, skipping revoked/expired or mismatched-agent wrappers.

@@ -304,6 +304,72 @@ owner click revoke
 - Key rotation creates a new `RESCUEGRID_AGENT_ADDRESS` for new policies. Existing policies must be revoked and recreated by owners; the system does not silently migrate policy authority.
 - Production hardening requires hardware-backed signing or external signer isolation; MVP accepts Worker-secret custody because policies are Testnet-only and chain-limited.
 
+### MVP Limitation: Shared Agent Key
+
+MVP uses a single deployment-level agent key for all users. Every user's Policy authorizes the same `agent` address. While Durable Object instances are isolated per-policy (one DO per wrapper_id), the agent identity and signing key are shared across all users.
+
+This is acceptable for Testnet but creates two risks for production:
+
+1. **Cross-user blast radius**: if the shared `AGENT_KEY` is compromised, all users' active Policies can be drained (within each Policy's pool, budget, and slippage limits).
+2. **No user-level identity isolation**: Alice and Bob share the same agent. There is no way to attribute an execution to "Alice's agent" versus "Bob's agent" on-chain — the MoveGate ActionReceipt shows the same agent address for both.
+
+### Post-MVP: Per-User Cloud Agent Key (Seal + Walrus + Durable Object)
+
+The production architecture must move to per-user agent keys, where each user has their own Sui agent keypair managed by the platform. The design leverages Sui's Seal (decentralized access-controlled secrets) and Walrus (decentralized blob storage) in combination with the existing Durable Object isolation:
+
+```
+User Registration Flow:
+  zkLogin / wallet connect
+    → Worker generates per-user Sui keypair (ed25519)
+    → public key → registers MoveGate AgentPassport on-chain
+    → private key → encrypted with Seal (client-side or Worker-side)
+    → encrypted blob → stored on Walrus
+    → Walrus blob id + Seal access policy id → stored in user's Durable Object
+
+Policy Creation Flow:
+  owner creates Mandate
+    → mandate.agent = user's own agent address (not a shared platform address)
+    → RescuePolicyWrapper records user's agent address
+
+Agent Tick Flow:
+  Durable Object alarm fires for Policy X
+    → read Seal access policy + Walrus blob id from DO
+    → decrypt agent key via Seal (access-gated to Worker identity)
+    → sign PTB with user's own agent key
+    → submit transaction
+    → key material never persisted in plaintext beyond tick lifetime
+```
+
+Key properties:
+
+- **Per-user identity isolation**: Alice's agent key compromise only affects Alice's Policies; Bob's Policies use a different key.
+- **Key at rest encrypted**: agent private keys are never stored in plaintext in DO state or Worker env vars. They exist as Seal-encrypted Walrus blobs, decryptable only by the Worker's authorized identity.
+- **On-chain identity per user**: each user gets their own MoveGate AgentPassport, so ActionReceipts are attributable to a specific user's agent.
+- **Compatible with existing DO isolation**: one DO per policy already exists; storing the per-user Seal/Walrus reference in DO state is a natural extension.
+- **Graceful degradation**: if Seal or Walrus is unavailable, the tick fails closed (no key → no signature → no execution). Chain state (Mandate revocation) remains available.
+
+Sui-specific primitives used:
+
+| Primitive | Role |
+| --- | --- |
+| Seal | Access-controlled decryption of per-user agent keys. Worker identity is the authorized decryptor. |
+| Walrus | Encrypted blob storage for agent private keys. Blob id stored in DO, content never in plaintext at rest. |
+| MoveGate AgentPassport | Per-user on-chain agent identity. Required for Mandate authorization. |
+| Durable Object | Per-policy runtime state + Seal/Walrus reference storage. Already isolated today. |
+
+Migration path from MVP:
+
+1. Keep shared `AGENT_KEY` for existing Testnet deployment.
+2. Add per-user key generation at registration (zkLogin or wallet connect).
+3. Implement Seal encryption + Walrus storage for private keys.
+4. Update Policy creation to use user's own agent address.
+5. Update tick path to decrypt per-user key before signing.
+6. Existing shared-key Policies continue to work until owner revokes and recreates with their own agent.
+
+This architecture turns RescueGrid into a **multi-tenant cloud agent platform with cryptographic isolation between users**, while retaining the same chain-enforced security model (Mandate + Wrapper + Guardian).
+
+Current implementation boundary: `cloud-per-user` already exists as a public `SignerAdapter` status kind in runtime/readiness/daemon posture. It is intentionally non-executable and returns `PER_USER_CLOUD_SIGNER_NOT_VALIDATED` until Seal/Walrus encrypted key write/read, decryptor identity, per-user AgentPassport registration and per-user policy creation are implemented and validated.
+
 ## 7. Failure Modes
 
 - Intent parse ambiguous：return AwaitingConfirm with warnings; do not create Policy.
@@ -331,7 +397,7 @@ Production hardening backlog:
 - Migrate Worker reads behind a `ChainDataProvider` boundary from JSON-RPC/SuiClient reads to Sui GraphQL RPC, with gRPC reserved for low-latency agent monitoring and Archival Store-backed providers for history/replay.
 - Current implementation: `worker/src/chain-data-provider.js` exposes `JsonRpcChainDataProvider` as the default read provider and a configurable `GraphqlChainDataProvider` spike for policy object snapshots, policy-module events, policy list/activity and owner summary. GraphQL is disabled unless `CHAIN_DATA_PROVIDER=graphql` plus `SUI_GRAPHQL_URL` / `SUI_GRAPHQL_ENDPOINT` or an injected transport is configured; balance, gas and DeepBook market reads still fall back to JSON-RPC until those GraphQL schemas are verified.
 - Optional Seal + Walrus encrypted policy record layer for private strategy snapshots, backtests, reasoning traces and incident reports; never for wallet or agent private keys.
-- Optional `SignerAdapter` layer for local daemon, hardware signer, remote signer or WaaP-style two-party signing; MoveGate + RescuePolicyWrapper remain the Sui on-chain enforcement layer.
+- Optional `SignerAdapter` layer for per-user cloud keys, local daemon, hardware signer, remote signer or WaaP-style two-party signing; MoveGate + RescuePolicyWrapper remain the Sui on-chain enforcement layer.
 - Direct owner emergency revoke script.
 - Multi-agent key rotation.
 - Local CLI daemon with same Runtime Core, Policy, Guardian and ExecutorAdapter interfaces.

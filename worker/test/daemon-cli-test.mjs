@@ -74,6 +74,11 @@ try {
   assert.equal(status.known_signer_kinds.includes('waap'), true)
   assert.equal(status.external_signer.waap_cli_enabled, false)
   assert.equal(status.external_signer.permission_token_configured, false)
+  assert.equal(status.cloud_per_user_signer.kind, 'cloud-per-user')
+  assert.equal(status.cloud_per_user_signer.selected, false)
+  assert.equal(status.cloud_per_user_signer.status, 'not_selected')
+  assert.equal(status.cloud_per_user_signer.seal_walrus_required, true)
+  assert.equal(status.cloud_per_user_signer.secrets_returned, false)
 
   const executionReadiness = await daemonExecutionReadiness({ ...config, signer_kind: 'waap', execution_enabled: true }, {
     chainData: {
@@ -94,6 +99,27 @@ try {
   const statusWithReadiness = daemonStatus(config, { executionReadiness })
   assert.equal(statusWithReadiness.execution_readiness.signer.kind, 'waap')
   assert.equal(statusWithReadiness.execution_readiness.execution_claimed, false)
+
+  const cloudPerUserConfig = resolveDaemonConfig({
+    flags: new Map([
+      ['--config', configPath],
+      ['--signer-kind', 'cloud-per-user'],
+      ['--execution-enabled', 'true'],
+    ]),
+    env: {
+      SEAL_ACCESS_TOKEN: 'seal-secret',
+      WALRUS_ACCESS_TOKEN: 'walrus-secret',
+    },
+  })
+  assert.equal(validateDaemonConfig(cloudPerUserConfig).ok, true)
+  const cloudPerUserStatus = daemonStatus(cloudPerUserConfig)
+  assert.equal(cloudPerUserStatus.signer_kind, 'cloud-per-user')
+  assert.equal(cloudPerUserStatus.cloud_per_user_signer.selected, true)
+  assert.equal(cloudPerUserStatus.cloud_per_user_signer.status, 'unavailable')
+  assert.equal(cloudPerUserStatus.cloud_per_user_signer.unavailable_code, 'PER_USER_CLOUD_SIGNER_NOT_VALIDATED')
+  assert.equal(cloudPerUserStatus.cloud_per_user_signer.secrets_returned, false)
+  assert.equal(JSON.stringify(cloudPerUserStatus).includes('seal-secret'), false)
+  assert.equal(JSON.stringify(cloudPerUserStatus).includes('walrus-secret'), false)
 
   const waapConfig = resolveDaemonConfig({
     flags: new Map([

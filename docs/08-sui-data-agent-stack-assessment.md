@@ -120,7 +120,7 @@ RescueGrid position:
 
 Do not put WaaP into the MVP hot path now. The current Testnet Worker is deterministic and small; introducing external signer orchestration would add moving parts before live DeepBook funding is solved. The immediate use is a design target, not a replacement for the current Testnet `worker-secret` path.
 
-Current implementation status: the repo now models `waap` as an explicit `SignerAdapter` kind and surfaces it through `/api/runtime/status`. It stays `UNSUPPORTED_SIGNER` by default and in Cloud Worker mode. The first local-daemon-only CLI adapter spike becomes available only when `RESCUEGRID_DAEMON_MODE=true`, `RESCUEGRID_WAAP_CLI_ENABLED=true`, and `RESCUEGRID_WAAP_SUI_ADDRESS` matches the deployed RescueGrid agent. It serializes the RescueGrid-generated Sui PTB to `tx_json`, sets sender to the agent address, and hands it to an injected `waap-cli send-tx --tx-json ... --chain sui:testnet --json` runner. The adapter now parses single JSON and newline-delimited JSON output, prefers `event=result`, accepts common digest keys, and maps approval-pending, approval-denied, policy-blocked and timeout states to stable non-success codes. Runtime tick handling keeps those states as non-submitted blocked activity with `signer_kind` / `approval_state` evidence, and Agent Activity can filter signer blocks and show signer kind, approval state and signer blocker codes without claiming execution. This gives RescueGrid a test-covered external signer boundary without claiming production WaaP execution.
+Current implementation status: the repo now models `waap` and `cloud-per-user` as explicit `SignerAdapter` kinds and surfaces them through `/api/runtime/status`. `cloud-per-user` is a disabled Seal/Walrus per-user agent-key boundary only: it reports `PER_USER_CLOUD_SIGNER_NOT_VALIDATED`, stays unavailable, remains blocked in daemon Mainnet config, and is allowlisted through runtime/readiness/funding/mission/wallet evidence without exposing Seal/Walrus tokens or key material. `waap` stays `UNSUPPORTED_SIGNER` by default and in Cloud Worker mode. The first local-daemon-only CLI adapter spike becomes available only when `RESCUEGRID_DAEMON_MODE=true`, `RESCUEGRID_WAAP_CLI_ENABLED=true`, and `RESCUEGRID_WAAP_SUI_ADDRESS` matches the deployed RescueGrid agent. It serializes the RescueGrid-generated Sui PTB to `tx_json`, sets sender to the agent address, and hands it to an injected `waap-cli send-tx --tx-json ... --chain sui:testnet --json` runner. The adapter now parses single JSON and newline-delimited JSON output, prefers `event=result`, accepts common digest keys, and maps approval-pending, approval-denied, policy-blocked and timeout states to stable non-success codes. Runtime tick handling keeps those states as non-submitted blocked activity with `signer_kind` / `approval_state` evidence, and Agent Activity can filter signer blocks and show signer kind, approval state and signer blocker codes without claiming execution. This gives RescueGrid test-covered signer boundaries without claiming production WaaP or per-user cloud signing execution.
 
 Cloud vs local placement:
 
@@ -133,7 +133,7 @@ Recommended adapter shape:
 
 ```ts
 interface SignerAdapter {
-  kind: 'worker-secret' | 'local-daemon' | 'waap' | 'hardware' | 'remote-signer'
+  kind: 'worker-secret' | 'cloud-per-user' | 'local-daemon' | 'waap' | 'hardware' | 'remote-signer'
   address(): Promise<string>
   signAndSubmit(plan: ApprovedExecutionPlan): Promise<ExecutionReceipt>
 }
@@ -150,11 +150,12 @@ WaaP adapter requirements:
 Mainnet hardening path:
 
 1. Keep `worker-secret` for Testnet.
-2. Keep the implemented `local-daemon` signer constrained to `RESCUEGRID_DAEMON_MODE=true` and local `AGENT_KEY`.
-3. Add a local-daemon `waap` CLI adapter spike that composes a RescueGrid-generated Sui Testnet `tx_json` request and parses a returned digest without logging session files or permission tokens. This is implemented at the signer boundary and unit-tested with an injected runner.
-4. Validate the same adapter against a live WaaP session and approval/privilege flow before enabling any real submission evidence.
-5. If the live spike works, keep WaaP as one implementation of `SignerAdapter`, not a special runtime branch.
-6. Require a security review before any external signer adapter can submit production trades.
+2. Keep `cloud-per-user` status-only until Seal/Walrus encrypted key write/read, decryptor identity, per-user AgentPassport registration and per-user Policy creation are validated.
+3. Keep the implemented `local-daemon` signer constrained to `RESCUEGRID_DAEMON_MODE=true` and local `AGENT_KEY`.
+4. Add a local-daemon `waap` CLI adapter spike that composes a RescueGrid-generated Sui Testnet `tx_json` request and parses a returned digest without logging session files or permission tokens. This is implemented at the signer boundary and unit-tested with an injected runner.
+5. Validate the same adapter against a live WaaP session and approval/privilege flow before enabling any real submission evidence.
+6. If the live spike works, keep WaaP as one implementation of `SignerAdapter`, not a special runtime branch.
+7. Require a security review before any external signer adapter can submit production trades.
 
 ## 5. Sui Agent Skills
 
@@ -191,7 +192,7 @@ Post-MVP architecture:
 
 1. Use Seal + Walrus for encrypted private policy records.
 2. Use the Sui Stack CRM pattern for versioned encrypted blobs and Sui ACL.
-3. Add `SignerAdapter` with WaaP/local/hardware signer options.
+3. Add `SignerAdapter` with per-user cloud, WaaP, local, hardware and remote signer options.
 4. Keep MoveGate + RescuePolicyWrapper as the on-chain policy boundary.
 5. Add Sui Agent Skills to the engineering setup for faster, more consistent Sui work.
 

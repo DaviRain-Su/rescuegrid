@@ -108,6 +108,7 @@ Hackathon 视角的成功指标：
 - 不在 MVP 承诺 Mainnet 资金执行。
 - 不在 MVP 承诺完整本地 LLM 产品化。
 - MVP 只保留 Local Mode 和 CLI daemon 扩展点；未来 Local Agent 与 Cloud Agent 共享 PolicyReader、Guardian、ExecutorAdapter 和 ActivityWriter 边界。
+- 不在 MVP 承诺 per-user cloud agent key（每位用户独立的 Sui agent keypair）。MVP 使用部署级共享 agent key；Post-MVP 将通过 Seal + Walrus 实现 per-user 加密密钥隔离，架构设计见 [`docs/02-architecture.md`](02-architecture.md) §6。
 - 不在 MVP 承诺多交易所、多链、跨链桥、CEX、Hyperliquid 或复杂组合保证金管理；这些属于 Post-MVP multivenue roadmap，见 [`docs/06-post-mvp-multivenue-roadmap.md`](06-post-mvp-multivenue-roadmap.md)。
 - 不在 MVP 承诺自动生成任意 PTB；仅支持 RescueGrid 已知策略模板。
 - 不在 MVP 承诺法律、投资建议或收益保证。
