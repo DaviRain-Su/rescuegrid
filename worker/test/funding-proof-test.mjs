@@ -306,7 +306,10 @@ function assertNoSecrets(value) {
   assert.equal(report.funding_proven, false)
   assert.equal(report.ready_for_strict_execution, false)
   assert.equal(report.blocker_codes.includes('FUNDING_TX_DIGEST_MISSING'), true)
+  assert.equal(report.blocker_codes.includes('FUNDING_TX_REQUIRED_TARGET_ASSET_NOT_PROVEN'), false)
   assert.equal(report.transaction_evidence.required, true)
+  assert.equal(report.transaction_evidence.required_target_asset_evidence_passed, false)
+  assert.deepEqual(report.transaction_evidence.required_target_assets, ['DBUSDC', 'DEEP'])
 }
 
 {
@@ -324,6 +327,7 @@ function assertNoSecrets(value) {
   assert.equal(report.transaction_evidence.tx_evidence_passed, true)
   assert.equal(report.transaction_evidence.target_evidence_passed, true)
   assert.equal(report.transaction_evidence.role_asset_evidence_passed, true)
+  assert.equal(report.transaction_evidence.required_target_asset_evidence_passed, true)
   assert.equal(report.funding_proven, false)
   assert.equal(report.blocker_codes.includes('INSUFFICIENT_DBUSDC'), true)
   assert.equal(report.policy_creation_allowed, false)
@@ -354,11 +358,36 @@ function assertNoSecrets(value) {
   assert.equal(report.transaction_evidence.asset_hits.includes('DEEP'), true)
   assert.equal(report.transaction_evidence.target_evidence_passed, true)
   assert.equal(report.transaction_evidence.role_asset_evidence_passed, true)
+  assert.equal(report.transaction_evidence.required_target_asset_evidence_passed, true)
   assert.equal(report.transaction_evidence.target_asset_hits.includes('DBUSDC'), true)
   assert.equal(report.transaction_evidence.target_asset_hits.includes('DEEP'), true)
   assert.equal(report.cloud_per_user_signer.kind, 'cloud-per-user')
   assert.equal(report.cloud_per_user_signer.seal_walrus_required, true)
   assertNoSecrets(report)
+}
+
+{
+  const report = buildFundingProofReport({
+    readiness: readiness({ executionReady: true }),
+    transactionProofs: [
+      await verifyFundingTransaction({
+        digest: 'gasOnlyDigest',
+        client: { async getTransactionBlock({ digest }) { return singleAssetTargetTxFixture({ digest, asset: 'SUI_MIST' }) } },
+      }),
+    ],
+    generatedAt: '2026-06-03T00:00:00.000Z',
+  })
+  assert.equal(report.status, 'failed')
+  assert.equal(report.transaction_evidence.tx_evidence_passed, true)
+  assert.equal(report.transaction_evidence.target_evidence_passed, true)
+  assert.equal(report.transaction_evidence.role_asset_evidence_passed, true)
+  assert.equal(report.transaction_evidence.required_target_asset_evidence_passed, false)
+  assert.deepEqual(report.transaction_evidence.required_target_assets, ['DBUSDC', 'DEEP'])
+  assert.deepEqual(report.transaction_evidence.missing_required_target_assets, ['DBUSDC', 'DEEP'])
+  assert.deepEqual(report.transaction_evidence.target_asset_hits, ['SUI_MIST'])
+  assert.equal(report.blocker_codes.includes('FUNDING_TX_REQUIRED_TARGET_ASSET_NOT_PROVEN'), true)
+  assert.equal(report.funding_proven, false)
+  assert.equal(report.ready_for_strict_execution, false)
 }
 
 {
@@ -377,12 +406,15 @@ function assertNoSecrets(value) {
   assert.equal(report.transaction_evidence.tx_evidence_passed, true)
   assert.equal(report.transaction_evidence.target_evidence_passed, true)
   assert.equal(report.transaction_evidence.role_asset_evidence_passed, false)
+  assert.equal(report.transaction_evidence.required_target_asset_evidence_passed, false)
+  assert.deepEqual(report.transaction_evidence.missing_required_target_assets, ['DBUSDC'])
   assert.deepEqual(report.transaction_evidence.failed_role_asset_digests, ['deepOnlyDigest'])
   assert.equal(report.transaction_evidence.role_asset_requirements[0].role, 'dbusdc_funding_tx')
   assert.equal(report.transaction_evidence.role_asset_requirements[0].required_asset, 'DBUSDC')
   assert.deepEqual(report.transaction_evidence.role_asset_requirements[0].target_asset_hits, ['DEEP'])
   assert.equal(report.transaction_evidence.role_asset_requirements[0].passed, false)
   assert.equal(report.blocker_codes.includes('FUNDING_TX_ROLE_ASSET_NOT_PROVEN'), true)
+  assert.equal(report.blocker_codes.includes('FUNDING_TX_REQUIRED_TARGET_ASSET_NOT_PROVEN'), true)
   assert.equal(report.funding_proven, false)
   assert.equal(report.ready_for_strict_execution, false)
 }

@@ -456,6 +456,7 @@ function fundingProofSummaryEvidence(report = null) {
   const failedTxDigests = Array.isArray(txEvidence.failed_tx_digests) ? txEvidence.failed_tx_digests : []
   const failedTargetDigests = Array.isArray(txEvidence.failed_target_digests) ? txEvidence.failed_target_digests : []
   const failedRoleAssetDigests = Array.isArray(txEvidence.failed_role_asset_digests) ? txEvidence.failed_role_asset_digests : []
+  const missingRequiredTargetAssets = Array.isArray(txEvidence.missing_required_target_assets) ? txEvidence.missing_required_target_assets : []
   const roleAssetRequirements = Array.isArray(txEvidence.role_asset_requirements) ? txEvidence.role_asset_requirements : []
   return {
     status: report?.status || null,
@@ -472,12 +473,15 @@ function fundingProofSummaryEvidence(report = null) {
       tx_evidence_passed: txEvidence.tx_evidence_passed === true,
       target_evidence_passed: txEvidence.target_evidence_passed === true,
       role_asset_evidence_passed: txEvidence.role_asset_evidence_passed === true,
+      required_target_asset_evidence_passed: txEvidence.required_target_asset_evidence_passed === true,
       failed_tx_digest_count: failedTxDigests.length,
       failed_tx_digests: publicDigestArray(failedTxDigests),
       failed_target_digest_count: failedTargetDigests.length,
       failed_target_digests: publicDigestArray(failedTargetDigests),
       failed_role_asset_digest_count: failedRoleAssetDigests.length,
       failed_role_asset_digests: publicDigestArray(failedRoleAssetDigests),
+      required_target_assets: publicFundingAssets(txEvidence.required_target_assets),
+      missing_required_target_assets: publicFundingAssets(missingRequiredTargetAssets),
       role_asset_requirements: roleAssetRequirements.map((row) => ({
         role: stringOrNull(row.role),
         digest: stringOrNull(row.digest),
@@ -515,9 +519,11 @@ function fundingProofMissingEvidence(evidence) {
   if (evidence.transaction_evidence.tx_evidence_passed !== true) missing.push('tx_evidence_passed')
   if (evidence.transaction_evidence.target_evidence_passed !== true) missing.push('target_evidence_passed')
   if (evidence.transaction_evidence.role_asset_evidence_passed !== true) missing.push('role_asset_evidence_passed')
+  if (evidence.transaction_evidence.required_target_asset_evidence_passed !== true) missing.push('required_target_asset_evidence_passed')
   if (evidence.transaction_evidence.failed_tx_digest_count > 0) missing.push('failed_tx_digests_empty')
   if (evidence.transaction_evidence.failed_target_digest_count > 0) missing.push('failed_target_digests_empty')
   if (evidence.transaction_evidence.failed_role_asset_digest_count > 0) missing.push('failed_role_asset_digests_empty')
+  if (evidence.transaction_evidence.missing_required_target_assets.length > 0) missing.push('missing_required_target_assets_empty')
   if (evidence.transaction_evidence.target_asset_hits.length < 1) missing.push('target_asset_hits')
   if (evidence.execution_gate.readiness_only !== true) missing.push('execution_gate_readiness_only')
   if (evidence.execution_gate.execution_claimed !== false) missing.push('execution_gate_unclaimed')
@@ -943,7 +949,7 @@ function nextActions({ safetyCheck, walletCheck, fundingCheck, fundingProofCheck
     actions.push('Run npm run wallet:evidence -- --format markdown --out .rescuegrid/wallet-clickthrough-evidence.md, then npm run wallet:evidence:preflight before the real Slush / standard Sui wallet flow. Create and activate the policy first, download the UI Activation strategy evidence JSON, run npm run wallet:evidence:apply-strategy -- --input .rescuegrid/wallet-clickthrough-evidence.md --strategy-file <strategy_json_path> to fill machine-derived owner/create/wrapper/mandate/hash fields without marking completion, keep the same wrapper active, run npm run demo:execute:wallet-report -- --wrapper-id <wrapper_id> --strategy-file <strategy_json_path> --create-tx-digest <create_tx_digest>, revoke from the browser wallet when the script reaches awaiting_wallet_revoke, then run npm run wallet:evidence:apply-report -- --input .rescuegrid/wallet-clickthrough-evidence.md --execution-report .rescuegrid/demo-execute-report.json to fill machine-derived revoke/report lifecycle fields including strict_execution_report_reference, set Actual click-through completed: true, fill screenshot evidence fields with readable local files or external audit URLs, and run npm run wallet:evidence:verify -- --input .rescuegrid/wallet-clickthrough-evidence.md --require-worker --execution-report .rescuegrid/demo-execute-report.json.')
   }
   if (fundingCheck?.status !== 'passed' || fundingProofCheck?.status !== 'passed') {
-    actions.push('Send the DBUSDC/DEEP funding handoff to an external funding provider, save the provider Sui tx digest with npm run funding:proof -- --tx <provider_funding_tx_digest> --json and npm run funding:proof:report -- --tx <provider_funding_tx_digest>, or use role-specific --dbusdc-tx / --deep-tx / --sui-gas-tx digests when funds arrive in separate transactions. Ensure .rescuegrid/funding-proof-report.json has funding_proven=true, transaction_evidence.target_evidence_passed=true and transaction_evidence.role_asset_evidence_passed=true for the target BalanceManager / agent gas address, then rerun npm run funding:watch -- --json and npm run funding:watch:report.')
+    actions.push('Send the DBUSDC/DEEP funding handoff to an external funding provider, save the provider Sui tx digest with npm run funding:proof -- --tx <provider_funding_tx_digest> --json and npm run funding:proof:report -- --tx <provider_funding_tx_digest>, or use role-specific --dbusdc-tx / --deep-tx / --sui-gas-tx digests when funds arrive in separate transactions. Ensure .rescuegrid/funding-proof-report.json has funding_proven=true, transaction_evidence.target_evidence_passed=true, transaction_evidence.required_target_asset_evidence_passed=true for DBUSDC/DEEP BalanceManager funding, and transaction_evidence.role_asset_evidence_passed=true for role-specific digests, then rerun npm run funding:watch -- --json and npm run funding:watch:report.')
   }
   if (fundingCheck?.status === 'passed' && fundingProofCheck?.status === 'passed' && strictExecutionCheck?.status !== 'passed') {
     actions.push('Run npm run demo:execute:wallet-report -- --wrapper-id <wallet_wrapper_id> --strategy-file <strategy_json_path> --create-tx-digest <wallet_create_tx_digest> to write .rescuegrid/demo-execute-report.json for the browser-wallet-created wrapper, proving create -> execute -> wallet revoke -> post-revoke no-execution with structured AgentTradeExecuted evidence, execution_claimed=true and spend increase.')

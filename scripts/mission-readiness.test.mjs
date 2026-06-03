@@ -134,9 +134,12 @@ function readyFundingProof(overrides = {}) {
       tx_evidence_passed: true,
       target_evidence_passed: true,
       role_asset_evidence_passed: true,
+      required_target_asset_evidence_passed: true,
       failed_tx_digests: [],
       failed_target_digests: [],
       failed_role_asset_digests: [],
+      required_target_assets: ['DBUSDC', 'DEEP'],
+      missing_required_target_assets: [],
       role_asset_requirements: [
         {
           role: 'provider_funding_tx',
@@ -376,7 +379,9 @@ function strictExecutionReport(overrides = {}) {
   assert.equal(fundingProofCheck.evidence.execution_claimed, false)
   assert.equal(fundingProofCheck.evidence.transaction_evidence.target_evidence_passed, true)
   assert.equal(fundingProofCheck.evidence.transaction_evidence.role_asset_evidence_passed, true)
+  assert.equal(fundingProofCheck.evidence.transaction_evidence.required_target_asset_evidence_passed, true)
   assert.equal(fundingProofCheck.evidence.transaction_evidence.target_asset_hits.includes('DBUSDC'), true)
+  assert.deepEqual(fundingProofCheck.evidence.transaction_evidence.required_target_assets, ['DBUSDC', 'DEEP'])
   assert.equal(fundingProofCheck.evidence.transaction_evidence.role_asset_requirements[0].passed, true)
   assert.equal(fundingProofCheck.evidence.execution_gate.readiness_only, true)
   assert.equal(fundingProofCheck.evidence.execution_gate.execution_claimed, false)
@@ -441,6 +446,7 @@ function strictExecutionReport(overrides = {}) {
   assert.equal(report.blocker_codes.includes('FUNDING_PROOF_REPORT_MISSING'), true)
   assert.equal(fundingProofCheck.evidence.expected_report, '.rescuegrid/funding-proof-report.json')
   assert.equal(report.next_actions.some((row) => /transaction_evidence\.target_evidence_passed=true/.test(row)), true)
+  assert.equal(report.next_actions.some((row) => /transaction_evidence\.required_target_asset_evidence_passed=true/.test(row)), true)
   assert.equal(report.next_actions.some((row) => /--dbusdc-tx \/ --deep-tx \/ --sui-gas-tx/.test(row)), true)
   assert.equal(report.next_actions.some((row) => /transaction_evidence\.role_asset_evidence_passed=true/.test(row)), true)
 }
@@ -462,9 +468,12 @@ function strictExecutionReport(overrides = {}) {
         tx_evidence_passed: true,
         target_evidence_passed: false,
         role_asset_evidence_passed: true,
+        required_target_asset_evidence_passed: false,
         failed_tx_digests: [],
         failed_target_digests: ['4Unre1atedDigest11111111111111111111111'],
         failed_role_asset_digests: [],
+        required_target_assets: ['DBUSDC', 'DEEP'],
+        missing_required_target_assets: ['DBUSDC', 'DEEP'],
         role_asset_requirements: [
           {
             role: 'provider_funding_tx',
@@ -488,8 +497,58 @@ function strictExecutionReport(overrides = {}) {
   assert.equal(report.blocker_codes.includes('FUNDING_TX_TARGET_NOT_PROVEN'), true)
   assert.equal(report.blocker_codes.includes('FUNDING_PROOF_NOT_PROVEN'), true)
   assert.equal(fundingProofCheck.evidence.missing_live_evidence.includes('target_evidence_passed'), true)
+  assert.equal(fundingProofCheck.evidence.missing_live_evidence.includes('required_target_asset_evidence_passed'), true)
   assert.equal(fundingProofCheck.evidence.missing_live_evidence.includes('blocker_codes_empty'), true)
   assert.deepEqual(fundingProofCheck.evidence.transaction_evidence.failed_target_digests, ['4Unre1atedDigest11111111111111111111111'])
+}
+
+{
+  const report = buildMissionReadinessReport({
+    scripts: requiredScripts,
+    safetyReport: safetyNegativeReport(),
+    walletReport: verifiedWalletReport(),
+    fundingReadiness: readyFunding(),
+    fundingProofReport: readyFundingProof({
+      status: 'failed',
+      funding_proven: false,
+      ready_for_strict_execution: false,
+      blocker_codes: ['FUNDING_TX_REQUIRED_TARGET_ASSET_NOT_PROVEN'],
+      transaction_evidence: {
+        required: true,
+        tx_digest_count: 1,
+        tx_evidence_passed: true,
+        target_evidence_passed: true,
+        role_asset_evidence_passed: true,
+        required_target_asset_evidence_passed: false,
+        failed_tx_digests: [],
+        failed_target_digests: [],
+        failed_role_asset_digests: [],
+        required_target_assets: ['DBUSDC', 'DEEP'],
+        missing_required_target_assets: ['DBUSDC', 'DEEP'],
+        role_asset_requirements: [
+          {
+            role: 'provider_funding_tx',
+            digest: '6GasOnlyDigest111111111111111111111',
+            required_asset: null,
+            target_asset_hits: ['SUI_MIST'],
+            passed: true,
+          },
+        ],
+        asset_hits: ['SUI_MIST'],
+        target_asset_hits: ['SUI_MIST'],
+      },
+    }),
+    executionReport: strictExecutionReport(),
+  })
+  const fundingProofCheck = report.checks.find((row) => row.id === 'external_funding_proof')
+  assert.equal(report.status, 'failed')
+  assert.equal(fundingProofCheck.status, 'failed')
+  assert.equal(report.blocker_codes.includes('FUNDING_TX_REQUIRED_TARGET_ASSET_NOT_PROVEN'), true)
+  assert.equal(fundingProofCheck.evidence.missing_live_evidence.includes('required_target_asset_evidence_passed'), true)
+  assert.equal(fundingProofCheck.evidence.missing_live_evidence.includes('missing_required_target_assets_empty'), true)
+  assert.deepEqual(fundingProofCheck.evidence.transaction_evidence.target_asset_hits, ['SUI_MIST'])
+  assert.deepEqual(fundingProofCheck.evidence.transaction_evidence.required_target_assets, ['DBUSDC', 'DEEP'])
+  assert.deepEqual(fundingProofCheck.evidence.transaction_evidence.missing_required_target_assets, ['DBUSDC', 'DEEP'])
 }
 
 {
@@ -509,9 +568,12 @@ function strictExecutionReport(overrides = {}) {
         tx_evidence_passed: true,
         target_evidence_passed: true,
         role_asset_evidence_passed: false,
+        required_target_asset_evidence_passed: false,
         failed_tx_digests: [],
         failed_target_digests: [],
         failed_role_asset_digests: ['5Ro1eMismatchDigest111111111111111111'],
+        required_target_assets: ['DBUSDC', 'DEEP'],
+        missing_required_target_assets: ['DBUSDC'],
         role_asset_requirements: [
           {
             role: 'dbusdc_funding_tx',
@@ -534,8 +596,11 @@ function strictExecutionReport(overrides = {}) {
   assert.equal(report.blocker_codes.includes('FUNDING_TX_ROLE_ASSET_NOT_PROVEN'), true)
   assert.equal(report.blocker_codes.includes('FUNDING_PROOF_NOT_PROVEN'), true)
   assert.equal(fundingProofCheck.evidence.missing_live_evidence.includes('role_asset_evidence_passed'), true)
+  assert.equal(fundingProofCheck.evidence.missing_live_evidence.includes('required_target_asset_evidence_passed'), true)
   assert.equal(fundingProofCheck.evidence.missing_live_evidence.includes('failed_role_asset_digests_empty'), true)
+  assert.equal(fundingProofCheck.evidence.missing_live_evidence.includes('missing_required_target_assets_empty'), true)
   assert.deepEqual(fundingProofCheck.evidence.transaction_evidence.failed_role_asset_digests, ['5Ro1eMismatchDigest111111111111111111'])
+  assert.deepEqual(fundingProofCheck.evidence.transaction_evidence.missing_required_target_assets, ['DBUSDC'])
   assert.equal(fundingProofCheck.evidence.transaction_evidence.role_asset_requirements[0].required_asset, 'DBUSDC')
   assert.deepEqual(fundingProofCheck.evidence.transaction_evidence.role_asset_requirements[0].target_asset_hits, ['DEEP'])
 }
@@ -624,6 +689,7 @@ function strictExecutionReport(overrides = {}) {
   assert.equal(report.next_actions.some((row) => /--execution-report \.rescuegrid\/demo-execute-report\.json/.test(row)), true)
   assert.equal(report.next_actions.some((row) => /funding:proof -- --tx <provider_funding_tx_digest> --json/.test(row)), true)
   assert.equal(report.next_actions.some((row) => /funding:proof:report -- --tx <provider_funding_tx_digest>/.test(row)), true)
+  assert.equal(report.next_actions.some((row) => /required_target_asset_evidence_passed=true/.test(row)), true)
   assert.equal(report.next_actions.some((row) => /role_asset_evidence_passed=true/.test(row)), true)
   assertNoSecretSignerPosture(report)
 }

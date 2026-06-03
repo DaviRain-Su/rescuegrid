@@ -151,6 +151,14 @@ function positiveAmount(value) {
   }
 }
 
+function positiveThreshold(value) {
+  try {
+    return BigInt(String(value ?? '0')) > 0n
+  } catch {
+    return false
+  }
+}
+
 const FUNDING_ASSETS = Object.freeze({
   DBUSDC: DEPLOYMENT.deepbook.dbusdc_coin_type,
   DEEP: DEPLOYMENT.deepbook.deep_coin_type,
@@ -233,6 +241,28 @@ function fundingRoleAssetCheckPassed(row = {}) {
   return targetAssetHits(row).includes(requiredAsset)
 }
 
+function requiredBalanceManagerAssets(handoff = {}) {
+  const rows = handoff.funding_targets?.balance_manager?.required_assets || []
+  return rows
+    .filter((row) => positiveThreshold(row.required))
+    .map((row) => row.asset)
+    .filter((asset) => asset === 'DBUSDC' || asset === 'DEEP')
+}
+
+function requiredTargetAssetEvidence({ handoff, txChecks = [] } = {}) {
+  const requiredAssets = [...new Set(requiredBalanceManagerAssets(handoff))]
+  const targetAssetHits = [...new Set(txChecks.flatMap((row) => (
+    row.target_evidence?.asset_target_hits || []
+  ).map((hit) => hit.asset).filter(Boolean)))]
+  const missingAssets = requiredAssets.filter((asset) => !targetAssetHits.includes(asset))
+  return {
+    required_assets: requiredAssets,
+    target_asset_hits: targetAssetHits,
+    missing_required_assets: missingAssets,
+    passed: missingAssets.length === 0,
+  }
+}
+
 function txStatus(effects = {}) {
   const status = effects.status
   if (typeof status === 'string') return status
@@ -310,13 +340,21 @@ export function buildFundingProofReport({
   const txEvidencePassed = !missingDigest && failedTxChecks.length === 0
   const targetEvidencePassed = txEvidencePassed && failedTargetChecks.length === 0
   const roleAssetEvidencePassed = txEvidencePassed && failedRoleAssetChecks.length === 0
-  const fundingProven = txEvidencePassed && targetEvidencePassed && roleAssetEvidencePassed && handoff.funding_ready === true
+  const requiredTargetAssetEvidenceResult = requiredTargetAssetEvidence({ handoff, txChecks })
+  const requiredTargetAssetEvidencePassed = txEvidencePassed && requiredTargetAssetEvidenceResult.passed === true
+  const failedRequiredTargetAssetEvidence = txEvidencePassed && requiredTargetAssetEvidenceResult.passed !== true
+  const fundingProven = txEvidencePassed &&
+    targetEvidencePassed &&
+    roleAssetEvidencePassed &&
+    requiredTargetAssetEvidencePassed &&
+    handoff.funding_ready === true
   const readyForStrictExecution = fundingProven && handoff.ready_for_strict_execution === true
   const txBlockers = [
     missingDigest ? 'FUNDING_TX_DIGEST_MISSING' : null,
     failedTxChecks.length > 0 ? 'FUNDING_TX_NOT_PROVEN' : null,
     failedTargetChecks.length > 0 ? 'FUNDING_TX_TARGET_NOT_PROVEN' : null,
     failedRoleAssetChecks.length > 0 ? 'FUNDING_TX_ROLE_ASSET_NOT_PROVEN' : null,
+    failedRequiredTargetAssetEvidence ? 'FUNDING_TX_REQUIRED_TARGET_ASSET_NOT_PROVEN' : null,
   ].filter(Boolean)
   const blockerCodes = [
     ...txBlockers,
@@ -324,7 +362,10 @@ export function buildFundingProofReport({
   ]
 
   return {
-    status: failedTxChecks.length > 0 || failedTargetChecks.length > 0 || failedRoleAssetChecks.length > 0 ? 'failed' : readyForStrictExecution ? 'ready' : 'blocked',
+    status: failedTxChecks.length > 0 ||
+      failedTargetChecks.length > 0 ||
+      failedRoleAssetChecks.length > 0 ||
+      failedRequiredTargetAssetEvidence ? 'failed' : readyForStrictExecution ? 'ready' : 'blocked',
     purpose: 'rescuegrid_external_funding_proof',
     generated_at: generatedAt,
     chain: handoff.chain,
@@ -342,9 +383,12 @@ export function buildFundingProofReport({
       tx_evidence_passed: txEvidencePassed,
       target_evidence_passed: targetEvidencePassed,
       role_asset_evidence_passed: roleAssetEvidencePassed,
+      required_target_asset_evidence_passed: requiredTargetAssetEvidencePassed,
       failed_tx_digests: failedTxChecks.map((row) => row.digest).filter(Boolean),
       failed_target_digests: failedTargetChecks.map((row) => row.digest).filter(Boolean),
       failed_role_asset_digests: failedRoleAssetChecks.map((row) => row.digest).filter(Boolean),
+      required_target_assets: requiredTargetAssetEvidenceResult.required_assets,
+      missing_required_target_assets: requiredTargetAssetEvidenceResult.missing_required_assets,
       role_asset_requirements: txChecks.map((row) => ({
         role: row.role || 'provider_funding_tx',
         digest: row.digest || null,
@@ -436,9 +480,10 @@ Usage:
 This is read-only. It fetches provider-supplied Sui transaction digests and the
 current execution readiness gate. A successful digest alone is not enough:
 funding_proven only becomes true when the digest also anchors to the target
-BalanceManager or agent gas address and the live BalanceManager / agent gas
-reads satisfy the DBUSDC, DEEP and SUI gas thresholds. No private key,
-AGENT_KEY, permission token or WaaP session value is accepted or printed.`)
+BalanceManager or agent gas address, proves the required DBUSDC/DEEP
+BalanceManager asset hits, and the live BalanceManager / agent gas reads
+satisfy the DBUSDC, DEEP and SUI gas thresholds. No private key, AGENT_KEY,
+permission token or WaaP session value is accepted or printed.`)
 }
 
 export async function main(argv = process.argv.slice(2), env = process.env) {
