@@ -49,6 +49,38 @@ function eventType(value) {
   return String(value).split('::').pop()
 }
 
+function activityEventType(row = {}) {
+  return eventType(row.type || row.chain_event || row.event_type)
+}
+
+function activityTxDigest(row = {}) {
+  return row.tx || row.tx_digest || row.digest || null
+}
+
+function collectActivityRows(activity = {}) {
+  const source = activity || {}
+  return [
+    ...(Array.isArray(source.events) ? source.events : []),
+    ...(Array.isArray(source.chain_activity) ? source.chain_activity : []),
+    ...(Array.isArray(source.activity) ? source.activity : []),
+  ]
+}
+
+export function chainEventTypesFromActivity(activity = {}) {
+  return [...new Set(collectActivityRows(activity).map(activityEventType).filter(Boolean))]
+}
+
+export function activityHasChainEvent(activity = {}, type) {
+  return chainEventTypesFromActivity(activity).includes(type)
+}
+
+export function findActivityChainEvent(activity = {}, type, expectedDigest = null) {
+  return collectActivityRows(activity).find((row) => (
+    activityEventType(row) === type &&
+    (!expectedDigest || activityTxDigest(row) === expectedDigest)
+  )) || null
+}
+
 function normalizeHexAnchor(value) {
   return value == null ? null : String(value).toLowerCase()
 }
@@ -260,7 +292,7 @@ export function buildDemoExecutionReport({
       execution_claimed: postRevokeTick?.execution_claimed === true,
       final_policy_status: finalActivity?.policy?.status || null,
       final_runtime_state: finalActivity?.policy?.runtime_state || null,
-      chain_event_types: (finalActivity?.events || []).map((event) => event.type),
+      chain_event_types: chainEventTypesFromActivity(finalActivity),
     },
   }
 }

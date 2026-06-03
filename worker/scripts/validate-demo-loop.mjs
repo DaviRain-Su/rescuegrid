@@ -15,8 +15,10 @@ import { getClient, readPolicyCreated, DEPLOYMENT } from '../src/sui-tx.js'
 import { readMandate, readWrapper } from '../src/chain.js'
 import { loadAgentKeypairFromDevVars, readWorkerDevVar } from './agent-key-loader.mjs'
 import {
+  activityHasChainEvent,
   assertStrictDemoExecutionReport,
   buildDemoExecutionReport,
+  chainEventTypesFromActivity,
   writeDemoExecutionReportArtifact,
 } from './demo-execution-report.mjs'
 
@@ -373,7 +375,7 @@ assert(postRevokeTick.execution_claimed === false, 'Post-revoke tick claimed exe
 
 const finalActivity = await waitFor('revoked policy activity', async () => {
   const detail = await getJson(`/api/policies/${wrapperId}/activity`)
-  return detail.policy?.revoked === true && detail.events?.some((e) => e.type === 'PolicyRevoked') ? detail : null
+  return detail.policy?.revoked === true && activityHasChainEvent(detail, 'PolicyRevoked') ? detail : null
 })
 
 console.log(JSON.stringify({
@@ -383,7 +385,7 @@ console.log(JSON.stringify({
   execution_claimed: postRevokeTick.execution_claimed,
   final_policy_status: finalActivity.policy.status,
   final_runtime_state: finalActivity.policy.runtime_state,
-  chain_event_types: finalActivity.events.map((e) => e.type),
+  chain_event_types: chainEventTypesFromActivity(finalActivity),
 }, null, 2))
 
 const passReport = buildDemoExecutionReport({

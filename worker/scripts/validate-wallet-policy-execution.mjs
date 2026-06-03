@@ -11,8 +11,10 @@ import { getClient, DEPLOYMENT } from '../src/sui-tx.js'
 import { queryPolicyEvents, readMandate, readWrapper } from '../src/chain.js'
 import { readWorkerDevVar } from './agent-key-loader.mjs'
 import {
+  activityHasChainEvent,
   assertStrictDemoExecutionReport,
   buildDemoExecutionReport,
+  findActivityChainEvent,
   writeDemoExecutionReportArtifact,
 } from './demo-execution-report.mjs'
 
@@ -359,10 +361,10 @@ async function main(argv = process.argv.slice(2), env = process.env) {
       readMandate(client, wrapper.mandate_id),
       getJson(workerUrl, `/api/policies/${wrapper.wrapper_id}/activity`),
     ])
-    const revokeEvent = (detail.events || []).find((event) => (
-      event.type === 'PolicyRevoked' && (!expectedRevokeDigest || event.tx === expectedRevokeDigest)
-    ))
-    if (latestMandate?.revoked === true && revokeEvent) return { mandate: latestMandate, detail, revokeDigest: revokeEvent.tx }
+    const revokeEvent = findActivityChainEvent(detail, 'PolicyRevoked', expectedRevokeDigest)
+    if (latestMandate?.revoked === true && revokeEvent) {
+      return { mandate: latestMandate, detail, revokeDigest: revokeEvent.tx || revokeEvent.tx_digest || revokeEvent.digest }
+    }
     return null
   }, { timeoutMs: revokeTimeoutMs, delayMs: revokePollMs })
 
@@ -380,7 +382,7 @@ async function main(argv = process.argv.slice(2), env = process.env) {
 
   const finalActivity = await waitFor('revoked policy activity', async () => {
     const detail = await getJson(workerUrl, `/api/policies/${wrapper.wrapper_id}/activity`)
-    return detail.policy?.revoked === true && detail.events?.some((event) => event.type === 'PolicyRevoked') ? detail : null
+    return detail.policy?.revoked === true && activityHasChainEvent(detail, 'PolicyRevoked') ? detail : null
   }, { timeoutMs: 60_000, delayMs: 1_500 })
 
   const passReport = buildDemoExecutionReport({

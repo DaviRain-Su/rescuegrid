@@ -3,8 +3,11 @@ import { mkdtempSync, readFileSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import {
+  activityHasChainEvent,
   assertStrictDemoExecutionReport,
   buildDemoExecutionReport,
+  chainEventTypesFromActivity,
+  findActivityChainEvent,
   strictDemoExecutionMissingEvidence,
   writeDemoExecutionReportArtifact,
 } from '../scripts/demo-execution-report.mjs'
@@ -34,7 +37,15 @@ const agentTradeEvent = {
   executed_at_ms: 1760000000000,
 }
 
-function strictReport({ tick = {}, wrapperId = '0xwrapper', mandateId = '0xmandate' } = {}) {
+function strictReport({
+  tick = {},
+  wrapperId = '0xwrapper',
+  mandateId = '0xmandate',
+  finalActivity = {
+    policy: { status: 'revoked', runtime_state: 'Revoked' },
+    events: [{ type: 'PolicyCreated' }, { type: 'AgentTradeExecuted' }, { type: 'PolicyRevoked' }],
+  },
+} = {}) {
   return buildDemoExecutionReport({
     generatedAt: '2026-06-03T00:00:00.000Z',
     workerUrl: 'http://localhost:8787',
@@ -61,10 +72,7 @@ function strictReport({ tick = {}, wrapperId = '0xwrapper', mandateId = '0xmanda
     beforeTickWrapper: { spent_amount: '0' },
     afterTickWrapper: { spent_amount: '1000' },
     postRevokeTick: { action: 'stopped_revoked', code: 'POLICY_REVOKED', execution_claimed: false },
-    finalActivity: {
-      policy: { status: 'revoked', runtime_state: 'Revoked' },
-      events: [{ type: 'PolicyCreated' }, { type: 'AgentTradeExecuted' }, { type: 'PolicyRevoked' }],
-    },
+    finalActivity,
     strictPreflight: {
       signer: { kind: 'worker-secret', available: true },
       funding: { execution_ready: true },
@@ -93,6 +101,24 @@ assert.equal(executed.post_revoke.execution_claimed, false)
 assert.equal(executed.post_revoke.chain_event_types.includes('AgentTradeExecuted'), true)
 assert.deepEqual(strictDemoExecutionMissingEvidence(executed), [])
 assert.equal(assertStrictDemoExecutionReport(executed), executed)
+
+const activityWithoutRawEvents = {
+  policy: { status: 'revoked', runtime_state: 'Revoked' },
+  chain_activity: [
+    { chain_event: 'PolicyCreated', tx_digest: 'createDigest' },
+    { chain_event: 'AgentTradeExecuted', tx_digest: 'tickDigest' },
+  ],
+  activity: [
+    { chain_event: 'PolicyRevoked', tx: 'revokeDigest' },
+    { chain_event: 'PolicyRevoked', tx: 'revokeDigest' },
+  ],
+}
+assert.deepEqual(chainEventTypesFromActivity(activityWithoutRawEvents), ['PolicyCreated', 'AgentTradeExecuted', 'PolicyRevoked'])
+assert.equal(activityHasChainEvent(activityWithoutRawEvents, 'PolicyRevoked'), true)
+assert.equal(findActivityChainEvent(activityWithoutRawEvents, 'PolicyRevoked', 'revokeDigest').tx, 'revokeDigest')
+assert.equal(findActivityChainEvent(activityWithoutRawEvents, 'PolicyRevoked', 'otherDigest'), null)
+const executedFromFeedOnlyActivity = strictReport({ finalActivity: activityWithoutRawEvents })
+assert.deepEqual(executedFromFeedOnlyActivity.post_revoke.chain_event_types, ['PolicyCreated', 'AgentTradeExecuted', 'PolicyRevoked'])
 
 const missingStructuredEvent = strictReport({
   tick: {
