@@ -601,6 +601,22 @@ assert.equal(
   'failed',
 )
 
+const nonStrictExecutionReportFile = join(strategyFileDir, 'demo-execute-report-non-strict.json')
+writeFileSync(
+  nonStrictExecutionReportFile,
+  `${JSON.stringify({ ...strictExecutionReport, require_execution: false }, null, 2)}\n`,
+  'utf8',
+)
+const nonStrictApplyReport = applyStrictExecutionReportToWalletEvidenceArtifact({
+  artifactText: appliedStrategyMarkdown.artifact_text,
+  reportFilePath: nonStrictExecutionReportFile,
+})
+assert.equal(nonStrictApplyReport.status, 'error')
+assert.equal(nonStrictApplyReport.code, 'STRICT_EXECUTION_REPORT_INVALID')
+const nonStrictStructuredEvidence = nonStrictApplyReport.checks.find((check) => check.id === 'strict-execution:structured-evidence')
+assert.equal(nonStrictStructuredEvidence.status, 'failed')
+assert.equal(nonStrictStructuredEvidence.actual.includes('require_execution'), true)
+
 const secretStrictReportFile = join(strategyFileDir, 'demo-execute-report-secret.json')
 writeFileSync(
   secretStrictReportFile,

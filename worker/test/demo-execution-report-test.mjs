@@ -186,6 +186,19 @@ assert.equal(missingAgentPoolEvidence.includes('pool_id'), true)
 assert.equal(missingAgentPoolEvidence.includes('agent_trade_event_agent'), true)
 assert.equal(missingAgentPoolEvidence.includes('agent_trade_event_pool'), true)
 
+const missingReportAnchors = strictReport()
+delete missingReportAnchors.owner_address
+delete missingReportAnchors.wrapper_id
+delete missingReportAnchors.mandate_id
+delete missingReportAnchors.strategy_hash
+missingReportAnchors.require_execution = false
+const missingReportAnchorEvidence = strictDemoExecutionMissingEvidence(missingReportAnchors)
+assert.equal(missingReportAnchorEvidence.includes('owner_address'), true)
+assert.equal(missingReportAnchorEvidence.includes('wrapper_id'), true)
+assert.equal(missingReportAnchorEvidence.includes('mandate_id'), true)
+assert.equal(missingReportAnchorEvidence.includes('strategy_hash'), true)
+assert.equal(missingReportAnchorEvidence.includes('require_execution'), true)
+
 const gated = buildDemoExecutionReport({
   tickOutcome: 'gated',
   tick: {

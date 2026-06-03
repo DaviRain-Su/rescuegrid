@@ -174,11 +174,18 @@ export function strictDemoExecutionMissingEvidence(report = {}) {
   const assertions = Array.isArray(report.assertions) ? report.assertions : []
   const txDigest = report.tick_tx_digest || report.tx_digest || null
   const event = report.agent_trade_event
+  if (report.purpose !== 'rescuegrid_demo_execution_report') missing.push('purpose')
+  if (report.chain !== 'sui:testnet') missing.push('chain')
+  if (report.require_execution !== true) missing.push('require_execution')
   if (report.phase !== 'pass') missing.push('phase')
   if (!assertions.includes('G2-EXECUTE')) missing.push('assertions_G2_EXECUTE')
   if (report.tick_outcome !== 'executed' && report.action !== 'executed') missing.push('tick_outcome')
+  if (!report.owner_address) missing.push('owner_address')
   if (!report.delegated_agent_address) missing.push('delegated_agent_address')
   if (!report.pool_id) missing.push('pool_id')
+  if (!report.wrapper_id) missing.push('wrapper_id')
+  if (!report.mandate_id) missing.push('mandate_id')
+  if (!report.strategy_hash) missing.push('strategy_hash')
   if (report.execution_claimed !== true) missing.push('execution_claimed')
   if (!txDigest) missing.push('tick_tx_digest')
   if (report.agent_trade_event_found !== true) missing.push('agent_trade_event_found')
