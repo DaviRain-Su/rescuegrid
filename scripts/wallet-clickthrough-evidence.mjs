@@ -422,6 +422,11 @@ export function buildWalletEvidence({
         record: ['runtime_state_after_activate', 'policy_active_screenshot', 'activity_row_screenshot'],
       },
       {
+        id: 'strict_execution_window',
+        action: 'Keep this same policy active for the strict execution validator before revoking it; final mission readiness requires the strict AgentTradeExecuted report and this wallet artifact to describe the same wrapper lifecycle.',
+        record: ['wrapper_id', 'mandate_id', 'strategy_hash', 'create_tx_digest'],
+      },
+      {
         id: 'revoke_policy',
         action: 'Revoke the same policy from the UI and approve the wallet transaction.',
         record: ['revoke_tx_digest', 'mandate_id', 'wallet_revoke_prompt_screenshot'],
@@ -454,6 +459,7 @@ export function buildWalletEvidence({
       'Create flow uses Worker-built tx_json and the browser wallet returns a create tx digest.',
       'PolicyCreated event yields a wrapper_id and mandate_id that match the UI/API row.',
       'Activation reaches Monitoring after the create transaction finalizes.',
+      'Before revocation, the same active wrapper is available for the strict execution validator; the wallet artifact itself still does not claim DeepBook execution.',
       'Revoke flow uses Worker-built tx_json and the browser wallet returns a revoke tx digest.',
       'Post-revoke reads show chain-authoritative revoked status for the same wrapper and mandate.',
       'No seed phrase, signing secret, Worker secret, tick token, WaaP session value or approval token is captured in screenshots or artifacts.',
@@ -466,6 +472,7 @@ export function buildWalletEvidence({
       session_boundary_test: 'npm run test:session-mode',
       live_smoke_after_clickthrough: 'RESCUEGRID_FRONTEND_URL=http://localhost:5175 RESCUEGRID_WORKER_URL=http://localhost:8787 npm run baseline:smoke',
       preflight: 'npm run wallet:evidence:preflight',
+      strict_execution_report: 'npm run demo:execute:report',
       final_verify: 'npm run wallet:evidence:verify -- --input .rescuegrid/wallet-clickthrough-evidence.md --require-worker',
     },
   }
@@ -584,6 +591,7 @@ function markdown(evidence) {
     `- ${evidence.next_commands.auth_wallet_test}`,
     `- ${evidence.next_commands.session_boundary_test}`,
     `- ${evidence.next_commands.preflight}`,
+    `- ${evidence.next_commands.strict_execution_report}`,
     `- ${evidence.next_commands.final_verify}`,
     `- ${evidence.next_commands.live_smoke_after_clickthrough}`,
     '',
