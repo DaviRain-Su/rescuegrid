@@ -212,6 +212,7 @@ function strictExecutionReport(overrides = {}) {
   writeFileSync(artifactPath, '- owner_address: 0xowner\n', 'utf8')
   const originalLog = console.log
   let output = ''
+  let walletVerifierRequiredWorker = false
   console.log = (value) => {
     output += `${value}\n`
   }
@@ -224,7 +225,8 @@ function strictExecutionReport(overrides = {}) {
       '.rescuegrid/mission-readiness-test-missing-execution.json',
     ], {}, {
       fundingReadiness: null,
-      verifyWallet: async () => {
+      verifyWallet: async ({ requireWorker }) => {
+        walletVerifierRequiredWorker = requireWorker === true
         throw new Error('synthetic wallet verifier failure')
       },
     })
@@ -234,6 +236,7 @@ function strictExecutionReport(overrides = {}) {
     rmSync(tempDir, { recursive: true, force: true })
   }
   const report = JSON.parse(output)
+  assert.equal(walletVerifierRequiredWorker, true)
   assert.equal(report.status, 'failed')
   assert.equal(report.blocker_codes.includes('WALLET_EVIDENCE_MISMATCH'), true)
 }

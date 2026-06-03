@@ -732,12 +732,32 @@ function buildMissingChecks(fields, requiredFields) {
   }))
 }
 
-async function verifyWorkerDetail({ workerUrl, wrapperId, revokeDigest, fetchImpl, timeoutMs, requireWorker }) {
+function activityTxDigest(row = {}) {
+  return row.tx || row.tx_digest || row.digest || null
+}
+
+function activityEventName(row = {}) {
+  return row.chain_event || row.type || row.event_type || row.title || row.kind || null
+}
+
+function activityIncludesDigest(activity = [], digest, eventName = null) {
+  return activity.some((row) => {
+    const digestMatches = activityTxDigest(row) === digest
+    if (!digestMatches) return false
+    if (!eventName) return true
+    return String(activityEventName(row) || '').includes(eventName)
+  })
+}
+
+async function verifyWorkerDetail({ workerUrl, wrapperId, createDigest, revokeDigest, fetchImpl, timeoutMs, requireWorker }) {
   if (!workerUrl) {
     return [createCheck({
       id: 'worker:detail',
       label: 'Worker detail check',
-      skipped: true,
+      passed: false,
+      skipped: !requireWorker,
+      expected: requireWorker ? 'worker URL configured' : 'optional',
+      actual: null,
       detail: 'worker URL not configured',
     })]
   }
@@ -766,6 +786,16 @@ async function verifyWorkerDetail({ workerUrl, wrapperId, revokeDigest, fetchImp
     }),
     checkEqual('worker:wrapper', 'Worker detail wrapper id matches artifact', policy.wrapper_id, wrapperId),
     createCheck({
+      id: 'worker:create-activity',
+      label: 'Worker activity includes the create tx digest',
+      passed: activityIncludesDigest(activity, createDigest, 'PolicyCreated') || activityIncludesDigest(activity, createDigest),
+      expected: createDigest,
+      actual: activity.map((row) => ({
+        tx: activityTxDigest(row),
+        event: activityEventName(row),
+      })).filter((row) => row.tx).slice(0, 10),
+    }),
+    createCheck({
       id: 'worker:revoked',
       label: 'Worker detail shows revoked chain state after revoke',
       passed: policy.revoked === true || policy.runtime_state === 'Revoked' || policy.status === 'revoked',
@@ -775,9 +805,12 @@ async function verifyWorkerDetail({ workerUrl, wrapperId, revokeDigest, fetchImp
     createCheck({
       id: 'worker:revoke-activity',
       label: 'Worker activity includes the revoke tx digest',
-      passed: activity.some((row) => row.tx === revokeDigest || row.tx_digest === revokeDigest),
+      passed: activityIncludesDigest(activity, revokeDigest, 'PolicyRevoked') || activityIncludesDigest(activity, revokeDigest),
       expected: revokeDigest,
-      actual: activity.map((row) => row.tx || row.tx_digest).filter(Boolean).slice(0, 10),
+      actual: activity.map((row) => ({
+        tx: activityTxDigest(row),
+        event: activityEventName(row),
+      })).filter((row) => row.tx).slice(0, 10),
     }),
   ]
 }
@@ -871,6 +904,7 @@ export async function verifyWalletEvidenceArtifact({
   report.checks.push(...await verifyWorkerDetail({
     workerUrl: expectedWorkerUrl,
     wrapperId: fields.wrapper_id,
+    createDigest: fields.create_tx_digest,
     revokeDigest: fields.revoke_tx_digest,
     fetchImpl,
     timeoutMs,

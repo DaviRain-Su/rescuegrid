@@ -361,7 +361,7 @@ function nextActions({ safetyCheck, walletCheck, fundingCheck, strictExecutionCh
 async function loadWalletReport({ artifactPath, verifyWallet = verifyWalletEvidenceArtifact }) {
   if (!existsSync(artifactPath)) return null
   const artifactText = readFileSync(artifactPath, 'utf8')
-  return verifyWallet({ artifactText })
+  return verifyWallet({ artifactText, requireWorker: true })
 }
 
 async function loadFundingReadiness({ env = process.env, skipLiveFunding = false } = {}) {

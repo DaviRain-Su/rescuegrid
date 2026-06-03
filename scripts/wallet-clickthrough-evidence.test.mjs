@@ -363,7 +363,10 @@ const fakeWorkerFetch = async (url) => {
           revoked: true,
           runtime_state: 'Revoked',
         },
-        activity: [{ type: 'PolicyRevoked', tx: 'revoke-digest' }],
+        activity: [
+          { chain_event: 'PolicyCreated', tx: 'create-digest' },
+          { chain_event: 'PolicyRevoked', tx: 'revoke-digest' },
+        ],
       })
     },
   }
@@ -377,7 +380,31 @@ assert.equal(verifiedReport.status, 'ok')
 assert.equal(verifiedReport.verified, true)
 assert.equal(verifiedReport.execution_claimed, false)
 assert.equal(verifiedReport.checks.every((check) => check.status === 'passed'), true)
+assert.equal(verifiedReport.checks.some((check) => check.id === 'worker:create-activity'), true)
 assert.equal(chainReads, 2)
+
+const missingCreateActivityReport = await verifyWalletEvidenceArtifact({
+  artifactText: filledArtifact,
+  suiClient: fakeSuiClient,
+  fetchImpl: async () => ({
+    ok: true,
+    status: 200,
+    async text() {
+      return JSON.stringify({
+        status: 'ok',
+        policy: {
+          wrapper_id: '0x2222222222222222222222222222222222222222222222222222222222222222',
+          revoked: true,
+          runtime_state: 'Revoked',
+        },
+        activity: [{ chain_event: 'PolicyRevoked', tx: 'revoke-digest' }],
+      })
+    },
+  }),
+})
+assert.equal(missingCreateActivityReport.verified, false)
+assert.equal(missingCreateActivityReport.code, 'EVIDENCE_VERIFICATION_FAILED')
+assert.equal(missingCreateActivityReport.checks.find((check) => check.id === 'worker:create-activity').status, 'failed')
 
 const optionalWorkerReport = await verifyWalletEvidenceArtifact({
   artifactText: filledArtifact.replace('http://worker.test', 'http://worker-offline.test'),
@@ -386,6 +413,16 @@ const optionalWorkerReport = await verifyWalletEvidenceArtifact({
 })
 assert.equal(optionalWorkerReport.verified, true)
 assert.equal(optionalWorkerReport.checks.some((check) => check.id === 'worker:detail' && check.status === 'skipped'), true)
+
+const requireWorkerWithoutUrlReport = await verifyWalletEvidenceArtifact({
+  artifactText: filledArtifact.replace('Worker: http://worker.test\n', ''),
+  suiClient: fakeSuiClient,
+  fetchImpl: async () => { throw new Error('should not fetch without URL') },
+  requireWorker: true,
+})
+assert.equal(requireWorkerWithoutUrlReport.verified, false)
+assert.equal(requireWorkerWithoutUrlReport.code, 'EVIDENCE_VERIFICATION_FAILED')
+assert.equal(requireWorkerWithoutUrlReport.checks.find((check) => check.id === 'worker:detail').status, 'failed')
 
 const incompleteReport = await verifyWalletEvidenceArtifact({
   artifactText: markdown,
