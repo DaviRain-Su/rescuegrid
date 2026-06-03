@@ -53,6 +53,8 @@ function readiness({ executionReady = false } = {}) {
         available: false,
         execution_enabled: false,
         runner_configured: false,
+        permission_token: 'super-secret',
+        session_file: '/tmp/super-secret-session',
       },
     ],
     external_signer: {
@@ -63,6 +65,9 @@ function readiness({ executionReady = false } = {}) {
       submission_runner_configured: false,
       permission_token_configured: false,
       secrets_returned: false,
+      permission_token: 'super-secret',
+      session_value: 'super-secret-session',
+      raw_runner_output: 'super-secret-output',
     },
     execution_ready: executionReady,
     funding_ready: executionReady,
@@ -138,6 +143,9 @@ function readiness({ executionReady = false } = {}) {
   assert.equal(report.external_signer.kind, 'waap')
   assert.equal(report.external_signer.secrets_returned, false)
   assert.equal(JSON.stringify(report).includes('super-secret'), false)
+  assert.equal(JSON.stringify(report).includes('"permission_token":'), false)
+  assert.equal(JSON.stringify(report).includes('"session_value":'), false)
+  assert.equal(JSON.stringify(report).includes('"raw_runner_output":'), false)
 }
 
 {
@@ -157,6 +165,8 @@ function readiness({ executionReady = false } = {}) {
     assert.equal(written.purpose, 'deepbook_execution_funding_watch')
     assert.equal(written.execution_ready, false)
     assert.equal(written.policy_creation_allowed, false)
+    assert.equal(JSON.stringify(written).includes('super-secret'), false)
+    assert.equal(JSON.stringify(written).includes('"permission_token":'), false)
   } finally {
     rmSync(tempDir, { recursive: true, force: true })
   }

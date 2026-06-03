@@ -86,6 +86,62 @@ function missingAmount(required, observed) {
   return requiredBig > observedBig ? (requiredBig - observedBig).toString() : '0'
 }
 
+function pickPublicFields(row = {}, fields = []) {
+  const out = {}
+  for (const field of fields) {
+    if (row[field] !== undefined) out[field] = row[field]
+  }
+  return out
+}
+
+function publicSignerCapabilities(rows = []) {
+  if (!Array.isArray(rows)) return []
+  return rows.map((row) => pickPublicFields(row, [
+    'kind',
+    'selected',
+    'runtime_scope',
+    'custody_model',
+    'address',
+    'expected_address',
+    'signer_matches_expected',
+    'available',
+    'execution_enabled',
+    'unavailable_code',
+    'unavailable_detail',
+    'runner_configured',
+    'cloud_worker_supported',
+    'local_daemon_supported',
+    'external_approval_required',
+    'production_mainnet_allowed',
+  ]))
+}
+
+function publicExternalSigner(posture = null) {
+  if (!posture) return null
+  return pickPublicFields(posture, [
+    'kind',
+    'selected',
+    'status',
+    'available',
+    'local_daemon_only',
+    'cloud_worker_supported',
+    'local_daemon_supported',
+    'daemon_mode',
+    'waap_cli_enabled',
+    'submission_runner_configured',
+    'waap_chain',
+    'waap_rpc_configured',
+    'permission_token_configured',
+    'address',
+    'expected_address',
+    'signer_matches_expected',
+    'unavailable_code',
+    'unavailable_detail',
+    'approval_state',
+    'secrets_returned',
+  ])
+}
+
 function criterionByAsset(readiness, asset) {
   return (readiness?.funding?.criteria || []).find((row) => row.asset === asset) || {}
 }
@@ -153,8 +209,8 @@ export function buildFundingHandoff(readiness, { generatedAt = new Date().toISOS
       unavailable_detail: readiness.signer?.unavailable_detail || null,
       known_signer_kinds: readiness.signer?.known_signer_kinds || [],
     },
-    signer_capabilities: readiness.signer_capabilities || [],
-    external_signer: readiness.external_signer || null,
+    signer_capabilities: publicSignerCapabilities(readiness.signer_capabilities),
+    external_signer: publicExternalSigner(readiness.external_signer),
     deepbook: {
       market_id: readiness.scope?.market_id || 'SUI_DBUSDC',
       pool_id: readiness.scope?.pool_id || DEPLOYMENT.deepbook.pools.SUI_DBUSDC.pool_id,

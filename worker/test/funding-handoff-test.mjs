@@ -53,6 +53,8 @@ const readiness = {
       execution_enabled: false,
       runner_configured: false,
       unavailable_code: 'UNSUPPORTED_SIGNER',
+      permission_token: 'super-secret',
+      session_file: '/tmp/super-secret-session',
     },
   ],
   external_signer: {
@@ -63,6 +65,9 @@ const readiness = {
     submission_runner_configured: false,
     permission_token_configured: false,
     secrets_returned: false,
+    permission_token: 'super-secret',
+    session_value: 'super-secret-session',
+    raw_runner_output: 'super-secret-output',
   },
   execution_ready: false,
   funding_ready: false,
@@ -122,6 +127,9 @@ assert.equal(handoff.signer_capabilities.some((row) => row.kind === 'waap' && ro
 assert.equal(handoff.external_signer.kind, 'waap')
 assert.equal(handoff.external_signer.secrets_returned, false)
 assert.equal(JSON.stringify(handoff).includes('super-secret'), false)
+assert.equal(JSON.stringify(handoff).includes('"permission_token":'), false)
+assert.equal(JSON.stringify(handoff).includes('"session_value":'), false)
+assert.equal(JSON.stringify(handoff).includes('"raw_runner_output":'), false)
 
 const markdown = serializeFundingHandoff(handoff, 'markdown')
 assert.match(markdown, /RescueGrid Funding Request/)
