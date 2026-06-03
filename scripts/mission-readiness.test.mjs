@@ -192,6 +192,7 @@ function strictExecutionReport(overrides = {}) {
     agent_trade_event_found: true,
     spend_increased: true,
     tick_tx_digest: 'tickDigest',
+    owner_address: '0xowner',
     wrapper_id: '0xwrapper',
     mandate_id: '0xmandate',
     strategy_hash: '0xstrategy',
@@ -222,7 +223,10 @@ function strictExecutionReport(overrides = {}) {
   assert.deepEqual(report.blocker_codes, [])
   assert.equal(report.checks.every((row) => row.status === 'passed'), true)
   const fundingCheck = report.checks.find((row) => row.id === 'execution_funding_readiness')
+  const continuityCheck = report.checks.find((row) => row.id === 'mission_same_policy_continuity')
   assert.equal(fundingCheck.evidence.external_signer.permission_token_configured, false)
+  assert.equal(continuityCheck.status, 'passed')
+  assert.equal(continuityCheck.evidence.wrapper_id, '0xwrapper')
   assertNoSecretSignerPosture(report)
 }
 
@@ -272,11 +276,37 @@ function strictExecutionReport(overrides = {}) {
   assert.equal(report.blocker_codes.includes('INSUFFICIENT_DBUSDC'), true)
   assert.equal(report.blocker_codes.includes('STRICT_EXECUTION_BLOCKED_BY_FUNDING'), true)
   const fundingCheck = report.checks.find((row) => row.id === 'execution_funding_readiness')
+  const continuityCheck = report.checks.find((row) => row.id === 'mission_same_policy_continuity')
   assert.equal(fundingCheck.evidence.signer_unavailable_code, 'EXECUTION_DISABLED')
   assert.equal(fundingCheck.evidence.signer_capabilities.some((row) => row.kind === 'waap'), true)
   assert.equal(fundingCheck.evidence.external_signer.kind, 'waap')
   assert.equal(fundingCheck.evidence.external_signer.permission_token_configured, true)
+  assert.equal(continuityCheck.status, 'blocked')
+  assert.equal(report.blocker_codes.includes('MISSION_CONTINUITY_MISMATCH'), false)
   assertNoSecretSignerPosture(report)
+}
+
+{
+  const report = buildMissionReadinessReport({
+    scripts: requiredScripts,
+    safetyReport: safetyNegativeReport(),
+    walletReport: verifiedWalletReport(),
+    fundingReadiness: readyFunding(),
+    executionReport: strictExecutionReport({
+      wrapper_id: '0xotherwrapper',
+      revoke_tx_digest: 'otherRevokeDigest',
+      revoke_tx: { digest: 'otherRevokeDigest', status: 'success' },
+    }),
+  })
+  const continuityCheck = report.checks.find((row) => row.id === 'mission_same_policy_continuity')
+  assert.equal(report.status, 'failed')
+  assert.equal(report.full_prd_ready, false)
+  assert.equal(report.execution_claimed, false)
+  assert.equal(continuityCheck.status, 'failed')
+  assert.equal(report.blocker_codes.includes('MISSION_CONTINUITY_MISMATCH'), true)
+  assert.equal(continuityCheck.evidence.mismatches.some((row) => row.field === 'wrapper_id'), true)
+  assert.equal(continuityCheck.evidence.mismatches.some((row) => row.field === 'revoke_tx_digest'), true)
+  assert.equal(report.next_actions.some((row) => /same owner-created wrapper/.test(row)), true)
 }
 
 {

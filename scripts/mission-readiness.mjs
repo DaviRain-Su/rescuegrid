@@ -154,10 +154,12 @@ export function summarizeWalletReport(report) {
       detail: 'filled artifact verified against Sui PolicyCreated / PolicyRevoked events',
       evidence: {
         actual_clickthrough_completed: report.actual_clickthrough_completed === true,
+        owner_address: report.fields?.owner_address || null,
         create_tx_digest: report.fields?.create_tx_digest || report.create_transaction?.digest || null,
         revoke_tx_digest: report.fields?.revoke_tx_digest || report.revoke_transaction?.digest || null,
         wrapper_id: report.fields?.wrapper_id || null,
         mandate_id: report.fields?.mandate_id || null,
+        strategy_hash: report.fields?.strategy_hash || null,
         manual_evidence_fields: report.required_manual_fields || [],
       },
     })
@@ -336,6 +338,7 @@ function executionReportEvidence(report) {
     chain: report?.chain || null,
     phase: report?.phase || null,
     require_execution: report?.require_execution === true,
+    owner_address: report?.owner_address || null,
     wrapper_id: report?.wrapper_id || null,
     mandate_id: report?.mandate_id || null,
     strategy_hash: report?.strategy_hash || null,
@@ -373,6 +376,7 @@ function strictExecutionMissingEvidence(report, assertions = []) {
   if (evidence.purpose !== 'rescuegrid_demo_execution_report') missing.push('purpose')
   if (evidence.chain !== 'sui:testnet') missing.push('chain')
   if (evidence.require_execution !== true) missing.push('require_execution')
+  if (!evidence.owner_address) missing.push('owner_address')
   if (!evidence.wrapper_id) missing.push('wrapper_id')
   if (!evidence.mandate_id) missing.push('mandate_id')
   if (!evidence.strategy_hash) missing.push('strategy_hash')
@@ -445,6 +449,95 @@ export function summarizeStrictExecutionEvidence(report, fundingCheck) {
   })
 }
 
+function normalizeHexAnchor(value) {
+  return String(value || '').trim().toLowerCase()
+}
+
+function normalizeDigestAnchor(value) {
+  return String(value || '').trim()
+}
+
+function compareMissionAnchor({ field, walletValue, executionValue, hex = true }) {
+  const normalize = hex ? normalizeHexAnchor : normalizeDigestAnchor
+  const wallet = normalize(walletValue)
+  const execution = normalize(executionValue)
+  if (!wallet || !execution || wallet !== execution) {
+    return {
+      field,
+      wallet: walletValue || null,
+      execution: executionValue || null,
+    }
+  }
+  return null
+}
+
+export function summarizeMissionContinuity(walletCheck, strictExecutionCheck) {
+  if (walletCheck?.status !== 'passed' || strictExecutionCheck?.status !== 'passed') {
+    return check({
+      id: 'mission_same_policy_continuity',
+      label: 'Same-policy browser wallet and execution evidence',
+      status: 'blocked',
+      detail: 'same-wrapper continuity cannot be checked until wallet and strict execution evidence both pass',
+      evidence: {
+        wallet_check_status: walletCheck?.status || null,
+        strict_execution_check_status: strictExecutionCheck?.status || null,
+      },
+    })
+  }
+  const wallet = walletCheck.evidence || {}
+  const execution = strictExecutionCheck.evidence || {}
+  const mismatches = [
+    compareMissionAnchor({ field: 'owner_address', walletValue: wallet.owner_address, executionValue: execution.owner_address }),
+    compareMissionAnchor({ field: 'wrapper_id', walletValue: wallet.wrapper_id, executionValue: execution.wrapper_id }),
+    compareMissionAnchor({ field: 'mandate_id', walletValue: wallet.mandate_id, executionValue: execution.mandate_id }),
+    compareMissionAnchor({ field: 'strategy_hash', walletValue: wallet.strategy_hash, executionValue: execution.strategy_hash }),
+    compareMissionAnchor({ field: 'create_tx_digest', walletValue: wallet.create_tx_digest, executionValue: execution.create_tx_digest, hex: false }),
+    compareMissionAnchor({ field: 'revoke_tx_digest', walletValue: wallet.revoke_tx_digest, executionValue: execution.revoke_tx_digest, hex: false }),
+  ].filter(Boolean)
+  if (mismatches.length === 0) {
+    return check({
+      id: 'mission_same_policy_continuity',
+      label: 'Same-policy browser wallet and execution evidence',
+      status: 'passed',
+      detail: 'wallet click-through and strict execution report describe the same owner-created wrapper lifecycle',
+      evidence: {
+        owner_address: wallet.owner_address,
+        wrapper_id: wallet.wrapper_id,
+        mandate_id: wallet.mandate_id,
+        strategy_hash: wallet.strategy_hash,
+        create_tx_digest: wallet.create_tx_digest,
+        revoke_tx_digest: wallet.revoke_tx_digest,
+      },
+    })
+  }
+  return check({
+    id: 'mission_same_policy_continuity',
+    label: 'Same-policy browser wallet and execution evidence',
+    status: 'failed',
+    detail: 'wallet click-through evidence and strict execution report do not describe the same policy lifecycle',
+    blocker_codes: ['MISSION_CONTINUITY_MISMATCH'],
+    evidence: {
+      wallet: {
+        owner_address: wallet.owner_address || null,
+        wrapper_id: wallet.wrapper_id || null,
+        mandate_id: wallet.mandate_id || null,
+        strategy_hash: wallet.strategy_hash || null,
+        create_tx_digest: wallet.create_tx_digest || null,
+        revoke_tx_digest: wallet.revoke_tx_digest || null,
+      },
+      execution: {
+        owner_address: execution.owner_address || null,
+        wrapper_id: execution.wrapper_id || null,
+        mandate_id: execution.mandate_id || null,
+        strategy_hash: execution.strategy_hash || null,
+        create_tx_digest: execution.create_tx_digest || null,
+        revoke_tx_digest: execution.revoke_tx_digest || null,
+      },
+      mismatches,
+    },
+  })
+}
+
 export function buildMissionReadinessReport({
   generatedAt = new Date().toISOString(),
   scripts = packageJson.scripts,
@@ -466,7 +559,8 @@ export function buildMissionReadinessReport({
   const walletCheck = summarizeWalletReport(walletReport)
   const fundingCheck = summarizeFundingReadiness(fundingReadiness)
   const strictExecutionCheck = summarizeStrictExecutionEvidence(executionReport, fundingCheck)
-  const checks = [scriptCheck, safetyCheck, walletCheck, fundingCheck, strictExecutionCheck]
+  const continuityCheck = summarizeMissionContinuity(walletCheck, strictExecutionCheck)
+  const checks = [scriptCheck, safetyCheck, walletCheck, fundingCheck, strictExecutionCheck, continuityCheck]
   const blockers = checks.flatMap((row) => row.status === 'passed' ? [] : row.blocker_codes)
   const fullPrdReady = checks.every((row) => row.status === 'passed')
   const hasFailedCheck = checks.some((row) => row.status === 'failed')
@@ -476,14 +570,14 @@ export function buildMissionReadinessReport({
     generated_at: generatedAt,
     chain: 'sui:testnet',
     full_prd_ready: fullPrdReady,
-    execution_claimed: strictExecutionCheck.status === 'passed',
+    execution_claimed: strictExecutionCheck.status === 'passed' && continuityCheck.status === 'passed',
     blocker_codes: blockers,
     checks,
-    next_actions: fullPrdReady ? [] : nextActions({ safetyCheck, walletCheck, fundingCheck, strictExecutionCheck }),
+    next_actions: fullPrdReady ? [] : nextActions({ safetyCheck, walletCheck, fundingCheck, strictExecutionCheck, continuityCheck }),
   }
 }
 
-function nextActions({ safetyCheck, walletCheck, fundingCheck, strictExecutionCheck }) {
+function nextActions({ safetyCheck, walletCheck, fundingCheck, strictExecutionCheck, continuityCheck }) {
   const actions = []
   if (safetyCheck?.status !== 'passed') {
     actions.push('Run npm run safety:negative:report with a live local Worker to write .rescuegrid/safety-negative-report.json proving all required validate-plan blockers.')
@@ -496,6 +590,9 @@ function nextActions({ safetyCheck, walletCheck, fundingCheck, strictExecutionCh
   }
   if (fundingCheck?.status === 'passed' && strictExecutionCheck?.status !== 'passed') {
     actions.push('Run npm run demo:execute:report to write .rescuegrid/demo-execute-report.json proving create -> execute -> revoke -> post-revoke no-execution with AgentTradeExecuted, execution_claimed=true and spend increase.')
+  }
+  if (continuityCheck?.status === 'failed') {
+    actions.push('Rerun the browser wallet flow and strict demo execution evidence for the same owner-created wrapper so owner, wrapper, mandate, strategy hash and create/revoke tx digests match.')
   }
   return actions
 }
