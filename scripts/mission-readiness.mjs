@@ -9,7 +9,7 @@ import { pathToFileURL } from 'node:url'
 import packageJson from '../package.json' with { type: 'json' }
 import { buildExecutionReadiness } from '../worker/src/execution-readiness.js'
 import { requireChainDataProvider } from '../worker/src/chain-data-provider.js'
-import { fundingHandoffEnv } from '../worker/scripts/funding-handoff.mjs'
+import { executionGate, fundingHandoffEnv } from '../worker/scripts/funding-handoff.mjs'
 import {
   SAFETY_NEGATIVE_REQUIRED_ASSERTIONS,
   SAFETY_NEGATIVE_REQUIRED_CODES,
@@ -297,6 +297,7 @@ export function summarizeFundingReadiness(readiness) {
         signer_execution_enabled: Boolean(readiness.signer?.execution_enabled || readiness.execution?.enabled),
         signer_capabilities: publicSignerCapabilities(readiness.signer_capabilities),
         external_signer: publicExternalSigner(readiness.external_signer),
+        execution_gate: executionGate(readiness),
       },
     })
   }
@@ -317,6 +318,7 @@ export function summarizeFundingReadiness(readiness) {
       signer_unavailable_code: readiness.signer?.unavailable_code || readiness.execution?.blocker_code || null,
       signer_capabilities: publicSignerCapabilities(readiness.signer_capabilities),
       external_signer: publicExternalSigner(readiness.external_signer),
+      execution_gate: executionGate(readiness),
       execution_claimed: readiness.execution_claimed === true,
     },
   })
