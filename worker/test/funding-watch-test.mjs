@@ -148,6 +148,8 @@ function readiness({ executionReady = false } = {}) {
     success_condition: report.next_verification.success_condition,
   })
   assert.equal(report.funding_targets.balance_manager.required_assets[0].missing, '100')
+  assert.match(report.next_verification.funding_proof_command, /funding:proof/)
+  assert.match(report.next_verification.funding_proof_report_command, /funding:proof:report/)
   assert.match(report.next_verification.wallet_strict_execution_report_command, /demo:execute:wallet-report/)
   assert.match(report.next_verification.wallet_strict_execution_report_command, /activation_strategy_file/)
   assert.match(report.next_verification.success_condition, /structured AgentTradeExecuted evidence/)

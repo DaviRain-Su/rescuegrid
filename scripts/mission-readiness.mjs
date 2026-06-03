@@ -37,6 +37,8 @@ const REQUIRED_SCRIPTS = [
   'funding:request',
   'funding:watch',
   'funding:watch:report',
+  'funding:proof',
+  'funding:proof:report',
   'demo:loop',
   'demo:execute',
   'demo:execute:report',
@@ -730,7 +732,7 @@ function nextActions({ safetyCheck, walletCheck, fundingCheck, strictExecutionCh
     actions.push('Run npm run wallet:evidence -- --format markdown --out .rescuegrid/wallet-clickthrough-evidence.md, then npm run wallet:evidence:preflight before the real Slush / standard Sui wallet flow. Create and activate the policy first, download the UI Activation strategy evidence JSON, run npm run wallet:evidence:apply-strategy -- --input .rescuegrid/wallet-clickthrough-evidence.md --strategy-file <strategy_json_path> to fill machine-derived owner/create/wrapper/mandate/hash fields without marking completion, keep the same wrapper active, run npm run demo:execute:wallet-report -- --wrapper-id <wrapper_id> --strategy-file <strategy_json_path> --create-tx-digest <create_tx_digest>, revoke from the browser wallet when the script reaches awaiting_wallet_revoke, then run npm run wallet:evidence:apply-report -- --input .rescuegrid/wallet-clickthrough-evidence.md --execution-report .rescuegrid/demo-execute-report.json to fill machine-derived revoke/report lifecycle fields including strict_execution_report_reference, set Actual click-through completed: true, fill screenshot evidence fields with readable local files or external audit URLs, and run npm run wallet:evidence:verify -- --input .rescuegrid/wallet-clickthrough-evidence.md --require-worker --execution-report .rescuegrid/demo-execute-report.json.')
   }
   if (fundingCheck?.status !== 'passed') {
-    actions.push('Send the DBUSDC/DEEP funding handoff to an external funding provider, then rerun npm run funding:watch -- --json and npm run funding:watch:report.')
+    actions.push('Send the DBUSDC/DEEP funding handoff to an external funding provider, save the provider Sui tx digest with npm run funding:proof -- --tx <provider_funding_tx_digest> --json and npm run funding:proof:report -- --tx <provider_funding_tx_digest>, then rerun npm run funding:watch -- --json and npm run funding:watch:report.')
   }
   if (fundingCheck?.status === 'passed' && strictExecutionCheck?.status !== 'passed') {
     actions.push('Run npm run demo:execute:wallet-report -- --wrapper-id <wallet_wrapper_id> --strategy-file <strategy_json_path> --create-tx-digest <wallet_create_tx_digest> to write .rescuegrid/demo-execute-report.json for the browser-wallet-created wrapper, proving create -> execute -> wallet revoke -> post-revoke no-execution with structured AgentTradeExecuted evidence, execution_claimed=true and spend increase.')

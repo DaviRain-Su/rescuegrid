@@ -25,6 +25,8 @@ const requiredScripts = {
   'funding:request': 'node worker/scripts/funding-handoff.mjs',
   'funding:watch': 'node worker/scripts/funding-watch.mjs',
   'funding:watch:report': 'node worker/scripts/funding-watch.mjs --json --out .rescuegrid/funding-watch-report.json',
+  'funding:proof': 'node worker/scripts/funding-proof.mjs',
+  'funding:proof:report': 'node worker/scripts/funding-proof.mjs --out .rescuegrid/funding-proof-report.json',
   'demo:loop': 'node worker/scripts/validate-demo-loop.mjs',
   'demo:execute': 'node worker/scripts/validate-demo-loop.mjs --require-execution',
   'demo:execute:report': 'node worker/scripts/validate-demo-loop.mjs --require-execution --out .rescuegrid/demo-execute-report.json',
@@ -352,6 +354,8 @@ function strictExecutionReport(overrides = {}) {
   assert.equal(report.next_actions.some((row) => /strict_execution_report_reference/.test(row)), true)
   assert.equal(report.next_actions.some((row) => /wallet:evidence:verify -- --input \.rescuegrid\/wallet-clickthrough-evidence\.md --require-worker/.test(row)), true)
   assert.equal(report.next_actions.some((row) => /--execution-report \.rescuegrid\/demo-execute-report\.json/.test(row)), true)
+  assert.equal(report.next_actions.some((row) => /funding:proof -- --tx <provider_funding_tx_digest> --json/.test(row)), true)
+  assert.equal(report.next_actions.some((row) => /funding:proof:report -- --tx <provider_funding_tx_digest>/.test(row)), true)
   assertNoSecretSignerPosture(report)
 }
 
