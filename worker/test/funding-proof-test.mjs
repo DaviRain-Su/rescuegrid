@@ -173,6 +173,40 @@ function unrelatedTargetTxFixture({ digest = 'unrelatedDigest' } = {}) {
   })
 }
 
+function nonDepositBalanceManagerCallFixture({ digest = 'nonDepositDigest' } = {}) {
+  return txFixture({
+    digest,
+    objectChanges: [{ type: 'mutated', objectId: DEPLOYMENT.agent.balance_manager_id }],
+    transaction: {
+      data: {
+        sender: '0xprovider',
+        transaction: {
+          transactions: [
+            {
+              MoveCall: {
+                package: DEPLOYMENT.deepbook.package_id,
+                module: 'balance_manager',
+                function: 'withdraw',
+                type_arguments: [DBUSDC],
+                arguments: [],
+              },
+            },
+            {
+              MoveCall: {
+                package: DEPLOYMENT.deepbook.package_id,
+                module: 'balance_manager',
+                function: 'withdraw',
+                type_arguments: [DEEP],
+                arguments: [],
+              },
+            },
+          ],
+        },
+      },
+    },
+  })
+}
+
 function singleAssetTargetTxFixture({ digest = 'singleAssetDigest', asset = 'DEEP' } = {}) {
   const coinType = asset === 'DBUSDC' ? DBUSDC : asset === 'DEEP' ? DEEP : SUI
   return txFixture({
@@ -446,6 +480,33 @@ function assertNoSecrets(value) {
   assert.equal(report.funding_proven, false)
   assert.equal(report.ready_for_strict_execution, false)
   assert.equal(report.transactions[0].target_evidence.target_evidence_passed, false)
+}
+
+{
+  const proof = await verifyFundingTransaction({
+    digest: 'nonDepositDigest',
+    client: { async getTransactionBlock({ digest }) { return nonDepositBalanceManagerCallFixture({ digest }) } },
+  })
+  assert.equal(proof.status, 'passed')
+  assert.equal(proof.funding_asset_hits.some((row) => row.asset === 'DBUSDC'), true)
+  assert.equal(proof.funding_asset_hits.some((row) => row.asset === 'DEEP'), true)
+  assert.equal(proof.target_evidence.balance_manager_object_touched, true)
+  assert.equal(proof.target_evidence.target_evidence_passed, false)
+  assert.deepEqual(proof.target_evidence.asset_target_hits, [])
+
+  const report = buildFundingProofReport({
+    readiness: readiness({ executionReady: true }),
+    transactionProofs: [proof],
+    generatedAt: '2026-06-03T00:00:00.000Z',
+  })
+  assert.equal(report.status, 'failed')
+  assert.equal(report.transaction_evidence.tx_evidence_passed, true)
+  assert.equal(report.transaction_evidence.target_evidence_passed, false)
+  assert.equal(report.transaction_evidence.required_target_asset_evidence_passed, false)
+  assert.deepEqual(report.transaction_evidence.missing_required_target_assets, ['DBUSDC', 'DEEP'])
+  assert.equal(report.blocker_codes.includes('FUNDING_TX_TARGET_NOT_PROVEN'), true)
+  assert.equal(report.blocker_codes.includes('FUNDING_TX_REQUIRED_TARGET_ASSET_NOT_PROVEN'), true)
+  assert.equal(report.funding_proven, false)
 }
 
 {

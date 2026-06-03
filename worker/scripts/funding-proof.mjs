@@ -188,6 +188,26 @@ function fundingAssetHits({ balanceChanges = [], moveCalls = [] } = {}) {
   return hits
 }
 
+function isBalanceManagerDepositCall(row = {}) {
+  return normalizeSuiId(row.package) === normalizeSuiId(DEPLOYMENT.deepbook.package_id) &&
+    String(row.module || '').toLowerCase() === 'balance_manager' &&
+    String(row.function || '').toLowerCase() === 'deposit'
+}
+
+function hasBalanceManagerAssetDeposit({ asset, coinType, balanceChanges = [], moveCalls = [], balanceManagerId }) {
+  const positiveBalanceChange = balanceChanges.some((row) => (
+    row.coin_type === coinType &&
+    normalizeSuiId(row.owner) === balanceManagerId &&
+    positiveAmount(row.amount)
+  ))
+  const depositMoveCall = moveCalls.some((row) => (
+    isBalanceManagerDepositCall(row) &&
+    row.type_arguments?.includes(coinType)
+  ))
+  if (asset === 'DBUSDC' || asset === 'DEEP') return positiveBalanceChange || depositMoveCall
+  return false
+}
+
 function fundingTargetEvidence({ balanceChanges = [], moveCalls = [], objectChanges = [] } = {}) {
   const balanceManagerId = normalizeSuiId(DEPLOYMENT.agent.balance_manager_id)
   const agentAddress = normalizeSuiId(DEPLOYMENT.agent.address)
@@ -201,15 +221,20 @@ function fundingTargetEvidence({ balanceChanges = [], moveCalls = [], objectChan
     normalizeSuiId(row.owner) === agentAddress &&
     positiveAmount(row.amount)
   ))
-  const hits = fundingAssetHits({ balanceChanges, moveCalls })
-  const assetHit = (asset) => hits.some((row) => row.asset === asset)
+  const balanceManagerAssetHit = (asset) => hasBalanceManagerAssetDeposit({
+    asset,
+    coinType: FUNDING_ASSETS[asset],
+    balanceChanges,
+    moveCalls,
+    balanceManagerId,
+  })
   const assetTargetHits = [
-    assetHit('DBUSDC') && balanceManagerObjectTouched ? {
+    balanceManagerObjectTouched && balanceManagerAssetHit('DBUSDC') ? {
       asset: 'DBUSDC',
       target_kind: 'deepbook_balance_manager',
       target: DEPLOYMENT.agent.balance_manager_id,
     } : null,
-    assetHit('DEEP') && balanceManagerObjectTouched ? {
+    balanceManagerObjectTouched && balanceManagerAssetHit('DEEP') ? {
       asset: 'DEEP',
       target_kind: 'deepbook_balance_manager',
       target: DEPLOYMENT.agent.balance_manager_id,
