@@ -120,6 +120,27 @@ assert.equal(findActivityChainEvent(activityWithoutRawEvents, 'PolicyRevoked', '
 const executedFromFeedOnlyActivity = strictReport({ finalActivity: activityWithoutRawEvents })
 assert.deepEqual(executedFromFeedOnlyActivity.post_revoke.chain_event_types, ['PolicyCreated', 'AgentTradeExecuted', 'PolicyRevoked'])
 
+const missingPostRevokeReport = strictReport({
+  finalActivity: {
+    policy: { status: 'active', runtime_state: 'Monitoring' },
+    events: [{ type: 'PolicyCreated' }, { type: 'AgentTradeExecuted' }],
+  },
+})
+missingPostRevokeReport.post_revoke.action = 'executed'
+missingPostRevokeReport.post_revoke.code = null
+missingPostRevokeReport.post_revoke.execution_claimed = true
+const missingPostRevokeEvidence = strictDemoExecutionMissingEvidence(missingPostRevokeReport)
+assert.equal(missingPostRevokeEvidence.includes('post_revoke_action'), true)
+assert.equal(missingPostRevokeEvidence.includes('post_revoke_code'), true)
+assert.equal(missingPostRevokeEvidence.includes('post_revoke_execution_unclaimed'), true)
+assert.equal(missingPostRevokeEvidence.includes('post_revoke_policy_revoked'), true)
+assert.equal(missingPostRevokeEvidence.includes('post_revoke_runtime_revoked'), true)
+assert.equal(missingPostRevokeEvidence.includes('chain_event:PolicyRevoked'), true)
+assert.throws(
+  () => assertStrictDemoExecutionReport(missingPostRevokeReport),
+  /STRICT_EXECUTION_EVENT_INCOMPLETE/,
+)
+
 const missingStructuredEvent = strictReport({
   tick: {
     agent_trade_event: {

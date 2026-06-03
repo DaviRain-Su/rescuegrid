@@ -123,6 +123,21 @@ function missingTransactionSequenceEvidence(report = {}, event = null) {
   return missing
 }
 
+function missingPostRevokeEvidence(report = {}) {
+  const missing = []
+  const postRevoke = report.post_revoke || {}
+  const chainEventTypes = Array.isArray(postRevoke.chain_event_types) ? postRevoke.chain_event_types : []
+  if (postRevoke.action !== 'stopped_revoked') missing.push('post_revoke_action')
+  if (postRevoke.code !== 'POLICY_REVOKED') missing.push('post_revoke_code')
+  if (postRevoke.execution_claimed !== false) missing.push('post_revoke_execution_unclaimed')
+  if (postRevoke.final_policy_status !== 'revoked') missing.push('post_revoke_policy_revoked')
+  if (postRevoke.final_runtime_state !== 'Revoked') missing.push('post_revoke_runtime_revoked')
+  for (const eventType of ['PolicyCreated', 'AgentTradeExecuted', 'PolicyRevoked']) {
+    if (!chainEventTypes.includes(eventType)) missing.push(`chain_event:${eventType}`)
+  }
+  return missing
+}
+
 function agentTradeEventReportEvidence(event) {
   if (!event || typeof event !== 'object' || Array.isArray(event)) return null
   return {
@@ -168,6 +183,7 @@ export function strictDemoExecutionMissingEvidence(report = {}) {
   if (!txDigest) missing.push('tick_tx_digest')
   if (report.agent_trade_event_found !== true) missing.push('agent_trade_event_found')
   if (report.spend_increased !== true) missing.push('spend_increased')
+  missing.push(...missingPostRevokeEvidence(report))
   if (!event) return [...missing, 'agent_trade_event']
   if (event.type !== 'AgentTradeExecuted') missing.push('agent_trade_event_type')
   if (
