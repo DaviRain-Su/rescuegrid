@@ -31,12 +31,12 @@ const REQUIRED_WALLET_MANUAL_FIELDS = [
   'post_revoke_activity_screenshot',
 ]
 const SECRET_LEAK_PATTERNS = [
-  { id: 'agent-key', pattern: /\bAGENT_KEY\s*=\s*\S+/i },
-  { id: 'owner-key', pattern: /\bOWNER_KEY\s*=\s*\S+/i },
-  { id: 'private-key', pattern: /\b(private[_ -]?key|signing[_ -]?secret|worker[_ -]?secret)\s*[:=]\s*(?!TODO\b|n\/a\b|not configured\b)\S+/i },
-  { id: 'internal-agent-tick-token', pattern: /\bINTERNAL_AGENT_TICK_TOKEN\s*=\s*\S+/i },
-  { id: 'waap-permission-token', pattern: /\b(WAAP_PERMISSION_TOKEN|RESCUEGRID_WAAP_PERMISSION_TOKEN|permission_token)\s*[:=]\s*(?!TODO\b|n\/a\b|not configured\b|false\b|true\b|null\b)\S+/i },
-  { id: 'waap-session', pattern: /\b(WAAP_SESSION|WAAP_SESSION_FILE|waap[_ -]?session)\s*[:=]\s*(?!TODO\b|n\/a\b|not configured\b)\S+/i },
+  { id: 'agent-key', pattern: /\bAGENT_KEY["']?\s*[:=]\s*["']?(?!TODO\b|n\/a\b|not configured\b)\S+/i },
+  { id: 'owner-key', pattern: /\bOWNER_KEY["']?\s*[:=]\s*["']?(?!TODO\b|n\/a\b|not configured\b)\S+/i },
+  { id: 'private-key', pattern: /\b(private[_ -]?key|privateKey|signing[_ -]?secret|signingSecret|worker[_ -]?secret|workerSecret)["']?\s*[:=]\s*["']?(?!TODO\b|n\/a\b|not configured\b)\S+/i },
+  { id: 'internal-agent-tick-token', pattern: /\bINTERNAL_AGENT_TICK_TOKEN["']?\s*[:=]\s*["']?(?!TODO\b|n\/a\b|not configured\b)\S+/i },
+  { id: 'waap-permission-token', pattern: /\b(WAAP_PERMISSION_TOKEN|RESCUEGRID_WAAP_PERMISSION_TOKEN|permission_token|permissionToken)["']?\s*[:=]\s*["']?(?!TODO\b|n\/a\b|not configured\b|false\b|true\b|null\b)\S+/i },
+  { id: 'waap-session', pattern: /\b(WAAP_SESSION|WAAP_SESSION_FILE|waap[_ -]?session|waapSession)["']?\s*[:=]\s*["']?(?!TODO\b|n\/a\b|not configured\b)\S+/i },
   { id: 'sui-private-key', pattern: /\bsuiprivkey[1-9A-HJ-NP-Za-km-z]{20,}/ },
   { id: 'seed-phrase', pattern: /\b(seed phrase|mnemonic)\s*[:=]\s*(?!TODO\b|n\/a\b|not captured\b)(\S+\s+){2,}\S+/i },
 ]

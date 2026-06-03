@@ -363,6 +363,43 @@ assert.equal(secretLeakReport.status, 'error')
 assert.equal(secretLeakReport.code, 'SECRET_LEAK_DETECTED')
 assert.equal(secretLeakReport.secret_leak_patterns.includes('agent-key'), true)
 
+const secretLeakCases = [
+  ['agent-key', '"AGENT_KEY": "suiprivkey1qqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqq"'],
+  ['owner-key', 'OWNER_KEY: suiprivkey1qqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqq'],
+  ['private-key', 'privateKey: suiprivkey1qqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqq'],
+  ['internal-agent-tick-token', '"INTERNAL_AGENT_TICK_TOKEN": "tick-secret"'],
+  ['waap-permission-token', 'permissionToken: waap-secret'],
+  ['waap-session', 'waapSession: local-session-secret'],
+]
+for (const [expectedPattern, secretSnippet] of secretLeakCases) {
+  const report = await verifyWalletEvidenceArtifact({
+    artifactText: filledArtifact.replace(
+      'sign_in_screenshot: screenshots/sign-in.png',
+      `sign_in_screenshot: screenshots/sign-in.png ${secretSnippet}`,
+    ),
+    suiClient: {
+      async getTransactionBlock() {
+        throw new Error(`should not read chain for ${expectedPattern}`)
+      },
+    },
+  })
+  assert.equal(report.status, 'error')
+  assert.equal(report.code, 'SECRET_LEAK_DETECTED')
+  assert.equal(report.secret_leak_patterns.includes(expectedPattern), true)
+}
+
+const safePublicPostureReport = await verifyWalletEvidenceArtifact({
+  artifactText: `${coreOnlyArtifact}\npermission_token: false\nwaapSession: TODO\n`,
+  suiClient: {
+    async getTransactionBlock() {
+      throw new Error('should not read chain when manual fields are missing')
+    },
+  },
+})
+assert.equal(safePublicPostureReport.status, 'error')
+assert.equal(safePublicPostureReport.code, 'EVIDENCE_FIELDS_INCOMPLETE')
+assert.equal(safePublicPostureReport.secret_leak_patterns, undefined)
+
 let chainReads = 0
 const fakeSuiClient = {
   async getTransactionBlock({ digest, options }) {
