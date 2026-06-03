@@ -104,7 +104,16 @@ function readiness({ executionReady = false } = {}) {
   }
 }
 
-function txFixture({ digest = 'fundingDigest', status = 'success' } = {}) {
+function txFixture({
+  digest = 'fundingDigest',
+  status = 'success',
+  objectChanges = [{ type: 'mutated', objectId: DEPLOYMENT.agent.balance_manager_id }],
+  balanceChanges = [
+    { coinType: DBUSDC, amount: '-100', owner: { AddressOwner: '0xprovider' } },
+    { coinType: DEEP, amount: '-1', owner: { AddressOwner: '0xprovider' } },
+    { coinType: SUI, amount: '-1000', owner: { AddressOwner: '0xprovider' } },
+  ],
+} = {}) {
   return {
     digest,
     checkpoint: '42',
@@ -137,16 +146,19 @@ function txFixture({ digest = 'fundingDigest', status = 'success' } = {}) {
         },
       },
     },
-    balanceChanges: [
-      { coinType: DBUSDC, amount: '-100', owner: { AddressOwner: '0xprovider' } },
-      { coinType: DEEP, amount: '-1', owner: { AddressOwner: '0xprovider' } },
-      { coinType: SUI, amount: '-1000', owner: { AddressOwner: '0xprovider' } },
-    ],
-    objectChanges: [{ type: 'mutated', objectId: DEPLOYMENT.agent.balance_manager_id }],
+    balanceChanges,
+    objectChanges,
     events: [
       { type: `${DEPLOYMENT.deepbook.package_id}::balance_manager::Deposit` },
     ],
   }
+}
+
+function unrelatedTargetTxFixture({ digest = 'unrelatedDigest' } = {}) {
+  return txFixture({
+    digest,
+    objectChanges: [{ type: 'mutated', objectId: '0xunrelatedBalanceManager' }],
+  })
 }
 
 function assertNoSecrets(value) {
@@ -188,6 +200,35 @@ function assertNoSecrets(value) {
   assert.equal(proof.funding_asset_hits.some((row) => row.asset === 'DBUSDC'), true)
   assert.equal(proof.funding_asset_hits.some((row) => row.asset === 'DEEP'), true)
   assert.equal(proof.funding_asset_hits.some((row) => row.asset === 'SUI_MIST'), true)
+  assert.equal(proof.target_evidence.target_evidence_passed, true)
+  assert.equal(proof.target_evidence.balance_manager_object_touched, true)
+  assert.equal(proof.target_evidence.asset_target_hits.some((row) => row.asset === 'DBUSDC'), true)
+  assert.equal(proof.target_evidence.asset_target_hits.some((row) => row.asset === 'DEEP'), true)
+  assert.equal(proof.target_evidence.asset_target_hits.some((row) => row.asset === 'SUI_MIST'), false)
+}
+
+{
+  const proof = await verifyFundingTransaction({
+    digest: 'gasDigest',
+    role: 'sui_gas_funding_tx',
+    client: {
+      async getTransactionBlock({ digest }) {
+        return txFixture({
+          digest,
+          objectChanges: [],
+          balanceChanges: [
+            { coinType: SUI, amount: '1000000000', owner: { AddressOwner: DEPLOYMENT.agent.address } },
+            { coinType: SUI, amount: '-1000000000', owner: { AddressOwner: '0xprovider' } },
+          ],
+        })
+      },
+    },
+  })
+  assert.equal(proof.status, 'passed')
+  assert.equal(proof.target_evidence.target_evidence_passed, true)
+  assert.equal(proof.target_evidence.balance_manager_object_touched, false)
+  assert.equal(proof.target_evidence.agent_gas_address_touched, true)
+  assert.deepEqual(proof.target_evidence.asset_target_hits.map((row) => row.asset), ['SUI_MIST'])
 }
 
 {
@@ -229,6 +270,7 @@ function assertNoSecrets(value) {
   })
   assert.equal(report.status, 'blocked')
   assert.equal(report.transaction_evidence.tx_evidence_passed, true)
+  assert.equal(report.transaction_evidence.target_evidence_passed, true)
   assert.equal(report.funding_proven, false)
   assert.equal(report.blocker_codes.includes('INSUFFICIENT_DBUSDC'), true)
   assert.equal(report.policy_creation_allowed, false)
@@ -255,7 +297,31 @@ function assertNoSecrets(value) {
   assert.equal(report.execution_gate.strict_execution_report_required, true)
   assert.equal(report.transaction_evidence.asset_hits.includes('DBUSDC'), true)
   assert.equal(report.transaction_evidence.asset_hits.includes('DEEP'), true)
+  assert.equal(report.transaction_evidence.target_evidence_passed, true)
+  assert.equal(report.transaction_evidence.target_asset_hits.includes('DBUSDC'), true)
+  assert.equal(report.transaction_evidence.target_asset_hits.includes('DEEP'), true)
   assertNoSecrets(report)
+}
+
+{
+  const report = buildFundingProofReport({
+    readiness: readiness({ executionReady: true }),
+    transactionProofs: [
+      await verifyFundingTransaction({
+        digest: 'unrelatedDigest',
+        client: { async getTransactionBlock({ digest }) { return unrelatedTargetTxFixture({ digest }) } },
+      }),
+    ],
+    generatedAt: '2026-06-03T00:00:00.000Z',
+  })
+  assert.equal(report.status, 'failed')
+  assert.equal(report.transaction_evidence.tx_evidence_passed, true)
+  assert.equal(report.transaction_evidence.target_evidence_passed, false)
+  assert.deepEqual(report.transaction_evidence.failed_target_digests, ['unrelatedDigest'])
+  assert.equal(report.blocker_codes.includes('FUNDING_TX_TARGET_NOT_PROVEN'), true)
+  assert.equal(report.funding_proven, false)
+  assert.equal(report.ready_for_strict_execution, false)
+  assert.equal(report.transactions[0].target_evidence.target_evidence_passed, false)
 }
 
 {

@@ -395,9 +395,10 @@ Security / boundary:
 
 Happy path:
 
-- `npm run funding:proof -- --tx <provider_funding_tx_digest> --json` 必须读取 provider 提供的 Sui tx digest，输出 `purpose=rescuegrid_external_funding_proof`、`chain=sui:testnet`、tx success status、checkpoint/timestamp、sender、公开 balance changes、Move-call targets、asset hints、当前 BalanceManager / agent gas readiness、signer capability posture 和 `execution_gate`。
+- `npm run funding:proof -- --tx <provider_funding_tx_digest> --json` 必须读取 provider 提供的 Sui tx digest，输出 `purpose=rescuegrid_external_funding_proof`、`chain=sui:testnet`、tx success status、checkpoint/timestamp、sender、公开 balance changes、Move-call targets、asset hints、target evidence（目标 BalanceManager object 或 agent gas address）、当前 BalanceManager / agent gas readiness、signer capability posture 和 `execution_gate`。
 - `npm run funding:proof:report -- --tx <provider_funding_tx_digest>` 或 `--out .rescuegrid/funding-proof-report.json` 必须写出同一 JSON。blocked 状态也要写出，供 reviewer 查看 provider tx digest 与当前余额 gate 的差异。
-- `funding_proven=true` 只有在 tx digest 读取成功且当前 DBUSDC/DEEP/SUI gas readiness 通过时成立；单独的 successful tx digest 不得把 `funding_proven` 或 `ready_for_strict_execution` 置为 true。
+- `funding_proven=true` 只有在 tx digest 读取成功、tx evidence 锚到部署的 BalanceManager 或 agent gas address、且当前 DBUSDC/DEEP/SUI gas readiness 通过时成立；单独的 successful tx digest 不得把 `funding_proven` 或 `ready_for_strict_execution` 置为 true。
+- successful tx digest 如果只有相关 asset hints、但没有目标 BalanceManager / agent gas address evidence，report 必须 `status=failed`、`funding_proven=false`，并暴露 `FUNDING_TX_TARGET_NOT_PROVEN`。
 - `ready_for_strict_execution=true` 还必须要求 signer/execution flag readiness 通过；若资金已到账但 `EXECUTION_ENABLED=false` 或 signer 不匹配，report 必须保持 `status=blocked` 并保留对应 blocker code。
 - 支持 `--tx` / `--digest` / `--dbusdc-tx` / `--deep-tx` / `--sui-gas-tx`，允许 provider 使用一笔或多笔交易完成交付。
 

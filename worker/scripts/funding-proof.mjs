@@ -135,6 +135,22 @@ function collectMoveCalls(value, out = [], seen = new Set()) {
   return out
 }
 
+function normalizeSuiId(value) {
+  return String(value || '').trim().toLowerCase()
+}
+
+function objectChangeObjectId(row = {}) {
+  return row.objectId || row.object_id || row.object?.objectId || row.object?.object_id || row.reference?.objectId || null
+}
+
+function positiveAmount(value) {
+  try {
+    return BigInt(String(value || '0')) > 0n
+  } catch {
+    return false
+  }
+}
+
 const FUNDING_ASSETS = Object.freeze({
   DBUSDC: DEPLOYMENT.deepbook.dbusdc_coin_type,
   DEEP: DEPLOYMENT.deepbook.deep_coin_type,
@@ -156,6 +172,49 @@ function fundingAssetHits({ balanceChanges = [], moveCalls = [] } = {}) {
     }
   }
   return hits
+}
+
+function fundingTargetEvidence({ balanceChanges = [], moveCalls = [], objectChanges = [] } = {}) {
+  const balanceManagerId = normalizeSuiId(DEPLOYMENT.agent.balance_manager_id)
+  const agentAddress = normalizeSuiId(DEPLOYMENT.agent.address)
+  const objectRows = Array.isArray(objectChanges) ? objectChanges : []
+  const objectChangeIds = objectRows.map(objectChangeObjectId).filter(Boolean)
+  const balanceManagerObjectTouched = objectChangeIds.some((id) => normalizeSuiId(id) === balanceManagerId) ||
+    balanceChanges.some((row) => normalizeSuiId(row.owner) === balanceManagerId)
+  const agentGasAddressTouched = balanceChanges.some((row) => (
+    row.coin_type === FUNDING_ASSETS.SUI_MIST &&
+    row.owner_kind === 'AddressOwner' &&
+    normalizeSuiId(row.owner) === agentAddress &&
+    positiveAmount(row.amount)
+  ))
+  const hits = fundingAssetHits({ balanceChanges, moveCalls })
+  const assetHit = (asset) => hits.some((row) => row.asset === asset)
+  const assetTargetHits = [
+    assetHit('DBUSDC') && balanceManagerObjectTouched ? {
+      asset: 'DBUSDC',
+      target_kind: 'deepbook_balance_manager',
+      target: DEPLOYMENT.agent.balance_manager_id,
+    } : null,
+    assetHit('DEEP') && balanceManagerObjectTouched ? {
+      asset: 'DEEP',
+      target_kind: 'deepbook_balance_manager',
+      target: DEPLOYMENT.agent.balance_manager_id,
+    } : null,
+    agentGasAddressTouched ? {
+      asset: 'SUI_MIST',
+      target_kind: 'agent_gas_address',
+      target: DEPLOYMENT.agent.address,
+    } : null,
+  ].filter(Boolean)
+  return {
+    required: true,
+    target_evidence_passed: assetTargetHits.length > 0,
+    balance_manager_id: DEPLOYMENT.agent.balance_manager_id,
+    agent_address: DEPLOYMENT.agent.address,
+    balance_manager_object_touched: balanceManagerObjectTouched,
+    agent_gas_address_touched: agentGasAddressTouched,
+    asset_target_hits: assetTargetHits,
+  }
 }
 
 function txStatus(effects = {}) {
@@ -190,6 +249,7 @@ export async function verifyFundingTransaction({ digest, role = 'provider_fundin
     const effectStatus = txStatus(tx.effects)
     const balanceChanges = (tx.balanceChanges || []).map(sanitizeBalanceChange)
     const moveCalls = collectMoveCalls(tx.transaction?.data?.transaction || tx.transaction || [])
+    const objectChanges = tx.objectChanges || []
     const passed = effectStatus === 'success'
     return {
       role,
@@ -203,8 +263,9 @@ export async function verifyFundingTransaction({ digest, role = 'provider_fundin
       sender: tx.transaction?.data?.sender || null,
       move_call_targets: moveCalls.map((row) => row.target),
       funding_asset_hits: fundingAssetHits({ balanceChanges, moveCalls }),
+      target_evidence: fundingTargetEvidence({ balanceChanges, moveCalls, objectChanges }),
       balance_changes: balanceChanges,
-      object_change_count: Array.isArray(tx.objectChanges) ? tx.objectChanges.length : null,
+      object_change_count: Array.isArray(objectChanges) ? objectChanges.length : null,
       event_types: (tx.events || []).map((event) => String(event.type || '').split('::').pop()).filter(Boolean),
     }
   } catch (error) {
@@ -227,13 +288,16 @@ export function buildFundingProofReport({
   const handoff = buildFundingHandoff(readiness, { generatedAt })
   const txChecks = Array.isArray(transactionProofs) ? transactionProofs : []
   const failedTxChecks = txChecks.filter((row) => row.passed !== true)
+  const failedTargetChecks = txChecks.filter((row) => row.passed === true && row.target_evidence?.target_evidence_passed !== true)
   const missingDigest = txChecks.length === 0
   const txEvidencePassed = !missingDigest && failedTxChecks.length === 0
-  const fundingProven = txEvidencePassed && handoff.funding_ready === true
+  const targetEvidencePassed = txEvidencePassed && failedTargetChecks.length === 0
+  const fundingProven = txEvidencePassed && targetEvidencePassed && handoff.funding_ready === true
   const readyForStrictExecution = fundingProven && handoff.ready_for_strict_execution === true
   const txBlockers = [
     missingDigest ? 'FUNDING_TX_DIGEST_MISSING' : null,
     failedTxChecks.length > 0 ? 'FUNDING_TX_NOT_PROVEN' : null,
+    failedTargetChecks.length > 0 ? 'FUNDING_TX_TARGET_NOT_PROVEN' : null,
   ].filter(Boolean)
   const blockerCodes = [
     ...txBlockers,
@@ -241,7 +305,7 @@ export function buildFundingProofReport({
   ]
 
   return {
-    status: failedTxChecks.length > 0 ? 'failed' : readyForStrictExecution ? 'ready' : 'blocked',
+    status: failedTxChecks.length > 0 || failedTargetChecks.length > 0 ? 'failed' : readyForStrictExecution ? 'ready' : 'blocked',
     purpose: 'rescuegrid_external_funding_proof',
     generated_at: generatedAt,
     chain: handoff.chain,
@@ -257,8 +321,11 @@ export function buildFundingProofReport({
       required: true,
       tx_digest_count: txChecks.length,
       tx_evidence_passed: txEvidencePassed,
+      target_evidence_passed: targetEvidencePassed,
       failed_tx_digests: failedTxChecks.map((row) => row.digest).filter(Boolean),
+      failed_target_digests: failedTargetChecks.map((row) => row.digest).filter(Boolean),
       asset_hits: [...new Set(txChecks.flatMap((row) => (row.funding_asset_hits || []).map((hit) => hit.asset)))],
+      target_asset_hits: [...new Set(txChecks.flatMap((row) => (row.target_evidence?.asset_target_hits || []).map((hit) => hit.asset)))],
     },
     transactions: txChecks,
     signer: handoff.signer,
@@ -339,9 +406,10 @@ Usage:
 
 This is read-only. It fetches provider-supplied Sui transaction digests and the
 current execution readiness gate. A successful digest alone is not enough:
-funding_proven only becomes true when the live BalanceManager / agent gas reads
-also satisfy the DBUSDC, DEEP and SUI gas thresholds. No private key, AGENT_KEY,
-permission token or WaaP session value is accepted or printed.`)
+funding_proven only becomes true when the digest also anchors to the target
+BalanceManager or agent gas address and the live BalanceManager / agent gas
+reads satisfy the DBUSDC, DEEP and SUI gas thresholds. No private key,
+AGENT_KEY, permission token or WaaP session value is accepted or printed.`)
 }
 
 export async function main(argv = process.argv.slice(2), env = process.env) {
