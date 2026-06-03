@@ -176,6 +176,34 @@ function publicAgentTradeEvent(event = null) {
   }
 }
 
+function txTimestampMs(row = null) {
+  return numberOrNull(row?.timestamp_ms ?? row?.timestampMs)
+}
+
+function missingTransactionSequenceEvidence(evidence) {
+  const missing = []
+  if (evidence.create_tx_timestamp_ms == null) missing.push('create_tx_timestamp_ms')
+  if (evidence.revoke_tx_timestamp_ms == null) missing.push('revoke_tx_timestamp_ms')
+  if (
+    evidence.create_tx_digest &&
+    evidence.tick_tx_digest &&
+    evidence.revoke_tx_digest &&
+    new Set([evidence.create_tx_digest, evidence.tick_tx_digest, evidence.revoke_tx_digest]).size !== 3
+  ) {
+    missing.push('transaction_digest_distinct')
+  }
+  const executedAt = evidence.agent_trade_event?.executed_at_ms
+  if (
+    evidence.create_tx_timestamp_ms != null &&
+    executedAt != null &&
+    evidence.revoke_tx_timestamp_ms != null &&
+    !(evidence.create_tx_timestamp_ms <= executedAt && executedAt <= evidence.revoke_tx_timestamp_ms)
+  ) {
+    missing.push('transaction_time_order')
+  }
+  return missing
+}
+
 function hasPresentValue(value) {
   return value !== null && value !== undefined && String(value) !== ''
 }
@@ -438,8 +466,12 @@ function executionReportEvidence(report) {
     strategy_hash: report?.strategy_hash || null,
     create_tx_digest: report?.create_tx_digest || report?.create_tx?.digest || null,
     create_tx_status: report?.create_tx?.status || null,
+    create_tx_checkpoint: report?.create_tx?.checkpoint || null,
+    create_tx_timestamp_ms: txTimestampMs(report?.create_tx),
     revoke_tx_digest: report?.revoke_tx_digest || report?.revoke_tx?.digest || null,
     revoke_tx_status: report?.revoke_tx?.status || null,
+    revoke_tx_checkpoint: report?.revoke_tx?.checkpoint || null,
+    revoke_tx_timestamp_ms: txTimestampMs(report?.revoke_tx),
     tick_outcome: report?.tick_outcome || null,
     tick_tx_digest: report?.tick_tx_digest || report?.tx_digest || null,
     agent_trade_event_found: report?.agent_trade_event_found === true,
@@ -491,6 +523,7 @@ function strictExecutionMissingEvidence(report, assertions = []) {
     if (!evidence.post_revoke.chain_event_types.includes(eventType)) missing.push(`chain_event:${eventType}`)
   }
   missing.push(...missingAgentTradeEventEvidence(evidence))
+  missing.push(...missingTransactionSequenceEvidence(evidence))
   if (
     evidence.agent_trade_event?.agent &&
     evidence.delegated_agent_address &&

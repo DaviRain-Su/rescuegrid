@@ -9,11 +9,11 @@ import {
   writeDemoExecutionReportArtifact,
 } from '../scripts/demo-execution-report.mjs'
 
-function tx(digest) {
+function tx(digest, { checkpoint = '42', timestampMs = '1760000000000' } = {}) {
   return {
     digest,
-    checkpoint: '42',
-    timestampMs: '1760000000000',
+    checkpoint,
+    timestampMs,
     effects: { status: { status: 'success' } },
   }
 }
@@ -46,8 +46,8 @@ function strictReport({ tick = {}, wrapperId = '0xwrapper', mandateId = '0xmanda
     wrapperId,
     mandateId,
     strategyHash: '0xstrategy',
-    createResolved: tx('createDigest'),
-    revokeResolved: tx('revokeDigest'),
+    createResolved: tx('createDigest', { checkpoint: '41', timestampMs: '1759999999000' }),
+    revokeResolved: tx('revokeDigest', { checkpoint: '43', timestampMs: '1760000001000' }),
     tickOutcome: 'executed',
     tick: {
       action: 'executed',
@@ -86,6 +86,8 @@ assert.equal(executed.spend_increased, true)
 assert.equal(executed.tick_tx_digest, 'tickDigest')
 assert.equal(executed.create_tx_digest, 'createDigest')
 assert.equal(executed.revoke_tx_digest, 'revokeDigest')
+assert.equal(executed.create_tx.timestamp_ms, 1759999999000)
+assert.equal(executed.revoke_tx.timestamp_ms, 1760000001000)
 assert.equal(executed.assertions.includes('G2-EXECUTE'), true)
 assert.equal(executed.post_revoke.execution_claimed, false)
 assert.equal(executed.post_revoke.chain_event_types.includes('AgentTradeExecuted'), true)
@@ -114,6 +116,19 @@ assert.throws(
   () => assertStrictDemoExecutionReport(missingStructuredEvent),
   /STRICT_EXECUTION_EVENT_INCOMPLETE/,
 )
+
+const duplicateDigestReport = strictReport({
+  tick: { tx_digest: 'createDigest', agent_trade_event: { ...agentTradeEvent, tx_digest: 'createDigest' } },
+})
+assert.equal(strictDemoExecutionMissingEvidence(duplicateDigestReport).includes('transaction_digest_distinct'), true)
+
+const outOfOrderReport = strictReport()
+outOfOrderReport.revoke_tx.timestamp_ms = 1759999999001
+assert.equal(strictDemoExecutionMissingEvidence(outOfOrderReport).includes('transaction_time_order'), true)
+
+const missingTxTimestampReport = strictReport()
+delete missingTxTimestampReport.create_tx.timestamp_ms
+assert.equal(strictDemoExecutionMissingEvidence(missingTxTimestampReport).includes('create_tx_timestamp_ms'), true)
 
 const missingAgentAndPool = strictReport()
 delete missingAgentAndPool.delegated_agent_address

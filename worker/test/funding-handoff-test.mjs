@@ -125,6 +125,8 @@ assert.equal(handoff.next_verification.strict_execution_command, 'npm run demo:e
 assert.equal(handoff.next_verification.strict_execution_report_command, 'npm run demo:execute:report')
 assert.match(handoff.next_verification.success_condition, /structured AgentTradeExecuted evidence/)
 assert.match(handoff.next_verification.success_condition, /same wrapper\/mandate\/tick digest/)
+assert.match(handoff.next_verification.success_condition, /distinct create\/tick\/revoke digests/)
+assert.match(handoff.next_verification.success_condition, /create <= execute <= revoke timestamps/)
 assert.deepEqual(handoff.execution_gate, {
   readiness_only: true,
   policy_creation_allowed: false,

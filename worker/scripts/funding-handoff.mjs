@@ -163,7 +163,7 @@ function assetFundingRow({ readiness, asset, coinType, holderKind }) {
 }
 
 const STRICT_EXECUTION_REPORT_PATH = '.rescuegrid/demo-execute-report.json'
-const STRICT_EXECUTION_SUCCESS_CONDITION = 'Strict execution must preflight ready, create a policy, force a tick, then prove structured AgentTradeExecuted evidence for the same wrapper/mandate/tick digest, execution_claimed=true and on-chain spend increase.'
+const STRICT_EXECUTION_SUCCESS_CONDITION = 'Strict execution must preflight ready, create a policy, force a tick, then prove structured AgentTradeExecuted evidence for the same wrapper/mandate/tick digest, execution_claimed=true, on-chain spend increase, distinct create/tick/revoke digests and create <= execute <= revoke timestamps.'
 
 export function executionGate(readiness) {
   const policyCreationAllowed = Boolean(readiness.execution_ready)

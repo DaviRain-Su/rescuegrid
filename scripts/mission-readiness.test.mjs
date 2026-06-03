@@ -205,9 +205,9 @@ function strictExecutionReport(overrides = {}) {
     require_execution: true,
     assertions: ['G2-CREATE', 'G2-ACTIVATE-MONITOR', 'G2-EXECUTE', 'G2-REVOKE', 'G2-POST-REVOKE-NO-EXECUTION'],
     create_tx_digest: 'createDigest',
-    create_tx: { digest: 'createDigest', status: 'success' },
+    create_tx: { digest: 'createDigest', status: 'success', checkpoint: '41', timestamp_ms: 1759999999000 },
     revoke_tx_digest: 'revokeDigest',
-    revoke_tx: { digest: 'revokeDigest', status: 'success' },
+    revoke_tx: { digest: 'revokeDigest', status: 'success', checkpoint: '43', timestamp_ms: 1760000001000 },
     tick_outcome: 'executed',
     execution_claimed: true,
     agent_trade_event_found: true,
@@ -263,6 +263,8 @@ function strictExecutionReport(overrides = {}) {
   assert.equal(executionCheck.evidence.agent_trade_event.tx_digest, 'tickDigest')
   assert.equal(executionCheck.evidence.agent_trade_event.agent, '0xagent')
   assert.equal(executionCheck.evidence.agent_trade_event.pool_id, '0xpool')
+  assert.equal(executionCheck.evidence.create_tx_timestamp_ms, 1759999999000)
+  assert.equal(executionCheck.evidence.revoke_tx_timestamp_ms, 1760000001000)
   assert.equal(continuityCheck.status, 'passed')
   assert.equal(continuityCheck.evidence.wrapper_id, '0xwrapper')
   assertNoSecretSignerPosture(report)
@@ -378,7 +380,7 @@ function strictExecutionReport(overrides = {}) {
       wrapper_id: '0xotherwrapper',
       agent_trade_event: strictAgentTradeEvent({ wrapper_id: '0xotherwrapper' }),
       revoke_tx_digest: 'otherRevokeDigest',
-      revoke_tx: { digest: 'otherRevokeDigest', status: 'success' },
+      revoke_tx: { digest: 'otherRevokeDigest', status: 'success', checkpoint: '43', timestamp_ms: 1760000001000 },
     }),
   })
   const continuityCheck = report.checks.find((row) => row.id === 'mission_same_policy_continuity')
@@ -477,6 +479,56 @@ function strictExecutionReport(overrides = {}) {
   assert.equal(report.status, 'failed')
   assert.equal(executionCheck.status, 'failed')
   assert.equal(executionCheck.evidence.missing_live_evidence.includes('agent_trade_event_wrapper'), true)
+}
+
+{
+  const report = buildMissionReadinessReport({
+    scripts: requiredScripts,
+    safetyReport: safetyNegativeReport(),
+    walletReport: verifiedWalletReport(),
+    fundingReadiness: readyFunding(),
+    executionReport: strictExecutionReport({
+      revoke_tx: { digest: 'revokeDigest', status: 'success', checkpoint: '42', timestamp_ms: 1759999999001 },
+    }),
+  })
+  const executionCheck = report.checks.find((row) => row.id === 'strict_execution_evidence')
+  assert.equal(report.status, 'failed')
+  assert.equal(executionCheck.status, 'failed')
+  assert.equal(executionCheck.evidence.missing_live_evidence.includes('transaction_time_order'), true)
+}
+
+{
+  const report = buildMissionReadinessReport({
+    scripts: requiredScripts,
+    safetyReport: safetyNegativeReport(),
+    walletReport: verifiedWalletReport(),
+    fundingReadiness: readyFunding(),
+    executionReport: strictExecutionReport({
+      tick_tx_digest: 'createDigest',
+      tx_digest: 'createDigest',
+      agent_trade_event: strictAgentTradeEvent({ tx_digest: 'createDigest' }),
+    }),
+  })
+  const executionCheck = report.checks.find((row) => row.id === 'strict_execution_evidence')
+  assert.equal(report.status, 'failed')
+  assert.equal(executionCheck.status, 'failed')
+  assert.equal(executionCheck.evidence.missing_live_evidence.includes('transaction_digest_distinct'), true)
+}
+
+{
+  const report = buildMissionReadinessReport({
+    scripts: requiredScripts,
+    safetyReport: safetyNegativeReport(),
+    walletReport: verifiedWalletReport(),
+    fundingReadiness: readyFunding(),
+    executionReport: strictExecutionReport({
+      create_tx: { digest: 'createDigest', status: 'success' },
+    }),
+  })
+  const executionCheck = report.checks.find((row) => row.id === 'strict_execution_evidence')
+  assert.equal(report.status, 'failed')
+  assert.equal(executionCheck.status, 'failed')
+  assert.equal(executionCheck.evidence.missing_live_evidence.includes('create_tx_timestamp_ms'), true)
 }
 
 {

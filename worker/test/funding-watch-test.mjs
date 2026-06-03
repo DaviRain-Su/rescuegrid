@@ -150,6 +150,8 @@ function readiness({ executionReady = false } = {}) {
   assert.equal(report.funding_targets.balance_manager.required_assets[0].missing, '100')
   assert.match(report.next_verification.success_condition, /structured AgentTradeExecuted evidence/)
   assert.match(report.next_verification.success_condition, /same wrapper\/mandate\/tick digest/)
+  assert.match(report.next_verification.success_condition, /distinct create\/tick\/revoke digests/)
+  assert.match(report.next_verification.success_condition, /create <= execute <= revoke timestamps/)
   assert.equal(report.signer_capabilities.some((row) => row.kind === 'waap' && row.runner_configured === false), true)
   assert.equal(report.external_signer.kind, 'waap')
   assert.equal(report.external_signer.secrets_returned, false)

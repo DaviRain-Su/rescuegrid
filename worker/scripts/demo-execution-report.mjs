@@ -61,6 +61,36 @@ function hasPresentValue(value) {
   return value !== null && value !== undefined && String(value) !== ''
 }
 
+function txStatus(tx = {}) {
+  return tx?.status || tx?.effects?.status?.status || null
+}
+
+function txTimestampMs(tx = {}) {
+  return numberOrNull(tx?.timestamp_ms ?? tx?.timestampMs)
+}
+
+function missingTransactionSequenceEvidence(report = {}, event = null) {
+  const missing = []
+  const createDigest = report.create_tx_digest || report.create_tx?.digest || null
+  const tickDigest = report.tick_tx_digest || report.tx_digest || null
+  const revokeDigest = report.revoke_tx_digest || report.revoke_tx?.digest || null
+  if (!createDigest || txStatus(report.create_tx) !== 'success') missing.push('create_tx_success')
+  if (!revokeDigest || txStatus(report.revoke_tx) !== 'success') missing.push('revoke_tx_success')
+  if (createDigest && tickDigest && revokeDigest && new Set([createDigest, tickDigest, revokeDigest]).size !== 3) {
+    missing.push('transaction_digest_distinct')
+  }
+
+  const createTs = txTimestampMs(report.create_tx)
+  const executedTs = numberOrNull(event?.executed_at_ms)
+  const revokeTs = txTimestampMs(report.revoke_tx)
+  if (createTs == null) missing.push('create_tx_timestamp_ms')
+  if (revokeTs == null) missing.push('revoke_tx_timestamp_ms')
+  if (createTs != null && executedTs != null && revokeTs != null && !(createTs <= executedTs && executedTs <= revokeTs)) {
+    missing.push('transaction_time_order')
+  }
+  return missing
+}
+
 function agentTradeEventReportEvidence(event) {
   if (!event || typeof event !== 'object' || Array.isArray(event)) return null
   return {
@@ -136,6 +166,7 @@ export function strictDemoExecutionMissingEvidence(report = {}) {
   for (const field of REQUIRED_AGENT_TRADE_EVENT_FIELDS) {
     if (!hasPresentValue(event[field])) missing.push(`agent_trade_event_${field}`)
   }
+  missing.push(...missingTransactionSequenceEvidence(report, event))
   return missing
 }
 
