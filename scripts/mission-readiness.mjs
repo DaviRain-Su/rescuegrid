@@ -10,6 +10,7 @@ import packageJson from '../package.json' with { type: 'json' }
 import { buildExecutionReadiness } from '../worker/src/execution-readiness.js'
 import { requireChainDataProvider } from '../worker/src/chain-data-provider.js'
 import { executionGate, fundingHandoffEnv } from '../worker/scripts/funding-handoff.mjs'
+import { strictDemoExecutionMissingEvidence } from '../worker/scripts/demo-execution-report.mjs'
 import {
   SAFETY_NEGATIVE_REQUIRED_ASSERTIONS,
   SAFETY_NEGATIVE_REQUIRED_CODES,
@@ -718,7 +719,7 @@ const STRICT_EXECUTION_REQUIRED_ASSERTIONS = [
 
 function strictExecutionMissingEvidence(report, assertions = []) {
   const evidence = executionReportEvidence(report)
-  const missing = []
+  const missing = [...strictDemoExecutionMissingEvidence(report)]
   if (evidence.purpose !== 'rescuegrid_demo_execution_report') missing.push('purpose')
   if (evidence.chain !== 'sui:testnet') missing.push('chain')
   if (evidence.require_execution !== true) missing.push('require_execution')
@@ -753,7 +754,7 @@ function strictExecutionMissingEvidence(report, assertions = []) {
     evidence.pool_id &&
     normalizeHexAnchor(evidence.agent_trade_event.pool_id) !== normalizeHexAnchor(evidence.pool_id)
   ) missing.push('agent_trade_event_pool')
-  return missing
+  return [...new Set(missing)]
 }
 
 export function summarizeStrictExecutionEvidence(report, fundingCheck, fundingProofCheck = null) {

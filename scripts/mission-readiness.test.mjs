@@ -1011,6 +1011,24 @@ function strictExecutionReport(overrides = {}) {
 }
 
 {
+  const report = buildMissionReadinessReport({
+    scripts: requiredScripts,
+    safetyReport: safetyNegativeReport(),
+    walletReport: verifiedWalletReport(),
+    fundingReadiness: readyFunding(),
+    fundingProofReport: readyFundingProof(),
+    executionReport: strictExecutionReport({
+      assertions: ['G2-CREATE', 'G2-REVOKE', 'G2-POST-REVOKE-NO-EXECUTION'],
+    }),
+  })
+  const executionCheck = report.checks.find((row) => row.id === 'strict_execution_evidence')
+  assert.equal(report.status, 'failed')
+  assert.equal(executionCheck.status, 'failed')
+  assert.equal(executionCheck.evidence.missing_live_evidence.includes('assertion:G2-EXECUTE'), true)
+  assert.equal(executionCheck.evidence.missing_live_evidence.includes('assertions_G2_EXECUTE'), true)
+}
+
+{
   const tempDir = mkdtempSync(join(tmpdir(), 'rescuegrid-mission-readiness-'))
   const artifactPath = join(tempDir, 'wallet.md')
   writeFileSync(artifactPath, '- owner_address: 0xowner\n', 'utf8')
