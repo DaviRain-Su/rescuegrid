@@ -428,6 +428,8 @@ function executionReportEvidence(report) {
     phase: report?.phase || null,
     require_execution: report?.require_execution === true,
     owner_address: report?.owner_address || null,
+    delegated_agent_address: report?.delegated_agent_address || null,
+    pool_id: report?.pool_id || null,
     wrapper_id: report?.wrapper_id || null,
     mandate_id: report?.mandate_id || null,
     strategy_hash: report?.strategy_hash || null,
@@ -467,6 +469,8 @@ function strictExecutionMissingEvidence(report, assertions = []) {
   if (evidence.chain !== 'sui:testnet') missing.push('chain')
   if (evidence.require_execution !== true) missing.push('require_execution')
   if (!evidence.owner_address) missing.push('owner_address')
+  if (!evidence.delegated_agent_address) missing.push('delegated_agent_address')
+  if (!evidence.pool_id) missing.push('pool_id')
   if (!evidence.wrapper_id) missing.push('wrapper_id')
   if (!evidence.mandate_id) missing.push('mandate_id')
   if (!evidence.strategy_hash) missing.push('strategy_hash')
@@ -484,6 +488,16 @@ function strictExecutionMissingEvidence(report, assertions = []) {
     if (!evidence.post_revoke.chain_event_types.includes(eventType)) missing.push(`chain_event:${eventType}`)
   }
   missing.push(...missingAgentTradeEventEvidence(evidence))
+  if (
+    evidence.agent_trade_event?.agent &&
+    evidence.delegated_agent_address &&
+    normalizeHexAnchor(evidence.agent_trade_event.agent) !== normalizeHexAnchor(evidence.delegated_agent_address)
+  ) missing.push('agent_trade_event_agent')
+  if (
+    evidence.agent_trade_event?.pool_id &&
+    evidence.pool_id &&
+    normalizeHexAnchor(evidence.agent_trade_event.pool_id) !== normalizeHexAnchor(evidence.pool_id)
+  ) missing.push('agent_trade_event_pool')
   return missing
 }
 

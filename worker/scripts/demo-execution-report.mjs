@@ -100,6 +100,8 @@ export function strictDemoExecutionMissingEvidence(report = {}) {
   if (report.phase !== 'pass') missing.push('phase')
   if (!assertions.includes('G2-EXECUTE')) missing.push('assertions_G2_EXECUTE')
   if (report.tick_outcome !== 'executed' && report.action !== 'executed') missing.push('tick_outcome')
+  if (!report.delegated_agent_address) missing.push('delegated_agent_address')
+  if (!report.pool_id) missing.push('pool_id')
   if (report.execution_claimed !== true) missing.push('execution_claimed')
   if (!txDigest) missing.push('tick_tx_digest')
   if (report.agent_trade_event_found !== true) missing.push('agent_trade_event_found')
@@ -121,6 +123,16 @@ export function strictDemoExecutionMissingEvidence(report = {}) {
     !report.mandate_id ||
     normalizeHexAnchor(event.mandate_id) !== normalizeHexAnchor(report.mandate_id)
   ) missing.push('agent_trade_event_mandate')
+  if (
+    !event.agent ||
+    !report.delegated_agent_address ||
+    normalizeHexAnchor(event.agent) !== normalizeHexAnchor(report.delegated_agent_address)
+  ) missing.push('agent_trade_event_agent')
+  if (
+    !event.pool_id ||
+    !report.pool_id ||
+    normalizeHexAnchor(event.pool_id) !== normalizeHexAnchor(report.pool_id)
+  ) missing.push('agent_trade_event_pool')
   for (const field of REQUIRED_AGENT_TRADE_EVENT_FIELDS) {
     if (!hasPresentValue(event[field])) missing.push(`agent_trade_event_${field}`)
   }
@@ -158,6 +170,7 @@ export function buildDemoExecutionReport({
   currentRunMarker = null,
   ownerAddress = null,
   delegatedAgentAddress = null,
+  poolId = null,
   strategyHash = null,
   wrapperId = null,
   mandateId = null,
@@ -188,6 +201,7 @@ export function buildDemoExecutionReport({
     current_run_marker: currentRunMarker,
     owner_address: ownerAddress,
     delegated_agent_address: delegatedAgentAddress,
+    pool_id: poolId,
     wrapper_id: wrapperId,
     mandate_id: mandateId,
     strategy_hash: strategyHash,

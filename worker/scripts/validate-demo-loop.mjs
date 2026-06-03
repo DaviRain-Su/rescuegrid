@@ -393,6 +393,7 @@ const passReport = buildDemoExecutionReport({
   current_run_marker: currentRunMarker,
   ownerAddress,
   delegatedAgentAddress,
+  poolId: strategy.pool_id,
   wrapperId,
   mandateId,
   strategyHash: strategy.strategy_hash,

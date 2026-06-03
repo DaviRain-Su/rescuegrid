@@ -42,6 +42,7 @@ function strictReport({ tick = {}, wrapperId = '0xwrapper', mandateId = '0xmanda
     currentRunMarker: 'demo-loop-test',
     ownerAddress: '0xowner',
     delegatedAgentAddress: '0xagent',
+    poolId: '0xpool',
     wrapperId,
     mandateId,
     strategyHash: '0xstrategy',
@@ -79,6 +80,8 @@ assert.equal(executed.tick_outcome, 'executed')
 assert.equal(executed.execution_claimed, true)
 assert.equal(executed.agent_trade_event_found, true)
 assert.deepEqual(executed.agent_trade_event, agentTradeEvent)
+assert.equal(executed.delegated_agent_address, '0xagent')
+assert.equal(executed.pool_id, '0xpool')
 assert.equal(executed.spend_increased, true)
 assert.equal(executed.tick_tx_digest, 'tickDigest')
 assert.equal(executed.create_tx_digest, 'createDigest')
@@ -93,6 +96,8 @@ const missingStructuredEvent = strictReport({
   tick: {
     agent_trade_event: {
       ...agentTradeEvent,
+      agent: '0xotheragent',
+      pool_id: '0xotherpool',
       quote_amount_spent: '',
       wrapper_id: '0xotherwrapper',
       tx_digest: 'otherTickDigest',
@@ -103,10 +108,21 @@ const missingEvidence = strictDemoExecutionMissingEvidence(missingStructuredEven
 assert.equal(missingEvidence.includes('agent_trade_event_quote_amount_spent'), true)
 assert.equal(missingEvidence.includes('agent_trade_event_wrapper'), true)
 assert.equal(missingEvidence.includes('agent_trade_event_tx_digest'), true)
+assert.equal(missingEvidence.includes('agent_trade_event_agent'), true)
+assert.equal(missingEvidence.includes('agent_trade_event_pool'), true)
 assert.throws(
   () => assertStrictDemoExecutionReport(missingStructuredEvent),
   /STRICT_EXECUTION_EVENT_INCOMPLETE/,
 )
+
+const missingAgentAndPool = strictReport()
+delete missingAgentAndPool.delegated_agent_address
+delete missingAgentAndPool.pool_id
+const missingAgentPoolEvidence = strictDemoExecutionMissingEvidence(missingAgentAndPool)
+assert.equal(missingAgentPoolEvidence.includes('delegated_agent_address'), true)
+assert.equal(missingAgentPoolEvidence.includes('pool_id'), true)
+assert.equal(missingAgentPoolEvidence.includes('agent_trade_event_agent'), true)
+assert.equal(missingAgentPoolEvidence.includes('agent_trade_event_pool'), true)
 
 const gated = buildDemoExecutionReport({
   tickOutcome: 'gated',

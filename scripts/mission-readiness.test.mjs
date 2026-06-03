@@ -213,6 +213,8 @@ function strictExecutionReport(overrides = {}) {
     spend_increased: true,
     tick_tx_digest: 'tickDigest',
     owner_address: '0xowner',
+    delegated_agent_address: '0xagent',
+    pool_id: '0xpool',
     wrapper_id: '0xwrapper',
     mandate_id: '0xmandate',
     strategy_hash: '0xstrategy',
@@ -254,6 +256,8 @@ function strictExecutionReport(overrides = {}) {
   assert.equal(executionCheck.evidence.agent_trade_event.wrapper_id, '0xwrapper')
   assert.equal(executionCheck.evidence.agent_trade_event.mandate_id, '0xmandate')
   assert.equal(executionCheck.evidence.agent_trade_event.tx_digest, 'tickDigest')
+  assert.equal(executionCheck.evidence.agent_trade_event.agent, '0xagent')
+  assert.equal(executionCheck.evidence.agent_trade_event.pool_id, '0xpool')
   assert.equal(continuityCheck.status, 'passed')
   assert.equal(continuityCheck.evidence.wrapper_id, '0xwrapper')
   assertNoSecretSignerPosture(report)
@@ -442,6 +446,46 @@ function strictExecutionReport(overrides = {}) {
   assert.equal(report.status, 'failed')
   assert.equal(executionCheck.status, 'failed')
   assert.equal(executionCheck.evidence.missing_live_evidence.includes('agent_trade_event_wrapper'), true)
+}
+
+{
+  const report = buildMissionReadinessReport({
+    scripts: requiredScripts,
+    safetyReport: safetyNegativeReport(),
+    walletReport: verifiedWalletReport(),
+    fundingReadiness: readyFunding(),
+    executionReport: strictExecutionReport({
+      delegated_agent_address: '0xagent',
+      pool_id: '0xpool',
+      agent_trade_event: strictAgentTradeEvent({
+        agent: '0xotheragent',
+        pool_id: '0xotherpool',
+      }),
+    }),
+  })
+  const executionCheck = report.checks.find((row) => row.id === 'strict_execution_evidence')
+  assert.equal(report.status, 'failed')
+  assert.equal(executionCheck.status, 'failed')
+  assert.equal(executionCheck.evidence.missing_live_evidence.includes('agent_trade_event_agent'), true)
+  assert.equal(executionCheck.evidence.missing_live_evidence.includes('agent_trade_event_pool'), true)
+}
+
+{
+  const report = buildMissionReadinessReport({
+    scripts: requiredScripts,
+    safetyReport: safetyNegativeReport(),
+    walletReport: verifiedWalletReport(),
+    fundingReadiness: readyFunding(),
+    executionReport: strictExecutionReport({
+      delegated_agent_address: null,
+      pool_id: null,
+    }),
+  })
+  const executionCheck = report.checks.find((row) => row.id === 'strict_execution_evidence')
+  assert.equal(report.status, 'failed')
+  assert.equal(executionCheck.status, 'failed')
+  assert.equal(executionCheck.evidence.missing_live_evidence.includes('delegated_agent_address'), true)
+  assert.equal(executionCheck.evidence.missing_live_evidence.includes('pool_id'), true)
 }
 
 {
