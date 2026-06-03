@@ -38,6 +38,7 @@ const REQUIRED_SCRIPTS = [
   'demo:loop',
   'demo:execute',
   'demo:execute:report',
+  'demo:execute:wallet-report',
   'safety:negative',
   'safety:negative:report',
   'baseline:smoke',
@@ -724,13 +725,13 @@ function nextActions({ safetyCheck, walletCheck, fundingCheck, strictExecutionCh
     actions.push('Run npm run safety:negative:report with a live local Worker to write .rescuegrid/safety-negative-report.json proving all required validate-plan blockers.')
   }
   if (walletCheck?.status !== 'passed') {
-    actions.push('Run npm run wallet:evidence -- --format markdown --out .rescuegrid/wallet-clickthrough-evidence.md, then npm run wallet:evidence:preflight before the real Slush / standard Sui wallet flow. Create and activate the policy first, keep the same wrapper active for strict execution evidence before revoking it, then set Actual click-through completed: true, fill tx/object, strict_execution_report_reference and screenshot evidence fields, and run npm run wallet:evidence:verify -- --input .rescuegrid/wallet-clickthrough-evidence.md --require-worker --execution-report .rescuegrid/demo-execute-report.json.')
+    actions.push('Run npm run wallet:evidence -- --format markdown --out .rescuegrid/wallet-clickthrough-evidence.md, then npm run wallet:evidence:preflight before the real Slush / standard Sui wallet flow. Create and activate the policy first, save the exact parsed strategy JSON to the artifact strategy file path, keep the same wrapper active, run npm run demo:execute:wallet-report -- --wrapper-id <wrapper_id> --strategy-file <strategy_json_path> --create-tx-digest <create_tx_digest>, revoke from the browser wallet when the script reaches awaiting_wallet_revoke, then set Actual click-through completed: true, fill tx/object, strict_execution_report_reference and screenshot evidence fields, and run npm run wallet:evidence:verify -- --input .rescuegrid/wallet-clickthrough-evidence.md --require-worker --execution-report .rescuegrid/demo-execute-report.json.')
   }
   if (fundingCheck?.status !== 'passed') {
     actions.push('Send the DBUSDC/DEEP funding handoff to an external funding provider, then rerun npm run funding:watch -- --json and npm run funding:watch:report.')
   }
   if (fundingCheck?.status === 'passed' && strictExecutionCheck?.status !== 'passed') {
-    actions.push('Run npm run demo:execute:report to write .rescuegrid/demo-execute-report.json proving create -> execute -> revoke -> post-revoke no-execution with structured AgentTradeExecuted evidence for the same wrapper/mandate/tick digest, execution_claimed=true and spend increase.')
+    actions.push('Run npm run demo:execute:wallet-report -- --wrapper-id <wallet_wrapper_id> --strategy-file <strategy_json_path> --create-tx-digest <wallet_create_tx_digest> to write .rescuegrid/demo-execute-report.json for the browser-wallet-created wrapper, proving create -> execute -> wallet revoke -> post-revoke no-execution with structured AgentTradeExecuted evidence, execution_claimed=true and spend increase.')
   }
   if (continuityCheck?.status === 'failed') {
     actions.push('Rerun the browser wallet flow and strict demo execution evidence for the same owner-created wrapper so owner, wrapper, mandate, strategy hash and create/revoke tx digests match.')

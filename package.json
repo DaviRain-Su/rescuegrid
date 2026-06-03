@@ -35,6 +35,7 @@
     "demo:loop": "node worker/scripts/validate-demo-loop.mjs",
     "demo:execute": "node worker/scripts/validate-demo-loop.mjs --require-execution",
     "demo:execute:report": "node worker/scripts/validate-demo-loop.mjs --require-execution --out .rescuegrid/demo-execute-report.json",
+    "demo:execute:wallet-report": "node worker/scripts/validate-wallet-policy-execution.mjs --out .rescuegrid/demo-execute-report.json",
     "safety:negative": "node worker/scripts/validate-safety-negative-paths.mjs",
     "safety:negative:report": "node worker/scripts/validate-safety-negative-paths.mjs --out .rescuegrid/safety-negative-report.json",
     "baseline:smoke": "node scripts/baseline-smoke.mjs"

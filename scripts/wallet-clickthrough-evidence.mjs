@@ -22,6 +22,7 @@ const REQUIRED_WALLET_CORE_FIELDS = [
 const REQUIRED_WALLET_MANUAL_FIELDS = [
   'sign_in_screenshot',
   'wallet_create_prompt_screenshot',
+  'activation_strategy_file',
   'runtime_state_after_activate',
   'policy_active_screenshot',
   'activity_row_screenshot',
@@ -415,17 +416,17 @@ export function buildWalletEvidence({
       {
         id: 'create_policy',
         action: 'Open New strategy, use the SUI risk-response prompt, click Sign & deploy, and approve the wallet transaction.',
-        record: ['create_tx_digest', 'wrapper_id', 'mandate_id', 'strategy_hash', 'wallet_create_prompt_screenshot'],
+        record: ['create_tx_digest', 'wrapper_id', 'mandate_id', 'strategy_hash', 'activation_strategy_file', 'wallet_create_prompt_screenshot'],
       },
       {
         id: 'activation',
-        action: 'Wait for the UI and Worker activity to show the created policy and Monitoring runtime state.',
-        record: ['runtime_state_after_activate', 'policy_active_screenshot', 'activity_row_screenshot'],
+        action: 'Save the exact parsed strategy JSON used for creation, then wait for the UI and Worker activity to show the created policy and Monitoring runtime state.',
+        record: ['activation_strategy_file', 'runtime_state_after_activate', 'policy_active_screenshot', 'activity_row_screenshot'],
       },
       {
         id: 'strict_execution_window',
-        action: 'Keep this same policy active for the strict execution validator before revoking it; final mission readiness requires the strict AgentTradeExecuted report and this wallet artifact to describe the same wrapper lifecycle.',
-        record: ['wrapper_id', 'mandate_id', 'strategy_hash', 'create_tx_digest', 'strict_execution_report_reference'],
+        action: 'Keep this same policy active and run demo:execute:wallet-report with the wrapper id, create tx digest and strategy file before revoking it; final mission readiness requires the strict AgentTradeExecuted report and this wallet artifact to describe the same wrapper lifecycle.',
+        record: ['wrapper_id', 'mandate_id', 'strategy_hash', 'create_tx_digest', 'activation_strategy_file', 'strict_execution_report_reference'],
       },
       {
         id: 'revoke_policy',
@@ -446,6 +447,7 @@ export function buildWalletEvidence({
       wrapper_id: '',
       mandate_id: '',
       strategy_hash: '',
+      activation_strategy_file: '',
       runtime_state_after_activate: '',
       policy_active_screenshot: '',
       activity_row_screenshot: '',
@@ -461,7 +463,8 @@ export function buildWalletEvidence({
       'Create flow uses Worker-built tx_json and the browser wallet returns a create tx digest.',
       'PolicyCreated event yields a wrapper_id and mandate_id that match the UI/API row.',
       'Activation reaches Monitoring after the create transaction finalizes.',
-      'Before revocation, the same active wrapper is available for the strict execution validator; the wallet artifact itself still does not claim DeepBook execution.',
+      'Before revocation, the same active wrapper is available for demo:execute:wallet-report; the wallet artifact itself still does not claim DeepBook execution.',
+      'The exact parsed strategy JSON used to create the wrapper is saved locally and hashes to the on-chain strategy_hash during wallet-report validation.',
       'The artifact records the strict execution report reference for this wrapper before the revoke step.',
       'Revoke flow uses Worker-built tx_json and the browser wallet returns a revoke tx digest.',
       'Post-revoke reads show chain-authoritative revoked status for the same wrapper and mandate.',
@@ -475,7 +478,7 @@ export function buildWalletEvidence({
       session_boundary_test: 'npm run test:session-mode',
       live_smoke_after_clickthrough: 'RESCUEGRID_FRONTEND_URL=http://localhost:5175 RESCUEGRID_WORKER_URL=http://localhost:8787 npm run baseline:smoke',
       preflight: 'npm run wallet:evidence:preflight',
-      strict_execution_report: 'npm run demo:execute:report',
+      strict_execution_report: 'npm run demo:execute:wallet-report -- --wrapper-id <wrapper_id> --strategy-file <activation_strategy_file> --create-tx-digest <create_tx_digest>',
       final_verify: 'npm run wallet:evidence:verify -- --input .rescuegrid/wallet-clickthrough-evidence.md --require-worker',
     },
   }
@@ -1078,7 +1081,9 @@ Worker detail reads, and --execution-report requires the artifact's
 strict_execution_report_reference to point at that report path. With
 --require-frontend / --require-worker it fails before
 the manual click-through when the local services or login guardrails are not
-ready.`)
+ready. For final same-wrapper execution evidence, keep the wallet-created policy
+active and run npm run demo:execute:wallet-report with the wrapper id, create tx
+digest and activation_strategy_file before revoking in the browser wallet.`)
 }
 
 export async function main(argv = process.argv.slice(2), env = process.env, options = {}) {

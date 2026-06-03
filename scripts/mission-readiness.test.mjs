@@ -26,6 +26,7 @@ const requiredScripts = {
   'demo:loop': 'node worker/scripts/validate-demo-loop.mjs',
   'demo:execute': 'node worker/scripts/validate-demo-loop.mjs --require-execution',
   'demo:execute:report': 'node worker/scripts/validate-demo-loop.mjs --require-execution --out .rescuegrid/demo-execute-report.json',
+  'demo:execute:wallet-report': 'node worker/scripts/validate-wallet-policy-execution.mjs --out .rescuegrid/demo-execute-report.json',
   'safety:negative': 'node worker/scripts/validate-safety-negative-paths.mjs',
   'safety:negative:report': 'node worker/scripts/validate-safety-negative-paths.mjs --out .rescuegrid/safety-negative-report.json',
   'baseline:smoke': 'node scripts/baseline-smoke.mjs',
@@ -38,6 +39,7 @@ function verifiedWalletReport() {
     required_manual_fields: [
       'sign_in_screenshot',
       'wallet_create_prompt_screenshot',
+      'activation_strategy_file',
       'runtime_state_after_activate',
       'policy_active_screenshot',
       'activity_row_screenshot',
@@ -56,6 +58,7 @@ function verifiedWalletReport() {
       revoke_tx_digest: 'revokeDigest',
       sign_in_screenshot: 'screenshots/sign-in.png',
       wallet_create_prompt_screenshot: 'screenshots/create-approval.png',
+      activation_strategy_file: '.rescuegrid/wallet-strategy.json',
       runtime_state_after_activate: 'Monitoring',
       policy_active_screenshot: 'screenshots/policy-active.png',
       activity_row_screenshot: 'screenshots/activity-created.png',
@@ -340,7 +343,8 @@ function strictExecutionReport(overrides = {}) {
   assert.equal(report.blocker_codes.includes('MISSION_CONTINUITY_MISMATCH'), false)
   assert.equal(report.next_actions.some((row) => /wallet:evidence -- --format markdown/.test(row)), true)
   assert.equal(report.next_actions.some((row) => /wallet:evidence:preflight/.test(row)), true)
-  assert.equal(report.next_actions.some((row) => /keep the same wrapper active for strict execution evidence before revoking/.test(row)), true)
+  assert.equal(report.next_actions.some((row) => /demo:execute:wallet-report/.test(row)), true)
+  assert.equal(report.next_actions.some((row) => /awaiting_wallet_revoke/.test(row)), true)
   assert.equal(report.next_actions.some((row) => /strict_execution_report_reference/.test(row)), true)
   assert.equal(report.next_actions.some((row) => /wallet:evidence:verify -- --input \.rescuegrid\/wallet-clickthrough-evidence\.md --require-worker/.test(row)), true)
   assert.equal(report.next_actions.some((row) => /--execution-report \.rescuegrid\/demo-execute-report\.json/.test(row)), true)
@@ -434,7 +438,8 @@ function strictExecutionReport(overrides = {}) {
   })
   assert.equal(report.status, 'blocked')
   assert.equal(report.next_actions.some((row) => /structured AgentTradeExecuted evidence/.test(row)), true)
-  assert.equal(report.next_actions.some((row) => /same wrapper\/mandate\/tick digest/.test(row)), true)
+  assert.equal(report.next_actions.some((row) => /demo:execute:wallet-report/.test(row)), true)
+  assert.equal(report.next_actions.some((row) => /wallet_wrapper_id/.test(row)), true)
 }
 
 {

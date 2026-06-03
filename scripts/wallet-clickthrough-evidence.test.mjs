@@ -232,8 +232,9 @@ assert(revokeIndex > strictWindowIndex)
 assert.match(evidence.manual_flow[strictWindowIndex].action, /same policy active/)
 assert.equal(evidence.pass_conditions.some((row) => /Worker-built tx_json/.test(row)), true)
 assert.equal(evidence.pass_conditions.some((row) => /DeepBook execution/.test(row)), true)
-assert.equal(evidence.pass_conditions.some((row) => /Before revocation/.test(row)), true)
-assert.equal(evidence.next_commands.strict_execution_report, 'npm run demo:execute:report')
+assert.equal(evidence.pass_conditions.some((row) => /demo:execute:wallet-report/.test(row)), true)
+assert.equal(evidence.pass_conditions.some((row) => /exact parsed strategy JSON/.test(row)), true)
+assert.equal(evidence.next_commands.strict_execution_report, 'npm run demo:execute:wallet-report -- --wrapper-id <wrapper_id> --strategy-file <activation_strategy_file> --create-tx-digest <create_tx_digest>')
 assert.equal(evidence.next_commands.final_verify, 'npm run wallet:evidence:verify -- --input .rescuegrid/wallet-clickthrough-evidence.md --require-worker')
 
 const json = serializeWalletEvidence(evidence, 'json')
@@ -251,6 +252,7 @@ assert.match(markdown, /create_tx_digest: TODO/)
 assert.match(markdown, /wrapper_id: TODO/)
 assert.match(markdown, /Execution claimed: false/)
 assert.match(markdown, /Frontend preflight: true/)
+assert.match(markdown, /activation_strategy_file: TODO/)
 assert.match(markdown, /strict_execution_report_reference: TODO/)
 assert.match(markdown, /Wallet auto-connect disabled: true/)
 assert.match(markdown, /Known signer kinds: worker-secret, waap/)
@@ -259,7 +261,7 @@ assert.match(markdown, /Readiness signer posture: worker-secret/)
 assert.match(markdown, /Readiness external signer: waap/)
 assert.match(markdown, /## strict_execution_window/)
 assert.match(markdown, /same wrapper lifecycle/)
-assert.match(markdown, /npm run demo:execute:report/)
+assert.match(markdown, /npm run demo:execute:wallet-report/)
 assert.match(markdown, /wallet:evidence:verify -- --input \.rescuegrid\/wallet-clickthrough-evidence\.md --require-worker/)
 assert.equal(markdown.includes('permission-secret'), false)
 assert.equal(markdown.includes('AGENT_KEY='), false)
@@ -317,6 +319,7 @@ Owner address: 0x111111111111111111111111111111111111111111111111111111111111111
 - wrapper_id: 0x2222222222222222222222222222222222222222222222222222222222222222
 - mandate_id: 0x3333333333333333333333333333333333333333333333333333333333333333
 - strategy_hash: 0xabc123
+- activation_strategy_file: .rescuegrid/wallet-strategy.json
 - sign_in_screenshot: screenshots/sign-in.png
 - wallet_create_prompt_screenshot: screenshots/create-approval.png
 - runtime_state_after_activate: Monitoring
@@ -336,6 +339,7 @@ assert.equal(parsedArtifact.format, 'markdown')
 assert.equal(parsedArtifact.metadata.worker_url, 'http://worker.test')
 assert.equal(parsedArtifact.metadata.actual_clickthrough_completed, true)
 assert.equal(parsedArtifact.fields.wrapper_id, '0x2222222222222222222222222222222222222222222222222222222222222222')
+assert.equal(parsedArtifact.fields.activation_strategy_file, '.rescuegrid/wallet-strategy.json')
 assert.equal(parsedArtifact.fields.strict_execution_report_reference, '.rescuegrid/demo-execute-report.json')
 
 const coreOnlyArtifact = `# RescueGrid Wallet Click-Through Evidence
@@ -365,6 +369,7 @@ const coreOnlyReport = await verifyWalletEvidenceArtifact({
 assert.equal(coreOnlyReport.status, 'error')
 assert.equal(coreOnlyReport.code, 'EVIDENCE_FIELDS_INCOMPLETE')
 assert.equal(coreOnlyReport.missing_fields.includes('sign_in_screenshot'), true)
+assert.equal(coreOnlyReport.missing_fields.includes('activation_strategy_file'), true)
 assert.equal(coreOnlyReport.missing_fields.includes('strict_execution_report_reference'), true)
 
 const secretLeakReport = await verifyWalletEvidenceArtifact({
@@ -491,6 +496,8 @@ assert.equal(verifiedReport.verified, true)
 assert.equal(verifiedReport.actual_clickthrough_completed, true)
 assert.equal(verifiedReport.execution_claimed, false)
 assert.equal(verifiedReport.required_manual_fields.includes('strict_execution_report_reference'), true)
+assert.equal(verifiedReport.required_manual_fields.includes('activation_strategy_file'), true)
+assert.equal(verifiedReport.fields.activation_strategy_file, '.rescuegrid/wallet-strategy.json')
 assert.equal(verifiedReport.fields.strict_execution_report_reference, '.rescuegrid/demo-execute-report.json')
 assert.equal(verifiedReport.checks.every((check) => check.status === 'passed'), true)
 assert.equal(verifiedReport.checks.some((check) => check.id === 'worker:create-activity'), true)
