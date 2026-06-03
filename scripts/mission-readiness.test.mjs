@@ -63,6 +63,7 @@ function safetyNegativeReport(overrides = {}) {
   return {
     purpose: 'rescuegrid_safety_negative_report',
     phase: 'pass',
+    chain: 'sui:testnet',
     assertions: ['VAL-SAFETY-001', 'VAL-SAFETY-002', 'VAL-SAFETY-003', 'VAL-SAFETY-005', 'VAL-SAFETY-008'],
     required_codes: ['OVER_BUDGET', 'OVER_SLIPPAGE', 'WRONG_POOL', 'WRONG_AGENT', 'MANDATE_MISMATCH', 'POLICY_EXPIRED', 'POLICY_REVOKED'],
     validated_codes: ['OVER_BUDGET', 'OVER_SLIPPAGE', 'WRONG_POOL', 'WRONG_AGENT', 'MANDATE_MISMATCH', 'POLICY_EXPIRED', 'POLICY_REVOKED'],
@@ -137,6 +138,34 @@ function strictExecutionReport(overrides = {}) {
   assert.equal(report.execution_claimed, true)
   assert.deepEqual(report.blocker_codes, [])
   assert.equal(report.checks.every((row) => row.status === 'passed'), true)
+}
+
+{
+  const report = buildMissionReadinessReport({
+    scripts: requiredScripts,
+    safetyReport: safetyNegativeReport({ chain: 'sui:mainnet' }),
+    walletReport: verifiedWalletReport(),
+    fundingReadiness: readyFunding(),
+    executionReport: strictExecutionReport(),
+  })
+  const safetyCheck = report.checks.find((row) => row.id === 'safety_negative_evidence')
+  assert.equal(report.status, 'failed')
+  assert.equal(safetyCheck.status, 'failed')
+  assert.equal(safetyCheck.evidence.missing_live_evidence.includes('chain'), true)
+}
+
+{
+  const report = buildMissionReadinessReport({
+    scripts: requiredScripts,
+    safetyReport: safetyNegativeReport({ revoke_tx_digest: null }),
+    walletReport: verifiedWalletReport(),
+    fundingReadiness: readyFunding(),
+    executionReport: strictExecutionReport(),
+  })
+  const safetyCheck = report.checks.find((row) => row.id === 'safety_negative_evidence')
+  assert.equal(report.status, 'failed')
+  assert.equal(safetyCheck.status, 'failed')
+  assert.equal(safetyCheck.evidence.missing_live_evidence.includes('revoke_tx_digest'), true)
 }
 
 {

@@ -174,6 +174,7 @@ export function summarizeFundingReadiness(readiness) {
 
 function safetyReportEvidence(report) {
   return {
+    chain: report?.chain || null,
     phase: report?.phase || null,
     active_wrapper_id: report?.active_policy?.wrapper_id || report?.active_wrapper_id || null,
     expired_wrapper_id: report?.expiring_policy?.wrapper_id || report?.expired_wrapper_id || null,
@@ -186,6 +187,20 @@ function safetyReportEvidence(report) {
     all_success_activity_unchanged: report?.all_success_activity_unchanged === true,
     chain_success_activity_total: Number(report?.chain_success_activity_total ?? 0),
   }
+}
+
+function safetyLiveEvidenceMissing(report, evidenceRows = []) {
+  const evidence = safetyReportEvidence(report)
+  const observedCodes = new Set(evidenceRows.map((row) => row.observed_code || row.code || row.blocker_code).filter(Boolean))
+  const missing = []
+  if (evidence.chain !== 'sui:testnet') missing.push('chain')
+  if (!evidence.active_wrapper_id) missing.push('active_wrapper_id')
+  if (!evidence.expired_wrapper_id) missing.push('expired_wrapper_id')
+  if (!evidence.revoke_tx_digest) missing.push('revoke_tx_digest')
+  for (const code of SAFETY_NEGATIVE_REQUIRED_CODES) {
+    if (!observedCodes.has(code)) missing.push(`evidence:${code}`)
+  }
+  return missing
 }
 
 export function summarizeSafetyNegativeEvidence(report) {
@@ -203,6 +218,7 @@ export function summarizeSafetyNegativeEvidence(report) {
   const evidenceRows = Array.isArray(report.evidence) ? report.evidence : []
   const missingAssertions = SAFETY_NEGATIVE_REQUIRED_ASSERTIONS.filter((id) => !assertions.includes(id))
   const missingCodes = SAFETY_NEGATIVE_REQUIRED_CODES.filter((code) => !validatedCodes.includes(code))
+  const missingLiveEvidence = safetyLiveEvidenceMissing(report, evidenceRows)
   const rowsProvePreSubmit = evidenceRows.every((row) => row.submitted === false)
   const rowsProveNoExecution = evidenceRows.every((row) => row.execution_claimed === false)
   const rowsProveSpendUnchanged = evidenceRows.every((row) => row.spend_unchanged === true || String(row.spend_before) === String(row.spend_after))
@@ -221,6 +237,7 @@ export function summarizeSafetyNegativeEvidence(report) {
     hasReportPass &&
     missingAssertions.length === 0 &&
     missingCodes.length === 0 &&
+    missingLiveEvidence.length === 0 &&
     rowsProvePreSubmit &&
     rowsProveNoExecution &&
     rowsProveSpendUnchanged &&
@@ -244,6 +261,7 @@ export function summarizeSafetyNegativeEvidence(report) {
       ...safetyReportEvidence(report),
       missing_assertions: missingAssertions,
       missing_codes: missingCodes,
+      missing_live_evidence: missingLiveEvidence,
       evidence_rows: evidenceRows.length,
     },
   })
