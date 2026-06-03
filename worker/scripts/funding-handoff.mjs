@@ -175,13 +175,31 @@ function criterionByAsset(readiness, asset) {
   return (readiness?.funding?.criteria || []).find((row) => row.asset === asset) || {}
 }
 
+const BALANCE_MANAGER_FUNDING_METHOD = 'Use the DeepBook BalanceManager deposit flow; direct wallet transfer is not enough unless the BalanceManager read reflects the balance.'
+const BALANCE_MANAGER_PROOF_REQUIREMENT = 'Funding proof must show DBUSDC/DEEP target asset hits for the deployed BalanceManager plus live BalanceManager reads at the required thresholds.'
+const AGENT_GAS_PROOF_REQUIREMENT = 'Funding proof must show SUI_MIST credited to the agent gas address plus a live agent gas read at the required threshold.'
+
 function assetFundingRow({ readiness, asset, coinType, holderKind }) {
   const row = criterionByAsset(readiness, asset)
+  const holder = row.holder || (
+    holderKind === 'agent_gas_address'
+      ? readiness.agent?.address || DEPLOYMENT.agent.address
+      : readiness.balance_manager?.id || DEPLOYMENT.agent.balance_manager_id
+  )
+  const balanceManagerAsset = holderKind === 'deepbook_balance_manager'
   return {
     asset,
     coin_type: coinType,
     holder_kind: holderKind,
-    holder: row.holder || (holderKind === 'agent_gas_address' ? readiness.agent?.address : readiness.balance_manager?.id),
+    holder,
+    target_kind: holderKind,
+    target: holder,
+    destination_kind: holderKind,
+    destination_object_id: balanceManagerAsset ? holder : null,
+    destination_address: balanceManagerAsset ? null : holder,
+    funding_action: balanceManagerAsset ? 'deepbook_balance_manager_deposit' : 'sui_gas_transfer',
+    direct_wallet_transfer_accepted: !balanceManagerAsset,
+    proof_requirement: balanceManagerAsset ? BALANCE_MANAGER_PROOF_REQUIREMENT : AGENT_GAS_PROOF_REQUIREMENT,
     observed: row.observed_balance ?? row.observed ?? readiness.funding?.balances?.[asset] ?? '0',
     required: row.threshold ?? readiness.thresholds?.[asset]?.required ?? '1',
     missing: missingAmount(row.threshold ?? readiness.thresholds?.[asset]?.required ?? '1', row.observed_balance ?? row.observed ?? readiness.funding?.balances?.[asset] ?? '0'),
@@ -207,6 +225,31 @@ export function executionGate(readiness) {
   }
 }
 
+function fundingRouting({ balanceManagerId, agentAddress }) {
+  return {
+    balance_manager_assets: {
+      target_kind: 'deepbook_balance_manager',
+      target: balanceManagerId,
+      required_assets: ['DBUSDC', 'DEEP'],
+      accepted_action: 'deepbook_balance_manager_deposit',
+      rejected_action: 'direct_dbusdc_or_deep_transfer_to_agent_wallet',
+      direct_wallet_transfer_accepted: false,
+      instruction: BALANCE_MANAGER_FUNDING_METHOD,
+      proof_requirement: BALANCE_MANAGER_PROOF_REQUIREMENT,
+    },
+    agent_gas: {
+      target_kind: 'agent_gas_address',
+      target: agentAddress,
+      required_assets: ['SUI_MIST'],
+      accepted_action: 'sui_gas_transfer',
+      direct_wallet_transfer_accepted: true,
+      instruction: 'Send SUI gas to the agent address only; this is separate from DBUSDC/DEEP BalanceManager funding.',
+      proof_requirement: AGENT_GAS_PROOF_REQUIREMENT,
+    },
+    strict_execution_report_required: true,
+  }
+}
+
 export function buildFundingHandoff(readiness, { generatedAt = new Date().toISOString() } = {}) {
   const dbusdc = assetFundingRow({
     readiness,
@@ -226,6 +269,8 @@ export function buildFundingHandoff(readiness, { generatedAt = new Date().toISOS
     coinType: '0x2::sui::SUI',
     holderKind: 'agent_gas_address',
   })
+  const balanceManagerId = readiness.balance_manager?.id || DEPLOYMENT.agent.balance_manager_id
+  const agentAddress = readiness.agent?.address || DEPLOYMENT.agent.address
 
   return {
     status: 'ok',
@@ -260,17 +305,22 @@ export function buildFundingHandoff(readiness, { generatedAt = new Date().toISOS
     deepbook: {
       market_id: readiness.scope?.market_id || 'SUI_DBUSDC',
       pool_id: readiness.scope?.pool_id || DEPLOYMENT.deepbook.pools.SUI_DBUSDC.pool_id,
-      balance_manager_funding_method: 'Use the DeepBook BalanceManager deposit flow; direct wallet transfer is not enough unless the BalanceManager read reflects the balance.',
+      balance_manager_funding_method: BALANCE_MANAGER_FUNDING_METHOD,
       dbusdc_coin_type: DEPLOYMENT.deepbook.dbusdc_coin_type,
       deep_coin_type: DEPLOYMENT.deepbook.deep_coin_type,
     },
+    funding_routing: fundingRouting({ balanceManagerId, agentAddress }),
     funding_targets: {
       balance_manager: {
-        id: readiness.balance_manager?.id || DEPLOYMENT.agent.balance_manager_id,
+        id: balanceManagerId,
+        target_kind: 'deepbook_balance_manager',
+        direct_wallet_transfer_accepted: false,
         required_assets: [dbusdc, deep],
       },
       agent_gas: {
-        address: readiness.agent?.address || DEPLOYMENT.agent.address,
+        address: agentAddress,
+        target_kind: 'agent_gas_address',
+        direct_wallet_transfer_accepted: true,
         required_assets: [suiGas],
       },
     },
@@ -299,8 +349,9 @@ function markdown(handoff) {
   const bmAssets = handoff.funding_targets.balance_manager.required_assets
   const gasAssets = handoff.funding_targets.agent_gas.required_assets
   const assetLines = [...bmAssets, ...gasAssets].map((row) => (
-    `- ${row.asset}: observed ${row.observed}, required ${row.required}, missing ${row.missing}, holder ${row.holder}`
+    `- ${row.asset}: observed ${row.observed}, required ${row.required}, missing ${row.missing}, target_kind ${row.target_kind}, target ${row.target}, action ${row.funding_action}`
   ))
+  const routing = handoff.funding_routing
   return [
     '# RescueGrid Funding Request',
     '',
@@ -319,6 +370,11 @@ function markdown(handoff) {
     '',
     'Required assets:',
     ...assetLines,
+    '',
+    'Funding routing:',
+    `- DBUSDC/DEEP destination: DeepBook BalanceManager ${routing.balance_manager_assets.target}`,
+    `- Do not transfer DBUSDC or DEEP directly to the agent wallet ${handoff.agent.address}; proof requires BalanceManager target asset hits and live BalanceManager reads.`,
+    `- SUI gas destination: agent address ${routing.agent_gas.target}`,
     '',
     `DBUSDC coin type: ${handoff.deepbook.dbusdc_coin_type}`,
     `DEEP coin type: ${handoff.deepbook.deep_coin_type}`,

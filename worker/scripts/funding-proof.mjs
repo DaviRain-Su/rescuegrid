@@ -404,6 +404,7 @@ export function buildFundingProofReport({
     signer_capabilities: handoff.signer_capabilities,
     external_signer: handoff.external_signer,
     cloud_per_user_signer: handoff.cloud_per_user_signer,
+    funding_routing: handoff.funding_routing,
     funding_targets: handoff.funding_targets,
     execution_gate: handoff.execution_gate,
     next_verification: handoff.next_verification,
